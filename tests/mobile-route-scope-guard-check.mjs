@@ -26,7 +26,12 @@ assert.match(source, /touchstart/);
 assert.match(css, /body:not\(\[data-mobile-investigation-route="1"\]\)/);
 assert.match(css, /overflow-y: auto !important/);
 assert.match(css, /height: auto !important/);
-assert.match(index, /mobile-route-scope-guard\.css\?v=0\.3\.22/);
+assert.match(css, /min-height: 0 !important/);
+assert.match(css, /touch-action: pan-y !important/);
+assert.match(css, /#modal-root:empty/);
+assert.match(css, /#toast-root:empty/);
+assert.doesNotMatch(css, /min-height: 100dvh !important/);
+assert.match(index, /mobile-route-scope-guard\.css\?v=0\.3\.23/);
 assert.match(index, /mobile-route-scope-guard\.js\?v=0\.3\.22/);
 
 console.log("mobile route scope guard checks passed");
