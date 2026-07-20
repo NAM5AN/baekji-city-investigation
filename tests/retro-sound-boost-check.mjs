@@ -6,10 +6,17 @@ const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8")
 
 assert.match(sound, /out\.gain\.value = 0\.95/);
 assert.match(sound, /volume = 0\.075/);
+assert.match(sound, /PRE_INVESTIGATION_ROUTES/);
+assert.match(sound, /"home", "party", "briefing"/);
+assert.match(sound, /function staticBurst/);
+assert.match(sound, /lowpass\.frequency\.value = 1250/);
+assert.match(sound, /function transitionStatic/);
+assert.match(sound, /window\.addEventListener\("hashchange", handleRouteTransition\)/);
+assert.match(sound, /play\("transition"\)/);
 assert.match(sound, /\[data-send-chat\]/);
 assert.match(sound, /\[data-move-route\], \[data-enter-investigation\]/);
 assert.match(sound, /data-transfer-accept/);
 assert.match(sound, /MutationObserver/);
-assert.match(index, /retro-sound-boost\.js\?v=0\.3\.45/);
+assert.match(index, /retro-sound-boost\.js\?v=0\.3\.47/);
 
 console.log("retro sound boost checks passed");
