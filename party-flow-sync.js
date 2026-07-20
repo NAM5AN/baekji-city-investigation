@@ -50,7 +50,7 @@
       return `briefing/${session.id}`;
     }
     if (session.status === "ACTIVE" && !(currentPage === "investigate" && currentId === session.id)) {
-      if (["home", "party", "briefing"].includes(currentPage)) return `investigate/${session.id}`;
+      if (["party", "briefing"].includes(currentPage)) return `investigate/${session.id}`;
     }
     return null;
   }
