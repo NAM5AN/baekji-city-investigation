@@ -90,12 +90,21 @@
     setTimeout(() => staticBurst(0.075, 0.07), 88);
   }
 
+  function channelStatic() {
+    staticBurst(0.34, 0.18);
+    tone(84, 42, 0.36, 0.105, "sawtooth");
+    setTimeout(() => staticBurst(0.13, 0.125), 86);
+    setTimeout(() => tone(132, 68, 0.17, 0.08, "square"), 112);
+    setTimeout(() => staticBurst(0.08, 0.085), 238);
+  }
+
   function play(name) {
     const now = performance.now();
     if (now - Number(last.get(name) || 0) < 70) return;
     last.set(name, now);
     ready().then(() => {
-      if (name === "transition") transitionStatic();
+      if (name === "channel") channelStatic();
+      else if (name === "transition") transitionStatic();
       else if (name === "send") { tone(118, 186, 0.11, 0.09); setTimeout(() => tone(176, 220, 0.08, 0.06, "sine"), 48); }
       else if (name === "move") { tone(112, 72, 0.14, 0.09); setTimeout(() => tone(92, 64, 0.1, 0.065), 110); }
       else if (name === "popup") tone(96, 152, 0.16, 0.085);
@@ -141,5 +150,6 @@
     routePage,
     handleRouteTransition,
     transitionStatic,
+    channelStatic,
   });
 })();
