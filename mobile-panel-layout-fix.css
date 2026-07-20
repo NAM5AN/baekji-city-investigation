@@ -1,0 +1,26 @@
+@media (max-width: 980px) {
+  /* The row resizer is hidden on mobile, so the left column must use two rows. */
+  body.mobile-investigation-active .retro-left-column {
+    grid-template-rows: 62% 38% !important;
+  }
+
+  /* Pane movement is instant unless it was initiated by an explicit user gesture. */
+  body.mobile-investigation-active .retro-investigation {
+    transition: none !important;
+  }
+
+  body.mobile-investigation-active.mobile-pane-user-switching .retro-investigation {
+    transition: transform 220ms steps(4, end) !important;
+  }
+
+  /* In the chat pane, keep the return button below the tab strip. */
+  body.mobile-investigation-chat .retro-mobile-panel-toggle {
+    top: calc(var(--mobile-investigation-topbar, 0px) + 58px);
+  }
+}
+
+@media (max-width: 520px) {
+  body.mobile-investigation-active .retro-left-column {
+    grid-template-rows: 64% 36% !important;
+  }
+}
