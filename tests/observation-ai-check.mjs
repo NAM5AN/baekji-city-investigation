@@ -15,7 +15,7 @@ vm.runInContext(clientSource, clientSandbox, { filename: "observation-ai-sync.js
 const client = clientSandbox.window.__BAEKJI_OBSERVATION_AI_TEST__;
 assert.ok(client, "관찰 AI 클라이언트 테스트 API가 필요합니다.");
 
-const loud = client.speechVisibility('/"거기 누구 있어?"라고 소리를 크게 질러 주변을 확인한다');
+const loud = client.speechVisibility('/"거기 누구 있어?"라고 소리를 질러 주변을 확인한다');
 assert.equal(loud.mode, "PUBLIC_QUOTE");
 assert.equal(loud.quote, "거기 누구 있어?");
 
@@ -42,11 +42,11 @@ assert.equal(jobs[0].quotedSpeech, "도와줘");
 assert.equal(state.sessions.witness.logs[0].observationAiPending, true);
 assert.equal(client.collectJobs(state, 1600).length, 0, "대기 중인 행동은 중복 요청하지 않습니다.");
 
-const serverLoud = classifySpeechVisibility('/"살려줘"라고 소리를 지른다');
+const serverLoud = classifySpeechVisibility('/"살려줘"라고 소리를 크게 질러 주변을 확인한다');
 assert.equal(serverLoud.mode, "PUBLIC_QUOTE");
 const loudPayload = sanitizeObservationPayload({
   actorName: "테스트 캐릭터 B",
-  actionText: '/"살려줘"라고 소리를 지른다',
+  actionText: '/"살려줘"라고 소리를 크게 질러 주변을 확인한다',
   fallback: "테스트 캐릭터 B가 외친다.",
 });
 assert.doesNotMatch(loudPayload.action, /살려줘/, "모델 관찰문 입력에는 직접 인용 내용을 넣지 않습니다.");
