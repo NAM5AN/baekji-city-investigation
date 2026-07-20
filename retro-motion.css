@@ -1,0 +1,274 @@
+/* 백지도시 인터랙션 모션 시스템 · v0.3.30 */
+:root {
+  --retro-motion-fast: 140ms;
+  --retro-motion-base: 220ms;
+  --retro-motion-slow: 340ms;
+  --retro-motion-step: steps(5, end);
+}
+
+html[data-retro-motion="ready"] .motion-page-enter {
+  animation: retro-page-enter var(--retro-motion-slow) var(--retro-motion-step) both;
+}
+
+html[data-retro-motion="ready"] .motion-cascade-item {
+  animation: retro-card-enter 260ms var(--retro-motion-step) both;
+  animation-delay: min(calc(var(--motion-index, 0) * 28ms), 196ms);
+}
+
+html[data-retro-motion="ready"] .motion-system-new {
+  position: relative;
+  isolation: isolate;
+  animation: retro-system-line-enter 300ms var(--retro-motion-step) both;
+  animation-delay: min(calc(var(--motion-index, 0) * 35ms), 175ms);
+}
+
+html[data-retro-motion="ready"] .motion-system-new::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -2px 0;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  animation: retro-system-scan 300ms steps(4, end) both;
+}
+
+html[data-retro-motion="ready"] .motion-system-new.retro-character-action {
+  animation-name: retro-action-line-enter;
+}
+
+html[data-retro-motion="ready"] .motion-chat-new {
+  animation: retro-chat-enter-left 260ms var(--retro-motion-step) both;
+  animation-delay: min(calc(var(--motion-index, 0) * 38ms), 190ms);
+  transform-origin: left center;
+}
+
+html[data-retro-motion="ready"] .motion-chat-new.mine {
+  animation-name: retro-chat-enter-right;
+  transform-origin: right center;
+}
+
+html[data-retro-motion="ready"] .retro-chat-divider.motion-chat-new {
+  animation-name: retro-divider-enter;
+  transform-origin: center;
+}
+
+html[data-retro-motion="ready"] .motion-tab-enter {
+  animation: retro-tab-enter 210ms var(--retro-motion-step) both;
+}
+
+html[data-retro-motion="ready"] .motion-tab-selected {
+  animation: retro-tab-selected 190ms steps(3, end) both;
+}
+
+html[data-retro-motion="ready"] .motion-scene-shift {
+  animation: retro-scene-shift 460ms steps(7, end) both;
+}
+
+html[data-retro-motion="ready"] .motion-location-update {
+  animation: retro-location-update 360ms steps(5, end) both;
+}
+
+html[data-retro-motion="ready"] .motion-modal-enter {
+  animation: retro-modal-enter 240ms var(--retro-motion-step) both;
+}
+
+html[data-retro-motion="ready"] .motion-toast-enter {
+  animation: retro-toast-enter 280ms var(--retro-motion-step) both;
+}
+
+html[data-retro-motion="ready"] .motion-thinking {
+  animation: retro-thinking 900ms steps(2, end) infinite;
+}
+
+html[data-retro-motion="ready"] .retro-motion-value-change {
+  animation: retro-value-change 300ms steps(4, end) both;
+}
+
+html[data-retro-motion="ready"] button:not(:disabled),
+html[data-retro-motion="ready"] [role="button"] {
+  transition: transform var(--retro-motion-fast) steps(2, end), filter var(--retro-motion-fast) steps(2, end);
+}
+
+html[data-retro-motion="ready"] button:not(:disabled):active,
+html[data-retro-motion="ready"] [role="button"]:active {
+  transform: translate(2px, 2px);
+  filter: contrast(1.2);
+}
+
+html[data-retro-motion="ready"] .retro-tab,
+html[data-retro-motion="ready"] .button,
+html[data-retro-motion="ready"] .retro-choice,
+html[data-retro-motion="ready"] .retro-send {
+  will-change: transform;
+}
+
+html[data-retro-motion="ready"] progress,
+html[data-retro-motion="ready"] .progress > span,
+html[data-retro-motion="ready"] [class*="progress"] > span {
+  transition: width 520ms steps(10, end), transform 260ms steps(5, end);
+}
+
+#retro-motion-flash {
+  position: fixed;
+  z-index: 2147483000;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(to bottom, transparent 0 43%, rgba(18, 18, 16, .10) 44% 47%, transparent 48% 100%),
+    repeating-linear-gradient(to bottom, transparent 0 4px, rgba(18, 18, 16, .04) 5px 6px);
+  mix-blend-mode: multiply;
+}
+
+#retro-motion-flash.is-active {
+  animation: retro-screen-flash 360ms steps(7, end) both;
+}
+
+@keyframes retro-page-enter {
+  0% { opacity: 0; filter: contrast(1.55) brightness(1.12); }
+  22% { opacity: .55; }
+  44% { opacity: .28; }
+  58% { opacity: .86; filter: contrast(1.18) brightness(1.02); }
+  100% { opacity: 1; filter: none; }
+}
+
+@keyframes retro-card-enter {
+  0% { opacity: 0; transform: translateY(8px); }
+  45% { opacity: 1; transform: translateY(3px); }
+  70% { transform: translateY(5px); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes retro-system-line-enter {
+  0% { opacity: 0; transform: translateY(-5px); clip-path: inset(0 100% 0 0); }
+  35% { opacity: 1; clip-path: inset(0 38% 0 0); }
+  68% { transform: translateY(1px); clip-path: inset(0 0 0 0); }
+  100% { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+}
+
+@keyframes retro-action-line-enter {
+  0% { opacity: 0; transform: translateX(-8px); clip-path: inset(0 100% 0 0); }
+  38% { opacity: 1; transform: translateX(2px); clip-path: inset(0 25% 0 0); }
+  62% { transform: translateX(-2px); clip-path: inset(0 0 0 0); }
+  100% { transform: none; }
+}
+
+@keyframes retro-system-scan {
+  0%, 100% { opacity: 0; transform: scaleX(0); transform-origin: left; }
+  42% { opacity: .08; transform: scaleX(.72); }
+  65% { opacity: .04; transform: scaleX(1); }
+}
+
+@keyframes retro-chat-enter-left {
+  0% { opacity: 0; transform: translateX(-12px) scale(.98); }
+  45% { opacity: 1; transform: translateX(3px) scale(1); }
+  70% { transform: translateX(-2px); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes retro-chat-enter-right {
+  0% { opacity: 0; transform: translateX(12px) scale(.98); }
+  45% { opacity: 1; transform: translateX(-3px) scale(1); }
+  70% { transform: translateX(2px); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes retro-divider-enter {
+  0% { opacity: 0; transform: scaleX(.55); }
+  52% { opacity: 1; transform: scaleX(1.04); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes retro-tab-enter {
+  0% { opacity: 0; transform: translateY(6px); }
+  55% { opacity: 1; transform: translateY(-1px); }
+  100% { transform: none; }
+}
+
+@keyframes retro-tab-selected {
+  0% { filter: invert(0); }
+  42% { filter: invert(1); }
+  100% { filter: invert(0); }
+}
+
+@keyframes retro-scene-shift {
+  0% { opacity: .35; filter: contrast(2) grayscale(1); }
+  18% { opacity: .92; transform: translateX(-3px); }
+  31% { opacity: .55; transform: translateX(3px); }
+  48% { opacity: 1; transform: translateX(-1px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes retro-location-update {
+  0% { opacity: 0; transform: translateY(-8px); }
+  46% { opacity: 1; transform: translateY(2px); }
+  72% { transform: translateY(-1px); }
+  100% { transform: none; }
+}
+
+@keyframes retro-modal-enter {
+  0% { opacity: 0; transform: translateY(12px) scale(.97); }
+  45% { opacity: 1; transform: translateY(-2px) scale(1.01); }
+  100% { transform: none; }
+}
+
+@keyframes retro-toast-enter {
+  0% { opacity: 0; transform: translateX(18px); }
+  42% { opacity: 1; transform: translateX(-4px); }
+  68% { transform: translateX(2px); }
+  100% { transform: none; }
+}
+
+@keyframes retro-thinking {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
+}
+
+@keyframes retro-value-change {
+  0% { opacity: .3; transform: translateY(-3px); filter: invert(1); }
+  45% { opacity: 1; transform: translateY(2px); }
+  100% { transform: none; filter: none; }
+}
+
+@keyframes retro-screen-flash {
+  0% { opacity: 0; transform: translateY(-12%); }
+  28% { opacity: .55; }
+  48% { opacity: .12; transform: translateY(2%); }
+  66% { opacity: .32; }
+  100% { opacity: 0; transform: translateY(12%); }
+}
+
+@media (max-width: 980px) {
+  html[data-retro-motion="ready"] .motion-page-enter {
+    animation-duration: 260ms;
+  }
+
+  html[data-retro-motion="ready"] .motion-cascade-item {
+    animation-delay: min(calc(var(--motion-index, 0) * 18ms), 108ms);
+  }
+
+  html[data-retro-motion="ready"] .motion-system-new,
+  html[data-retro-motion="ready"] .motion-chat-new {
+    animation-duration: 230ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --retro-motion-fast: 1ms;
+    --retro-motion-base: 1ms;
+    --retro-motion-slow: 1ms;
+  }
+
+  html[data-retro-motion="ready"] *,
+  html[data-retro-motion="ready"] *::before,
+  html[data-retro-motion="ready"] *::after,
+  #retro-motion-flash {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
