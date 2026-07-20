@@ -23,7 +23,13 @@
     return Boolean(target?.closest?.("textarea, input, select, button, a, [role='button'], [data-mobile-no-swipe]"));
   }
 
-  const TEST_API = Object.freeze({ decideSwipe, paneTransform, isInteractiveTarget });
+  function updateMarkup(element, markup) {
+    if (!element || element.innerHTML === markup) return false;
+    element.innerHTML = markup;
+    return true;
+  }
+
+  const TEST_API = Object.freeze({ decideSwipe, paneTransform, isInteractiveTarget, updateMarkup });
   if (typeof window !== "undefined") window.__BAEKJI_MOBILE_INVESTIGATION_TEST__ = TEST_API;
 
   if (
@@ -79,14 +85,16 @@
       button.dataset.pane = currentPane;
       button.setAttribute("aria-label", isChat ? "현장 화면 열기" : "채팅과 메뉴 열기");
       button.setAttribute("aria-pressed", String(isChat));
-      button.innerHTML = isChat
+      updateMarkup(button, isChat
         ? '<span aria-hidden="true">‹</span><strong>현장</strong>'
-        : '<strong>채팅</strong><span aria-hidden="true">›</span>';
+        : '<strong>채팅</strong><span aria-hidden="true">›</span>');
     }
     if (indicator) {
       indicator.dataset.pane = currentPane;
       indicator.querySelectorAll("i").forEach((dot, index) => dot.classList.toggle("active", index === (isChat ? 1 : 0)));
-      indicator.querySelector("span").textContent = isChat ? "채팅·메뉴" : "현장·SYSTEM";
+      const label = indicator.querySelector("span");
+      const nextLabel = isChat ? "채팅·메뉴" : "현장·SYSTEM";
+      if (label && label.textContent !== nextLabel) label.textContent = nextLabel;
     }
     if (announce) {
       document.querySelector("[data-mobile-investigation-live]")?.replaceChildren(document.createTextNode(isChat ? "채팅 화면" : "현장 화면"));
@@ -151,11 +159,13 @@
 
   function unmountMobile() {
     mountedRoot = null;
+    currentSessionId = "";
     touchState = null;
     document.body.classList.remove("mobile-investigation-active", "mobile-investigation-chat", "mobile-investigation-field");
     document.querySelectorAll("[data-mobile-investigation-toggle], [data-mobile-investigation-indicator], [data-mobile-investigation-live], [data-mobile-investigation-hint]").forEach((element) => element.remove());
     document.querySelectorAll("[data-mobile-investigation-root]").forEach((element) => {
       delete element.dataset.mobileInvestigationRoot;
+      delete element.dataset.mobileSwipeBound;
       element.style.removeProperty("--mobile-investigation-transform");
     });
   }
@@ -216,14 +226,15 @@
       return;
     }
 
-    currentSessionId = root.dataset.sessionId || "";
-    if (mountedRoot !== root) {
+    const nextSessionId = root.dataset.sessionId || "";
+    if (mountedRoot !== root || currentSessionId !== nextSessionId) {
       mountedRoot = root;
+      currentSessionId = nextSessionId;
       currentPane = readPane(currentSessionId);
-      createControls(root);
-      bindSwipe(root);
     }
 
+    createControls(root);
+    bindSwipe(root);
     document.body.classList.add("mobile-investigation-active");
     measureTopbar();
     updateControls();
@@ -240,12 +251,15 @@
   window.addEventListener("hashchange", scheduleMount);
   window.addEventListener("resize", scheduleMount);
   window.visualViewport?.addEventListener?.("resize", () => {
-    measureTopbar();
+    if (routeIsInvestigation()) measureTopbar();
     scheduleMount();
   });
   window.addEventListener("pageshow", scheduleMount);
 
-  const observer = new MutationObserver(scheduleMount);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  const appRoot = document.getElementById("app");
+  if (appRoot) {
+    const observer = new MutationObserver(scheduleMount);
+    observer.observe(appRoot, { childList: true });
+  }
   scheduleMount();
 })();
