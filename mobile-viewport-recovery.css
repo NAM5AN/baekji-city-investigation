@@ -1,0 +1,28 @@
+@media (max-width: 980px) {
+  body:not(.mobile-investigation-active) #toast-root:empty,
+  body:not(.mobile-investigation-active) #modal-root:empty {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
+  }
+
+  body[data-mobile-login-viewport-settling="1"] {
+    position: static !important;
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    touch-action: pan-y !important;
+  }
+
+  body[data-mobile-login-viewport-settling="1"] #app,
+  body[data-mobile-login-viewport-settling="1"] #app > .shell {
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
