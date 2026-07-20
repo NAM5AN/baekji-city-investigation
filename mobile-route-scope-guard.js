@@ -26,10 +26,14 @@
 
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
-  let queued = false;
+  let resetQueued = false;
 
   function isMobile() {
     return window.matchMedia?.(MOBILE_QUERY)?.matches ?? window.innerWidth <= 980;
+  }
+
+  function investigationRoot() {
+    return document.querySelector(".retro-investigation[data-session-id]");
   }
 
   function removeInvestigationControls() {
@@ -41,28 +45,19 @@
     ).forEach((element) => element.remove());
   }
 
-  function clearLeakedInvestigationLayout() {
-    const body = document.body;
-    if (!body) return;
-
-    ACTIVE_CLASSES.forEach((className) => body.classList.remove(className));
-    body.removeAttribute("data-mobile-investigation-mounted");
-    body.removeAttribute(ROUTE_ATTRIBUTE);
-    document.documentElement.style.removeProperty("--mobile-investigation-topbar");
-    removeInvestigationControls();
-
+  function clearInvestigationMarkers() {
     document.querySelectorAll("[data-mobile-investigation-root]").forEach((element) => {
       element.removeAttribute("data-mobile-investigation-root");
       element.style.removeProperty("--mobile-investigation-transform");
+      element.removeAttribute("data-mobile-swipe-bound");
     });
   }
 
-  function enforceRouteScope() {
-    queued = false;
-    const root = document.querySelector(".retro-investigation[data-session-id]");
+  function resetOutsideInvestigation() {
+    const rootExists = Boolean(investigationRoot());
     const keepScope = shouldKeepMobileInvestigationScope({
       hashValue: location.hash,
-      rootExists: Boolean(root),
+      rootExists,
       mobile: isMobile(),
     });
 
@@ -71,35 +66,50 @@
       return true;
     }
 
-    clearLeakedInvestigationLayout();
+    const body = document.body;
+    if (!body) return false;
+
+    ACTIVE_CLASSES.forEach((className) => body.classList.remove(className));
+    body.removeAttribute("data-mobile-investigation-mounted");
+    body.removeAttribute(ROUTE_ATTRIBUTE);
+    document.documentElement.style.removeProperty("--mobile-investigation-topbar");
+    removeInvestigationControls();
+    clearInvestigationMarkers();
     return false;
   }
 
-  function scheduleEnforcement() {
-    if (!routeIsInvestigation(location.hash)) {
-      enforceRouteScope();
-      return;
-    }
-    if (queued) return;
-    queued = true;
-    queueMicrotask(enforceRouteScope);
+  function scheduleReset() {
+    if (resetQueued) return;
+    resetQueued = true;
+    queueMicrotask(() => {
+      resetQueued = false;
+      resetOutsideInvestigation();
+    });
   }
 
-  function clearBeforeTouchOutsideInvestigation() {
-    if (!routeIsInvestigation(location.hash)) enforceRouteScope();
+  function resetBeforeOutsideTouch() {
+    if (!shouldKeepMobileInvestigationScope({
+      hashValue: location.hash,
+      rootExists: Boolean(investigationRoot()),
+      mobile: isMobile(),
+    })) resetOutsideInvestigation();
   }
 
-  window.addEventListener("hashchange", scheduleEnforcement);
-  window.addEventListener("popstate", scheduleEnforcement);
-  window.addEventListener("pageshow", scheduleEnforcement);
-  window.addEventListener("resize", scheduleEnforcement);
-  window.visualViewport?.addEventListener?.("resize", scheduleEnforcement);
-  document.addEventListener("pointerdown", clearBeforeTouchOutsideInvestigation, true);
-  document.addEventListener("touchstart", clearBeforeTouchOutsideInvestigation, { capture: true, passive: true });
-  document.addEventListener("visibilitychange", scheduleEnforcement);
+  window.addEventListener("hashchange", scheduleReset);
+  window.addEventListener("popstate", scheduleReset);
+  window.addEventListener("pageshow", scheduleReset);
+  window.addEventListener("resize", scheduleReset);
+  window.addEventListener("orientationchange", scheduleReset);
+  window.visualViewport?.addEventListener?.("resize", scheduleReset);
+  document.addEventListener("pointerdown", resetBeforeOutsideTouch, true);
+  document.addEventListener("touchstart", resetBeforeOutsideTouch, { capture: true, passive: true });
 
-  const observer = new MutationObserver(scheduleEnforcement);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  const appRoot = document.getElementById("app");
+  if (appRoot) {
+    const observer = new MutationObserver(scheduleReset);
+    observer.observe(appRoot, { childList: true });
+  }
 
-  enforceRouteScope();
+  resetOutsideInvestigation();
+  requestAnimationFrame(resetOutsideInvestigation);
 })();
