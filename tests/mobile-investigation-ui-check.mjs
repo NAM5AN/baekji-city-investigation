@@ -17,11 +17,18 @@ assert.equal(api.decideSwipe(200, 200, 170, 200, "chat", 390), "chat", "short sw
 assert.equal(api.paneTransform("chat"), "translate3d(-100vw, 0, 0)");
 assert.equal(api.paneTransform("field"), "translate3d(0, 0, 0)");
 
+const mock = { innerHTML: "same" };
+assert.equal(api.updateMarkup(mock, "same"), false, "unchanged control markup must not rewrite DOM");
+assert.equal(api.updateMarkup(mock, "next"), true);
+assert.equal(mock.innerHTML, "next");
+
 assert.match(source, /data-mobile-investigation-toggle/);
 assert.match(source, /pointerdown/);
 assert.match(source, /pointermove/);
 assert.match(source, /pointerup/);
 assert.match(source, /sessionStorage\.setItem/);
+assert.match(source, /observer\.observe\(appRoot, \{ childList: true \}\)/);
+assert.doesNotMatch(source, /observer\.observe\(document\.documentElement/);
 assert.match(css, /@media \(max-width: 980px\)/);
 assert.match(css, /width: 200vw/);
 assert.match(css, /height: 100dvh/);
