@@ -7,6 +7,10 @@
   .retro-transfer-note { margin-left: 15px; margin-right: 15px; }
   .retro-transfer-actions { padding: 15px; position: sticky; bottom: 0; background: #f6f6f2; border-top: 1px solid rgba(0,0,0,.2); }
 }
+@media (max-height: 520px) and (orientation: landscape) {
+  .retro-transfer-modal { max-height: calc(100dvh - 12px); }
+  .retro-transfer-item-card { padding-top: 10px; padding-bottom: 10px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .retro-transfer-modal, .retro-transfer-backdrop { animation: none !important; }
 }
