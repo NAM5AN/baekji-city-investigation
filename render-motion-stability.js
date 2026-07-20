@@ -6,7 +6,7 @@
   if (!app || typeof MutationObserver === "undefined") return;
 
   const buckets = new Map();
-  const choiceRevealKeys = new Map();
+  const initialChoiceClosed = new Set();
   let stabilizeQueued = false;
   let suppressQueued = false;
 
@@ -106,20 +106,15 @@
     bucket.chatSeeded = true;
   }
 
-  function closeFreshChoicePanel(state, sessionId) {
+  function closeInitialChoicePanel(state, sessionId) {
+    if (initialChoiceClosed.has(sessionId)) return;
     const session = state?.sessions?.[sessionId];
-    const reveal = session?.choiceReveal;
-    const key = reveal ? `${sessionId}:${reveal.type || "context"}:${reveal.at || 0}` : "";
-
-    if (!key) {
-      choiceRevealKeys.set(sessionId, "");
-      return;
-    }
-    if (choiceRevealKeys.get(sessionId) === key) return;
-    choiceRevealKeys.set(sessionId, key);
+    if (!session?.choiceReveal) return;
 
     const closeButton = document.querySelector("[data-close-choice-panel]");
     if (!closeButton) return;
+    initialChoiceClosed.add(sessionId);
+
     const panel = closeButton.closest(".retro-scene-actions");
     if (panel) panel.hidden = true;
     queueMicrotask(() => {
@@ -163,7 +158,7 @@
     if (!sessionId || !session) return;
 
     const bucket = bucketFor(sessionId);
-    closeFreshChoicePanel(state, sessionId);
+    closeInitialChoicePanel(state, sessionId);
     tagSystemEntries(session, bucket);
     tagChatEntries(session, bucket);
     queueSuppress();
