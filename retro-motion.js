@@ -59,14 +59,22 @@
     animateOnce(flash, "is-active", 430);
   }
 
+  function signatureText(element) {
+    const target = element.querySelector(".retro-character-log-text, .retro-system-copy, .retro-chat-bubble");
+    const remembered = target?.dataset.motionFullText || element.dataset.motionFullText;
+    return String(remembered || element.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
   function elementSignatures(selector) {
     const counts = new Map();
-    return [...document.querySelectorAll(selector)].map((element) => {
-      const text = String(element.textContent || "").replace(/\s+/g, " ").trim();
-      const count = (counts.get(text) || 0) + 1;
-      counts.set(text, count);
-      return { element, signature: `${text}::${count}` };
-    });
+    return [...document.querySelectorAll(selector)]
+      .filter((element) => !element.classList.contains("retro-action-result-pending"))
+      .map((element) => {
+        const text = signatureText(element);
+        const count = (counts.get(text) || 0) + 1;
+        counts.set(text, count);
+        return { element, signature: `${text}::${count}` };
+      });
   }
 
   function replaceKnown(target, entries) {
@@ -74,9 +82,19 @@
     entries.forEach(({ signature }) => target.add(signature));
   }
 
+  function rememberFullText(target, text = target?.textContent || "") {
+    if (!target) return "";
+    const fullText = String(target.dataset.motionFullText || text || "");
+    if (fullText) target.dataset.motionFullText = fullText;
+    return fullText;
+  }
+
   function ensureSystemTypingTarget(element) {
     const existing = element.querySelector(".retro-character-log-text, .retro-system-copy");
-    if (existing) return existing;
+    if (existing) {
+      rememberFullText(existing);
+      return existing;
+    }
     const time = element.querySelector(".retro-log-time");
     const nodes = [...element.childNodes].filter((node) => node !== time && node.nodeType === Node.TEXT_NODE);
     const text = nodes.map((node) => node.textContent || "").join("");
@@ -85,20 +103,42 @@
     const target = document.createElement("span");
     target.className = "retro-system-copy";
     target.textContent = text;
+    target.dataset.motionFullText = text;
     nodes.forEach((node) => node.remove());
     element.appendChild(target);
     return target;
   }
 
   function typingTargetFor(element, kind) {
-    if (kind === "chat") return element.querySelector(".retro-chat-bubble");
+    if (kind === "chat") {
+      const target = element.querySelector(".retro-chat-bubble");
+      rememberFullText(target);
+      return target;
+    }
     if (kind === "system") return ensureSystemTypingTarget(element);
     return null;
   }
 
+  function completeTypingTarget(target) {
+    if (!target) return;
+    const original = rememberFullText(target);
+    const timer = typingTimers.get(target);
+    if (timer) clearTimeout(timer);
+    typingTimers.delete(target);
+    if (original) target.textContent = original;
+    target.classList.remove("is-typing", "motion-type-target");
+    delete target.dataset.motionTyping;
+    const line = target.closest("[data-motion-typing]");
+    if (line && line !== target) delete line.dataset.motionTyping;
+  }
+
+  function completeInterruptedTyping() {
+    document.querySelectorAll(".motion-type-target.is-typing, [data-motion-typing='true'].motion-type-target").forEach(completeTypingTarget);
+  }
+
   function typeText(target, { speed = 9, maxDuration = 680 } = {}) {
     if (!target || !motionEnabled()) return;
-    const original = String(target.textContent || "");
+    const original = rememberFullText(target);
     if (!original.trim() || original.length < 2) return;
     const previous = typingTimers.get(target);
     if (previous) clearTimeout(previous);
@@ -111,7 +151,10 @@
     target.textContent = "";
 
     const step = () => {
-      if (!target.isConnected) return;
+      if (!target.isConnected) {
+        typingTimers.delete(target);
+        return;
+      }
       index = Math.min(characters.length, index + Math.max(1, Math.ceil(characters.length / 70)));
       target.textContent = characters.slice(0, index).join("");
       if (index < characters.length) {
@@ -135,12 +178,17 @@
   }
 
   function animateNewEntries(entries, known, className, kind) {
-    const newEntries = entries.filter(({ signature }) => !known.has(signature)).slice(-8);
+    const newEntries = entries
+      .filter(({ signature, element }) => !known.has(signature) && !element.classList.contains("retro-action-result-pending"))
+      .slice(-8);
     newEntries.forEach(({ element }, index) => {
       element.style.setProperty("--motion-index", String(index));
       animateOnce(element, className, 880);
       const target = typingTargetFor(element, kind);
-      if (target) setTimeout(() => typeText(target, { speed: kind === "system" ? 7 : 9 }), index * 34 + 65);
+      if (target) setTimeout(() => {
+        if (!element.isConnected || element.classList.contains("retro-action-result-pending")) return;
+        typeText(target, { speed: kind === "system" ? 7 : 9 });
+      }, index * 34 + 65);
     });
     replaceKnown(known, entries);
   }
@@ -309,6 +357,7 @@
 
   const appObserver = new MutationObserver((mutations) => {
     if (mutations.every(isTypingMutation)) return;
+    completeInterruptedTyping();
     scheduleProcess();
   });
   appObserver.observe(app, { childList: true, subtree: true });
@@ -323,14 +372,17 @@
 
   reduceMotion?.addEventListener?.("change", () => {
     document.documentElement.dataset.retroMotion = "ready";
+    completeInterruptedTyping();
     scheduleProcess();
   });
 
   window.__BAEKJI_RETRO_MOTION_TEST__ = Object.freeze({
     routeKey,
+    signatureText,
     elementSignatures,
     motionEnabled,
     typeText,
+    completeInterruptedTyping,
   });
 
   scheduleProcess();
