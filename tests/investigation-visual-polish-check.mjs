@@ -10,6 +10,7 @@ assert.match(js, /is-channel-switching/);
 assert.match(js, /BAEKJI_RETRO_SOUND_BOOST\?\.play\?\.\("channel"\)/);
 assert.match(js, /\.retro-tab/);
 assert.match(js, /retro-choice-no-enter/);
+assert.match(js, /data-choice-motion-suppressed/);
 assert.match(js, /조원 초대/);
 assert.match(js, /retro-invite-grid/);
 assert.match(js, /document\.createElement\("img"\)/);
@@ -21,8 +22,9 @@ assert.match(css, /retro-channel-picture/);
 assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
 assert.match(css, /retro-invite-profile/);
 assert.match(css, /retro-choice-no-enter/);
+assert.match(css, /body\[data-choice-motion-suppressed\] \.retro-choice-launch/);
 
-assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.50/);
+assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.51/);
 assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.50/);
 assert.ok(index.indexOf("retro-sound-boost.js?v=0.3.50") < index.indexOf("investigation-visual-polish.js?v=0.3.50"));
 
