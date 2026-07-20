@@ -8,6 +8,26 @@
     "mobile-investigation-field",
   ];
   const ROUTE_ATTRIBUTE = "data-mobile-investigation-route";
+  const NON_INVESTIGATION_CLASS = "mobile-non-investigation-route";
+  const RESET_PROPERTIES = [
+    "position",
+    "inset",
+    "top",
+    "right",
+    "bottom",
+    "left",
+    "width",
+    "height",
+    "min-height",
+    "max-height",
+    "overflow",
+    "overflow-x",
+    "overflow-y",
+    "overscroll-behavior",
+    "touch-action",
+    "transform",
+    "contain",
+  ];
 
   function routePage(hashValue = "") {
     return String(hashValue || "").replace(/^#\/?/, "").split("/").filter(Boolean)[0] || "";
@@ -17,8 +37,8 @@
     return routePage(hashValue) === "investigate";
   }
 
-  function shouldKeepMobileInvestigationScope({ hashValue = "", rootExists = false, mobile = true } = {}) {
-    return Boolean(mobile && rootExists && routeIsInvestigation(hashValue));
+  function shouldKeepMobileInvestigationScope({ hashValue = "", rootExists = false, mobile = true, homeMode = false, pageMode = false } = {}) {
+    return Boolean(mobile && rootExists && routeIsInvestigation(hashValue) && !homeMode && !pageMode);
   }
 
   const TEST_API = Object.freeze({ routePage, routeIsInvestigation, shouldKeepMobileInvestigationScope });
@@ -32,6 +52,15 @@
     return window.matchMedia?.(MOBILE_QUERY)?.matches ?? window.innerWidth <= 980;
   }
 
+  function setImportant(element, property, value) {
+    element?.style?.setProperty?.(property, value, "important");
+  }
+
+  function removeRestorationStyles(element) {
+    if (!element?.style) return;
+    RESET_PROPERTIES.forEach((property) => element.style.removeProperty(property));
+  }
+
   function removeInvestigationControls() {
     document.querySelectorAll(
       "[data-mobile-investigation-toggle], " +
@@ -39,6 +68,51 @@
       "[data-mobile-investigation-live], " +
       "[data-mobile-investigation-hint]"
     ).forEach((element) => element.remove());
+  }
+
+  function restoreDocumentScrolling() {
+    const body = document.body;
+    const app = document.getElementById("app");
+    const shell = app?.querySelector(":scope > .shell") || document.querySelector(".shell");
+    const main = shell?.querySelector("main");
+
+    document.documentElement.classList.add(NON_INVESTIGATION_CLASS);
+    [document.documentElement, body].forEach((element) => {
+      setImportant(element, "position", "static");
+      setImportant(element, "width", "100%");
+      setImportant(element, "height", "auto");
+      setImportant(element, "min-height", "0");
+      setImportant(element, "max-height", "none");
+      setImportant(element, "overflow-x", "hidden");
+      setImportant(element, "overflow-y", "auto");
+      setImportant(element, "overscroll-behavior", "auto");
+      setImportant(element, "touch-action", "pan-y");
+      setImportant(element, "transform", "none");
+    });
+
+    [app, shell, main].forEach((element) => {
+      setImportant(element, "position", "static");
+      setImportant(element, "inset", "auto");
+      setImportant(element, "width", "100%");
+      setImportant(element, "height", "auto");
+      setImportant(element, "min-height", "0");
+      setImportant(element, "max-height", "none");
+      setImportant(element, "overflow", "visible");
+      setImportant(element, "overflow-x", "visible");
+      setImportant(element, "overflow-y", "visible");
+      setImportant(element, "overscroll-behavior", "auto");
+      setImportant(element, "touch-action", "pan-y");
+      setImportant(element, "transform", "none");
+      setImportant(element, "contain", "none");
+    });
+  }
+
+  function clearRestorationStyles() {
+    document.documentElement.classList.remove(NON_INVESTIGATION_CLASS);
+    const app = document.getElementById("app");
+    const shell = app?.querySelector(":scope > .shell") || document.querySelector(".shell");
+    const main = shell?.querySelector("main");
+    [document.documentElement, document.body, app, shell, main].forEach(removeRestorationStyles);
   }
 
   function clearLeakedInvestigationLayout() {
@@ -55,19 +129,27 @@
       element.removeAttribute("data-mobile-investigation-root");
       element.style.removeProperty("--mobile-investigation-transform");
     });
+
+    restoreDocumentScrolling();
   }
 
   function enforceRouteScope() {
     queued = false;
+    const body = document.body;
     const root = document.querySelector(".retro-investigation[data-session-id]");
+    const homeMode = Boolean(body?.classList.contains("retro-home-mode"));
+    const pageMode = Boolean(body?.classList.contains("retro-page-mode"));
     const keepScope = shouldKeepMobileInvestigationScope({
       hashValue: location.hash,
       rootExists: Boolean(root),
       mobile: isMobile(),
+      homeMode,
+      pageMode,
     });
 
     if (keepScope) {
-      document.body?.setAttribute(ROUTE_ATTRIBUTE, "1");
+      clearRestorationStyles();
+      body?.setAttribute(ROUTE_ATTRIBUTE, "1");
       return true;
     }
 
@@ -76,7 +158,7 @@
   }
 
   function scheduleEnforcement() {
-    if (!routeIsInvestigation(location.hash)) {
+    if (!routeIsInvestigation(location.hash) || document.body?.classList.contains("retro-home-mode") || document.body?.classList.contains("retro-page-mode")) {
       enforceRouteScope();
       return;
     }
@@ -86,20 +168,26 @@
   }
 
   function clearBeforeTouchOutsideInvestigation() {
-    if (!routeIsInvestigation(location.hash)) enforceRouteScope();
+    const body = document.body;
+    if (!routeIsInvestigation(location.hash) || body?.classList.contains("retro-home-mode") || body?.classList.contains("retro-page-mode")) {
+      enforceRouteScope();
+    }
   }
 
   window.addEventListener("hashchange", scheduleEnforcement);
   window.addEventListener("popstate", scheduleEnforcement);
   window.addEventListener("pageshow", scheduleEnforcement);
   window.addEventListener("resize", scheduleEnforcement);
+  window.addEventListener("orientationchange", scheduleEnforcement);
   window.visualViewport?.addEventListener?.("resize", scheduleEnforcement);
   document.addEventListener("pointerdown", clearBeforeTouchOutsideInvestigation, true);
   document.addEventListener("touchstart", clearBeforeTouchOutsideInvestigation, { capture: true, passive: true });
   document.addEventListener("visibilitychange", scheduleEnforcement);
 
   const observer = new MutationObserver(scheduleEnforcement);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
   enforceRouteScope();
+  requestAnimationFrame(enforceRouteScope);
+  setTimeout(enforceRouteScope, 120);
 })();
