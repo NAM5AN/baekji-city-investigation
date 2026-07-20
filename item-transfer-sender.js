@@ -29,8 +29,10 @@
     const left = remaining(offer);
     const label = modal?.querySelector("[data-transfer-sender-seconds]");
     const bar = modal?.querySelector("[data-transfer-sender-bar]");
-    if (label) label.textContent = formatRemaining(left);
-    if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, left / 60000))})`;
+    const nextLabel = formatRemaining(left);
+    const nextTransform = `scaleX(${Math.max(0, Math.min(1, left / 60000))})`;
+    if (label && label.textContent !== nextLabel) label.textContent = nextLabel;
+    if (bar && bar.style.transform !== nextTransform) bar.style.transform = nextTransform;
   }
 
   function cancelOffer(offer) {
@@ -136,7 +138,6 @@
   });
   window.addEventListener("hashchange", queueRefresh);
   window.addEventListener("pageshow", queueRefresh);
-  new MutationObserver(queueRefresh).observe(document.documentElement, { childList: true, subtree: true });
   setInterval(refresh, 250);
   queueRefresh();
 })();
