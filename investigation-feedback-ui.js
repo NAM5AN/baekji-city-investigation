@@ -216,7 +216,7 @@
       failSafeTimer: 0,
     };
     document.body.setAttribute("data-action-processing", "true");
-    applyProcessingUI();
+    queueMicrotask(() => processing && applyProcessingUI());
     processing.failSafeTimer = setTimeout(finishProcessing, 22_000);
   }
 
