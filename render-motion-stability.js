@@ -137,20 +137,30 @@
     if (fullText != null && target.textContent !== fullText) target.textContent = fullText;
     target.classList.remove("is-typing", "motion-type-target");
     delete target.dataset.motionTyping;
+    const wrapper = target.closest("[data-motion-typing]");
+    if (wrapper && wrapper !== target) delete wrapper.dataset.motionTyping;
+  }
+
+  function suppressEntry(entry) {
+    if (!entry?.classList?.contains("motion-stable-existing")) return;
+    entry.classList.remove("motion-chat-new", "motion-system-new");
+    entry.style.removeProperty("--motion-index");
+    restoreTypingTarget(entry.querySelector(".retro-chat-bubble, .retro-character-log-text, .retro-system-copy"));
   }
 
   function suppressExistingReplay() {
     suppressQueued = false;
-    document.querySelectorAll(
-      ".motion-stable-existing.motion-chat-new, .motion-stable-existing.motion-system-new"
-    ).forEach((entry) => {
-      entry.classList.remove("motion-chat-new", "motion-system-new");
-      entry.style.removeProperty("--motion-index");
-      restoreTypingTarget(entry.querySelector(".retro-chat-bubble, .retro-character-log-text, .retro-system-copy"));
-    });
-
+    document.querySelectorAll(".motion-stable-existing").forEach(suppressEntry);
     document.querySelectorAll(".motion-stable-existing .motion-type-target, .motion-stable-existing [data-motion-typing='true']")
       .forEach(restoreTypingTarget);
+  }
+
+  function suppressMutationTyping(mutation) {
+    const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
+    const entry = target?.closest?.(".motion-stable-existing");
+    if (!entry) return false;
+    suppressEntry(entry);
+    return true;
   }
 
   function queueSuppress() {
@@ -171,8 +181,10 @@
     tagSystemEntries(session, bucket);
     tagChatEntries(session, bucket);
     queueSuppress();
-    setTimeout(queueSuppress, 75);
-    setTimeout(queueSuppress, 220);
+    setTimeout(queueSuppress, 40);
+    setTimeout(queueSuppress, 90);
+    setTimeout(queueSuppress, 180);
+    setTimeout(queueSuppress, 360);
   }
 
   function queueStabilize() {
@@ -185,10 +197,11 @@
     let needsStabilize = false;
     let needsSuppress = false;
     mutations.forEach((mutation) => {
+      if (suppressMutationTyping(mutation)) needsSuppress = true;
       if (mutation.type === "childList") {
         needsStabilize = true;
         needsSuppress = true;
-      } else if (mutation.type === "attributes") {
+      } else if (mutation.type === "attributes" || mutation.type === "characterData") {
         needsSuppress = true;
       }
     });
@@ -199,6 +212,7 @@
   observer.observe(app, {
     childList: true,
     subtree: true,
+    characterData: true,
     attributes: true,
     attributeFilter: ["class", "data-motion-typing"],
   });
@@ -207,6 +221,8 @@
     visibleSystemEntries,
     visibleChatEntries,
     currentSessionId,
+    restoreTypingTarget,
+    suppressMutationTyping,
   });
 
   stabilize();
