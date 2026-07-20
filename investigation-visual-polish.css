@@ -37,6 +37,8 @@
   animation: retro-channel-overlay-hold 720ms steps(8, end) both;
 }
 
+body[data-choice-motion-suppressed] .retro-choice-launch,
+body[data-choice-motion-suppressed] .retro-scene-actions,
 .retro-choice-no-enter,
 .retro-choice-no-enter.motion-modal-enter {
   animation: none !important;
