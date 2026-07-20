@@ -7,8 +7,7 @@
 
   const buckets = new Map();
   const initialChoiceClosed = new Set();
-  let stabilizeQueued = false;
-  let suppressQueued = false;
+  let stabilizeFrame = 0;
 
   function parseState() {
     try {
@@ -31,6 +30,7 @@
       buckets.set(sessionId, {
         system: new Set(),
         chat: new Set(),
+        pendingSystem: new Set(),
         systemSeeded: false,
         chatSeeded: false,
       });
@@ -49,36 +49,46 @@
     return (session?.logs || []).filter((entry) => entry?.type === "interaction");
   }
 
-  function classify(element, key, seen, seeded, pending = false) {
+  function markEntry(element, key, seen, pendingKeys, seeded, pending = false) {
     if (!element || !key) return;
 
     const previousKey = element.dataset.motionEntryId;
     const previousState = element.dataset.motionStability;
     if (previousKey === key && previousState) {
       if (pending) {
+        pendingKeys.add(key);
+        element.dataset.motionStability = "pending";
+        element.classList.remove("motion-stable-existing", "motion-stable-new");
         element.classList.add("retro-action-result-pending", "motion-stable-pending");
         return;
       }
-      if (previousState !== "pending") return;
-
-      element.classList.remove("retro-action-result-pending", "motion-stable-pending", "motion-stable-existing");
-      element.dataset.motionStability = "new";
-      element.classList.add("motion-stable-new");
-      seen.add(key);
+      if (previousState === "pending") {
+        pendingKeys.delete(key);
+        element.dataset.motionStability = "new";
+        element.classList.remove("retro-action-result-pending", "motion-stable-pending", "motion-stable-existing");
+        element.classList.add("motion-stable-new");
+        seen.add(key);
+      }
       return;
     }
 
     element.dataset.motionEntryId = key;
-    element.classList.remove("motion-stable-existing", "motion-stable-new", "motion-stable-pending");
+    element.classList.remove(
+      "motion-stable-existing",
+      "motion-stable-new",
+      "motion-stable-pending",
+      "retro-action-result-pending",
+    );
 
     if (pending) {
+      pendingKeys.add(key);
       element.dataset.motionStability = "pending";
       element.classList.add("retro-action-result-pending", "motion-stable-pending");
       return;
     }
 
-    element.classList.remove("retro-action-result-pending");
-    const existing = !seeded || seen.has(key);
+    const completedPending = pendingKeys.delete(key);
+    const existing = !completedPending && (!seeded || seen.has(key));
     element.dataset.motionStability = existing ? "existing" : "new";
     element.classList.add(existing ? "motion-stable-existing" : "motion-stable-new");
     seen.add(key);
@@ -91,7 +101,14 @@
     lines.forEach((line, index) => {
       const entry = entries[index];
       const key = entry?.id ? `system:${entry.id}` : `system:fallback:${index}`;
-      classify(line, key, bucket.system, bucket.systemSeeded, Boolean(entry?.actionNarrationPending));
+      markEntry(
+        line,
+        key,
+        bucket.system,
+        bucket.pendingSystem,
+        bucket.systemSeeded,
+        Boolean(entry?.actionNarrationPending),
+      );
     });
     bucket.systemSeeded = true;
   }
@@ -99,10 +116,12 @@
   function tagChatEntries(session, bucket) {
     const entries = visibleChatEntries(session);
     const messages = [...document.querySelectorAll("[data-chat-stream] .retro-chat-message")];
+    const noPending = new Set();
+
     messages.forEach((message, index) => {
       const entry = entries[index];
       const key = entry?.id ? `chat:${entry.id}` : `chat:fallback:${index}`;
-      classify(message, key, bucket.chat, bucket.chatSeeded, false);
+      markEntry(message, key, bucket.chat, noPending, bucket.chatSeeded, false);
     });
 
     const dividerCounts = new Map();
@@ -110,7 +129,7 @@
       const label = String(divider.textContent || "").replace(/\s+/g, " ").trim();
       const count = (dividerCounts.get(label) || 0) + 1;
       dividerCounts.set(label, count);
-      classify(divider, `chat-divider:${label}:${count}`, bucket.chat, bucket.chatSeeded, false);
+      markEntry(divider, `chat-divider:${label}:${count}`, bucket.chat, noPending, bucket.chatSeeded, false);
     });
     bucket.chatSeeded = true;
   }
@@ -141,36 +160,16 @@
     if (wrapper && wrapper !== target) delete wrapper.dataset.motionTyping;
   }
 
-  function suppressEntry(entry) {
-    if (!entry?.classList?.contains("motion-stable-existing")) return;
-    entry.classList.remove("motion-chat-new", "motion-system-new");
-    entry.style.removeProperty("--motion-index");
-    restoreTypingTarget(entry.querySelector(".retro-chat-bubble, .retro-character-log-text, .retro-system-copy"));
-  }
-
   function suppressExistingReplay() {
-    suppressQueued = false;
-    document.querySelectorAll(".motion-stable-existing").forEach(suppressEntry);
-    document.querySelectorAll(".motion-stable-existing .motion-type-target, .motion-stable-existing [data-motion-typing='true']")
-      .forEach(restoreTypingTarget);
-  }
-
-  function suppressMutationTyping(mutation) {
-    const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
-    const entry = target?.closest?.(".motion-stable-existing");
-    if (!entry) return false;
-    suppressEntry(entry);
-    return true;
-  }
-
-  function queueSuppress() {
-    if (suppressQueued) return;
-    suppressQueued = true;
-    queueMicrotask(suppressExistingReplay);
+    document.querySelectorAll(".motion-stable-existing").forEach((entry) => {
+      entry.classList.remove("motion-chat-new", "motion-system-new");
+      entry.style.removeProperty("--motion-index");
+      restoreTypingTarget(entry.querySelector(".retro-chat-bubble, .retro-character-log-text, .retro-system-copy"));
+    });
   }
 
   function stabilize() {
-    stabilizeQueued = false;
+    stabilizeFrame = 0;
     const sessionId = currentSessionId();
     const state = parseState();
     const session = state?.sessions?.[sessionId];
@@ -180,50 +179,34 @@
     closeInitialChoicePanel(state, sessionId);
     tagSystemEntries(session, bucket);
     tagChatEntries(session, bucket);
-    queueSuppress();
-    setTimeout(queueSuppress, 40);
-    setTimeout(queueSuppress, 90);
-    setTimeout(queueSuppress, 180);
-    setTimeout(queueSuppress, 360);
+
+    suppressExistingReplay();
+    setTimeout(suppressExistingReplay, 90);
+    setTimeout(suppressExistingReplay, 220);
+    setTimeout(suppressExistingReplay, 420);
   }
 
   function queueStabilize() {
-    if (stabilizeQueued) return;
-    stabilizeQueued = true;
-    queueMicrotask(stabilize);
+    if (stabilizeFrame) return;
+    stabilizeFrame = requestAnimationFrame(stabilize);
   }
 
-  const observer = new MutationObserver((mutations) => {
-    let needsStabilize = false;
-    let needsSuppress = false;
-    mutations.forEach((mutation) => {
-      if (suppressMutationTyping(mutation)) needsSuppress = true;
-      if (mutation.type === "childList") {
-        needsStabilize = true;
-        needsSuppress = true;
-      } else if (mutation.type === "attributes" || mutation.type === "characterData") {
-        needsSuppress = true;
-      }
-    });
-    if (needsStabilize) queueStabilize();
-    if (needsSuppress) queueSuppress();
-  });
+  // app.innerHTML이 교체되는 렌더만 감지합니다.
+  // 채팅 타이핑의 글자 변화나 하위 요소의 클래스 변화는 감시하지 않아
+  // 모션 감시기끼리 서로 재호출되는 루프를 만들지 않습니다.
+  const observer = new MutationObserver(queueStabilize);
+  observer.observe(app, { childList: true });
 
-  observer.observe(app, {
-    childList: true,
-    subtree: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ["class", "data-motion-typing"],
-  });
+  window.addEventListener("hashchange", queueStabilize);
+  window.addEventListener("pageshow", queueStabilize);
 
   window.__BAEKJI_RENDER_MOTION_STABILITY_TEST__ = Object.freeze({
     visibleSystemEntries,
     visibleChatEntries,
     currentSessionId,
     restoreTypingTarget,
-    suppressMutationTyping,
+    suppressExistingReplay,
   });
 
-  stabilize();
+  queueStabilize();
 })();
