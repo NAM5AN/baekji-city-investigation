@@ -3,8 +3,12 @@
   const T = window.BAEKJI_ITEM_TRANSFER;
   if (!T) return;
 
+  const HOLD_KEY = "baekji_transfer_held";
   let activeModalId = "";
   const read = () => T.parse(localStorage.getItem(T.STATE_KEY));
+  const heldTransferId = () => {
+    try { return sessionStorage.getItem(HOLD_KEY) || ""; } catch { return ""; }
+  };
 
   function dispatchState(oldValue, newValue) {
     try {
@@ -60,6 +64,7 @@
       closeModal(transferId);
       return;
     }
+    try { sessionStorage.removeItem(HOLD_KEY); } catch { /* 저장소를 사용할 수 없는 환경은 무시합니다. */ }
     write(state);
     closeModal(transferId);
     toast(
@@ -79,6 +84,13 @@
       activeModalId = "";
       return;
     }
+
+    if (heldTransferId() === offer.id) {
+      if (root.querySelector(`[data-item-transfer-modal="${offer.id}"]`)) root.innerHTML = "";
+      activeModalId = "";
+      return;
+    }
+
     if (activeModalId === offer.id && root.querySelector(`[data-item-transfer-modal="${offer.id}"]`)) return;
     if (root.children.length && !root.querySelector("[data-item-transfer-modal]")) return;
 
