@@ -70,6 +70,7 @@ assert.equal(api.allBriefingMembersConfirmed(twiceConfirmed.sessions.session_1, 
 assert.equal(api.routeSyncTarget(base, "test_a", "party", "party_1"), "briefing/session_1");
 const active = structuredClone(base);
 active.sessions.session_1.status = "ACTIVE";
+assert.equal(api.routeSyncTarget(active, "test_a", "home", ""), null, "active sessions must remain on the personal home screen until resume is pressed");
 assert.equal(api.routeSyncTarget(active, "test_a", "briefing", "session_1"), "investigate/session_1");
 assert.equal(api.routeSyncTarget(active, "test_a", "investigate", "session_1"), null);
 
