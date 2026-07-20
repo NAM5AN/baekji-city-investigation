@@ -14,16 +14,19 @@ assert.match(source, /motion-stable-existing/);
 assert.match(source, /visibleSystemEntries/);
 assert.match(source, /visibleChatEntries/);
 assert.match(source, /restoreTypingTarget/);
+assert.match(source, /suppressMutationTyping/);
+assert.match(source, /characterData:\s*true/);
+assert.match(source, /setTimeout\(queueSuppress, 360\)/);
 
 assert.match(css, /motion-stable-existing\.motion-chat-new/);
 assert.match(css, /motion-stable-existing\.motion-system-new/);
 assert.match(css, /animation:\s*none\s*!important/);
 
-const guardIndex = index.indexOf("render-motion-stability.js?v=0.3.40");
+const guardIndex = index.indexOf("render-motion-stability.js?v=0.3.41");
 const motionIndex = index.indexOf("retro-motion.js?v=0.3.33");
 assert.ok(guardIndex >= 0, "render stability guard must be loaded");
 assert.ok(motionIndex >= 0, "retro motion script must be loaded");
 assert.ok(guardIndex < motionIndex, "stability guard must observe renders before retro motion");
-assert.match(index, /render-motion-stability\.css\?v=0\.3\.39/);
+assert.match(index, /render-motion-stability\.css\?v=0\.3\.41/);
 
 console.log("render motion stability checks passed");
