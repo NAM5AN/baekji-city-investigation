@@ -1,5 +1,5 @@
 @media (max-width: 640px) {
-  .retro-transfer-modal { width: calc(100vw - 20px); max-height: calc(100dvh - 28px); overflow: auto; }
+  .retro-transfer-modal { width: calc(100vw - 20px); max-height: calc(100dvh - 28px); overflow: auto; overscroll-behavior: contain; }
   .retro-transfer-item-card { grid-template-columns: 56px 1fr; padding: 15px; }
   .retro-transfer-item-icon { width: 56px; height: 56px; font-size: 23px; }
   .retro-transfer-item-card h2 { font-size: 21px; }
