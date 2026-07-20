@@ -1,0 +1,24 @@
+@media (max-width: 980px) {
+  body:not([data-mobile-investigation-route="1"]) {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+
+  body:not([data-mobile-investigation-route="1"]) #app,
+  body:not([data-mobile-investigation-route="1"]) .shell {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+
+  body:not([data-mobile-investigation-route="1"]) [data-mobile-investigation-toggle],
+  body:not([data-mobile-investigation-route="1"]) [data-mobile-investigation-indicator],
+  body:not([data-mobile-investigation-route="1"]) [data-mobile-investigation-live],
+  body:not([data-mobile-investigation-route="1"]) [data-mobile-investigation-hint] {
+    display: none !important;
+    pointer-events: none !important;
+  }
+}
