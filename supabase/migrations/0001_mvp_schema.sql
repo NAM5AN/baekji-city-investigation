@@ -167,6 +167,7 @@ create table public.action_idempotency (
 alter table public.profiles enable row level security;
 alter table public.characters enable row level security;
 alter table public.user_characters enable row level security;
+alter table public.world_loops enable row level security;
 alter table public.character_states enable row level security;
 alter table public.parties enable row level security;
 alter table public.party_members enable row level security;
@@ -338,7 +339,10 @@ begin
 end;
 $$;
 
-revoke all on all tables in schema public from anon, authenticated;
+revoke all on public.profiles, public.characters, public.user_characters, public.world_loops,
+  public.character_states, public.parties, public.party_members, public.investigation_sessions,
+  public.session_members, public.session_events, public.route_encounters, public.hazard_resolutions,
+  public.object_states, public.inventory_items, public.action_idempotency from anon, authenticated;
 grant select on public.profiles, public.characters, public.user_characters, public.character_states,
   public.parties, public.party_members, public.investigation_sessions, public.session_members,
   public.session_events, public.route_encounters, public.hazard_resolutions, public.object_states,
@@ -347,3 +351,9 @@ grant execute on function public.current_character_id() to authenticated;
 grant execute on function public.is_session_member(uuid) to authenticated;
 grant execute on function public.rpc_set_party_ready(uuid, uuid) to authenticated;
 grant execute on function public.rpc_inspect_object(uuid, text, uuid) to authenticated;
+
+-- PostgreSQL grants EXECUTE to PUBLIC by default. Keep helper/RPC functions unavailable to anon.
+revoke execute on function public.current_character_id() from public, anon;
+revoke execute on function public.is_session_member(uuid) from public, anon;
+revoke execute on function public.rpc_set_party_ready(uuid, uuid) from public, anon;
+revoke execute on function public.rpc_inspect_object(uuid, text, uuid) from public, anon;
