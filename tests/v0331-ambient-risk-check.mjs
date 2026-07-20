@@ -70,9 +70,9 @@ assert.equal(skippedProfile.skippedByChance, true);
 assert.match(gameplaySource, /무사히 통과했다/);
 assert.match(gameplaySource, /profile\.chance/);
 
-assert.match(motionSource, /function typeText/);
-assert.match(motionSource, /retro-chat-bubble/);
-assert.match(motionSource, /retro-system-copy/);
+assert.doesNotMatch(motionSource, /function typeText/);
+assert.doesNotMatch(motionSource, /typingTimers/);
+assert.match(motionSource, /motion-stable-new/);
 assert.match(motionSource, /motion-map-unfold/);
 assert.match(motionCss, /retro-ambient-breathe/);
 assert.match(motionCss, /retro-dissolve-flow/);
@@ -81,4 +81,4 @@ assert.match(motionCss, /retro-type-caret/);
 assert.match(index, /gameplay-variance\.js\?v=0\.3\.31/);
 assert.match(index, /retro-ambient-type\.css\?v=0\.3\.31/);
 
-console.log("v0.3.31 ambient, typing, persistent choice, and chance-risk checks passed");
+console.log("v0.3.31 ambient, persistent choice, and chance-risk checks passed");
