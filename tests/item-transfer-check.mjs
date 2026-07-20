@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import vm from "node:vm";
+const source=fs.readFileSync(new URL("../item-transfer-core.js",import.meta.url),"utf8");
+const box={window:{},globalThis:{},Date,JSON,Map,Set,Object,String,Number,Math,console};box.globalThis.window=box.window;vm.createContext(box);vm.runInContext(source,box);
+const T=box.window.__BAEKJI_ITEM_TRANSFER_TEST__;assert.ok(T);
+const state={version:3,characters:{test_a:{currentSessionId:"a",inventory:{NORMAL:{itemId:"LIGHT",name:"손전등",category:"도구",quantity:1,state:"CLEAN"},DEAD:{itemId:"DEAD",baseItemId:"LIGHT",catalogItemId:"LIGHT",name:"손전등",category:"도구",quantity:1,state:"DISCHARGED"}}},test_b:{currentSessionId:"b",inventory:{NORMAL:{itemId:"LIGHT",name:"손전등",category:"도구",quantity:1,state:"CLEAN"}}}},sessions:{a:{id:"a",status:"ACTIVE",variant:"c",currentNode:"N",currentDetailId:"D",memberIds:["test_a"],logs:[]},b:{id:"b",status:"ACTIVE",variant:"c",currentNode:"N",currentDetailId:"D",memberIds:["test_b"],logs:[]}}};
+const choice=T.localInterpret("/캐릭터B에게 방전된 손전등을 건넨다",{visibleCharacters:[{id:"test_b",name:"테스트 캐릭터 B",aliases:["캐릭터B"]}],inventory:[{inventoryKey:"NORMAL",name:"손전등",displayName:"손전등",stateLabel:"정상",quantity:1},{inventoryKey:"DEAD",name:"손전등",displayName:"방전된 손전등",stateLabel:"방전됨",quantity:1}]});
+assert.equal(choice.inventoryKey,"DEAD");
+const offer=T.createOffer(state,{giverId:"test_a",receiverId:"test_b",inventoryKey:"DEAD",actionText:"/캐릭터B에게 방전된 손전등을 건넨다"});assert.equal(offer.ok,true);assert.equal(state.characters.test_a.inventory.DEAD.quantity,1);
+T.resolveOffer(state,offer.offer.id,"test_b","ACCEPT");assert.equal(state.characters.test_a.inventory.DEAD,undefined);assert.equal(Object.values(state.characters.test_b.inventory).length,2);assert.ok(Object.values(state.characters.test_b.inventory).some(item=>item.state==="DISCHARGED"));
+const reject=T.createOffer(state,{giverId:"test_b",receiverId:"test_a",inventoryKey:"NORMAL"});const before=state.characters.test_b.inventory.NORMAL.quantity;T.resolveOffer(state,reject.offer.id,"test_a","REJECT");assert.equal(state.characters.test_b.inventory.NORMAL.quantity,before);
+console.log("PASS: item transfer consent and state-separated inventory");
