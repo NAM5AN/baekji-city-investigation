@@ -1,7 +1,8 @@
 .retro-transfer-backdrop { z-index: 1300; }
 .retro-transfer-modal { width: min(520px, calc(100vw - 32px)); padding: 0; overflow: hidden; }
-.retro-transfer-modal .retro-modal-title { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 2px solid #161616; background: #ecece7; }
-.retro-transfer-modal .retro-modal-title b { font-size: 11px; letter-spacing: .08em; border: 1px solid #161616; padding: 4px 7px; background: #fff; }
+.retro-transfer-modal .retro-modal-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 2px solid #161616; background: #ecece7; }
+.retro-transfer-modal .retro-modal-title b { margin-left: auto; font-size: 11px; letter-spacing: .08em; border: 1px solid #161616; padding: 4px 7px; background: #fff; }
+.retro-transfer-close { width: 30px; height: 30px; border: 1px solid #161616; background: #fff; font: inherit; font-size: 20px; line-height: 1; cursor: pointer; }
 .retro-transfer-sender { display: flex; justify-content: space-between; gap: 16px; padding: 14px 18px 10px; font-size: 13px; border-bottom: 1px dashed rgba(0,0,0,.35); }
 .retro-transfer-sender span { opacity: .65; }
 .retro-transfer-item-card { display: grid; grid-template-columns: 70px 1fr; gap: 15px; align-items: center; padding: 18px; }
@@ -15,8 +16,14 @@
 .retro-transfer-info dt, .retro-transfer-info dd { margin: 0; padding: 9px 11px; font-size: 12px; }
 .retro-transfer-info dt { font-weight: 700; background: rgba(0,0,0,.06); border-right: 1px solid rgba(0,0,0,.25); }
 .retro-transfer-note { margin: 13px 18px 0; font-size: 12px; line-height: 1.55; opacity: .7; }
-.retro-transfer-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 9px; padding: 17px 18px 19px; }
+.retro-transfer-timer { margin: 14px 18px 0; font-size: 12px; }
+.retro-transfer-timer > span { display: flex; justify-content: space-between; margin-bottom: 7px; }
+.retro-transfer-timer > div { height: 7px; overflow: hidden; border: 1px solid #161616; background: rgba(0,0,0,.08); }
+.retro-transfer-timer i { display: block; width: 100%; height: 100%; transform-origin: left center; background: #161616; transition: transform .2s linear; }
+.retro-transfer-actions { display: grid; grid-template-columns: .9fr 1fr 1.4fr; gap: 9px; padding: 14px 18px 19px; }
 .retro-transfer-actions .retro-modal-button { margin: 0; width: 100%; }
-.retro-transfer-actions .danger { background: #deded9; color: #111; }
+.retro-transfer-actions .danger, .retro-transfer-actions .hold { background: #deded9; color: #111; }
 .retro-transfer-actions .primary { background: #181818; color: #fff; }
+.retro-transfer-resume-launch { margin-right: 8px; border: 2px solid #161616; background: #f6f6f2; box-shadow: 3px 3px 0 rgba(0,0,0,.25); font: inherit; padding: 10px 13px; cursor: pointer; }
 .retro-item-state-badge { margin-left: auto; padding: 2px 6px; border: 1px solid currentColor; font-size: 10px; line-height: 1.2; opacity: .68; white-space: nowrap; }
+@media (max-width: 640px) { .retro-transfer-actions { grid-template-columns: 1fr; } .retro-transfer-resume-launch { margin-right: 6px; padding: 9px 10px; font-size: 12px; } }
