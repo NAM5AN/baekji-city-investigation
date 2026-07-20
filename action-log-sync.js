@@ -38,38 +38,89 @@
     return `node:${session.currentNode}`;
   }
 
+  function normalizedActionText(rawText) {
+    return String(rawText || "")
+      .trim()
+      .replace(/^\/+\s*/, "")
+      .replace(/[\[\](){}]/g, " ")
+      .replace(/\s+/g, " ");
+  }
+
   function observationalActionText(actorId, rawText) {
     const actorName = USER_LABELS[actorId] || "다른 조사자";
-    const text = String(rawText || "").trim().replace(/^\/+\s*/, "");
+    const text = normalizedActionText(rawText);
+
+    if (/(소리\s*(?:를\s*)?지르|소리치|고함|외치|고래고래|비명|목청|큰\s*소리|크게\s*(?:말|부르)|부르짖|호통|고성|함성)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 입을 크게 벌리고 몸을 앞으로 내밀며 주변을 향해 큰 소리로 외치는 모습이 보인다.`;
+    }
+    if (/(속삭|중얼|말하|말을\s*건|대답|질문|묻(?:는|는다|고|기)|이름을\s*부르|대화)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 누군가를 향해 입을 움직이며 말을 건네는 모습이 보인다.`;
+    }
     if (/(지도|약도|구역도)/.test(text)) {
       return `가까운 곳에서 ${actorName}가 접힌 지도를 펼쳐 주변 구조와 번갈아 대조하는 모습이 보인다.`;
     }
-    if (/(듣|귀를|소리|방송|잡음|발소리|기계음)/.test(text)) {
+    if (/(귀를\s*기울|경청|듣(?:는|는다|고|기|자)|방송을\s*듣|잡음에\s*집중|발소리.*듣|기계음.*듣|소리가\s*나는\s*쪽)/.test(text)) {
       return `가까운 곳에서 ${actorName}가 움직임을 줄이고 고개를 기울여 주변 소리에 귀를 기울이는 모습이 보인다.`;
     }
-    if (/(내\s*(?:몸|피부|옷)|자기\s*(?:몸|상태)|상태\s*(?:확인|살펴)|오염도)/.test(text)) {
-      return `가까운 곳에서 ${actorName}가 자신의 피부와 옷자락을 차례로 살피며 상태를 확인하는 모습이 보인다.`;
+    if (/(내\s*(?:몸|피부|옷)|자기\s*(?:몸|상태)|상태\s*(?:확인|살펴)|오염도|상처|피가|통증)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 자신의 피부와 옷자락을 차례로 살피며 몸 상태를 확인하는 모습이 보인다.`;
     }
-    if (/(기다|멈춰|가만히|움직이지)/.test(text)) {
+    if (/(숨(?:는|는다|기)|몸을\s*숨|웅크|엎드|몸을\s*낮)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 몸을 낮추고 주변 구조물 뒤로 조심스럽게 몸을 숨기는 모습이 보인다.`;
+    }
+    if (/(기다|멈춰|가만히|움직이지|정지)/.test(text)) {
       return `가까운 곳에서 ${actorName}가 움직임을 멈춘 채 주변을 경계하며 기다리는 모습이 보인다.`;
     }
-    if (/(본다|보다|봐|살펴|관찰|확인|조사|훑어)/.test(text)) {
-      return `가까운 곳에서 ${actorName}가 제자리에서 시선을 천천히 돌리며 주변 구조와 흔적을 살피는 모습이 보인다.`;
+    if (/(손가락으로\s*가리|가리킨|지목|손짓|신호|고개짓)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 한쪽 방향을 가리키며 손짓으로 신호를 보내는 모습이 보인다.`;
     }
-    if (/(가져|꺼내|사용|도구|장갑|천|로프|손전등|점검봉)/.test(text)) {
-      return `가까운 곳에서 ${actorName}가 소지품을 꺼내 상태를 확인한 뒤 주변 상황에 맞춰 사용하는 모습이 보인다.`;
+    if (/(열(?:어|고|기)|문을\s*연|닫(?:아|고|기)|문을\s*닫|손잡이)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 손잡이와 문틈을 살핀 뒤 문을 조심스럽게 움직이는 모습이 보인다.`;
     }
-    if (/(이동|간다|가자|걷|뛰|달려|통과|건너|올라|내려|들어)/.test(text)) {
-      return `가까운 곳에서 ${actorName}가 표지와 통로를 번갈아 살피며 이동할 방향을 가늠하는 모습이 보인다.`;
+    if (/(밀(?:어|고|기)|당기|끌어|잡아당)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 두 손에 힘을 주어 눈앞의 물체를 밀거나 당기는 모습이 보인다.`;
     }
-    if (/(피해|막아|잡아|밀어|당겨|닦아|건드|누르|열어|닫아|밟아)/.test(text)) {
-      return `가까운 곳에서 ${actorName}가 눈앞의 상황을 향해 몸을 낮추고 조심스럽게 대응하는 모습이 보인다.`;
+    if (/(줍|집어|들어\s*올|꺼내|가져|사용|도구|장갑|천|로프|손전등|점검봉)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 손을 뻗어 물건을 집거나 소지품을 꺼내 사용하는 모습이 보인다.`;
     }
-    return `가까운 곳에서 ${actorName}가 주변을 향해 손과 몸을 움직이며 무언가를 확인하는 모습이 보인다.`;
+    if (/(뛰|달려|전력|급히\s*가|서둘러)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 몸을 앞으로 기울인 채 빠른 걸음으로 현장을 가로지르는 모습이 보인다.`;
+    }
+    if (/(이동|간다|가자|걷|통과|건너|올라|내려|들어|나가|떠나)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 통로와 표지를 확인하며 한쪽 방향으로 이동하는 모습이 보인다.`;
+    }
+    if (/(본다|보다|봐|살펴|관찰|확인|조사|훑어|들여다|찾아|수색)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 시선을 천천히 옮기며 주변 구조와 흔적을 자세히 살피는 모습이 보인다.`;
+    }
+    if (/(피해|막아|잡아|닦아|건드|누르|밟아|만져|접촉)/.test(text)) {
+      return `가까운 곳에서 ${actorName}가 눈앞의 대상에 손을 뻗어 조심스럽게 대응하는 모습이 보인다.`;
+    }
+    return `가까운 곳에서 ${actorName}가 주변을 향해 손과 몸을 움직이며 무언가를 시도하는 모습이 보인다.`;
   }
 
   function makeObservationId(actionLogId, witnessSessionId) {
     return `field_action_${String(actionLogId || "unknown")}_${String(witnessSessionId || "unknown")}`;
+  }
+
+  function repairObservedActionTexts(state) {
+    if (!state?.sessions) return state;
+    const actions = new Map();
+    Object.values(state.sessions).forEach((session) => {
+      (session?.logs || []).forEach((entry) => {
+        if (entry?.id && entry.type === "action-input" && entry.actorId) actions.set(entry.id, entry);
+      });
+    });
+    Object.values(state.sessions).forEach((session) => {
+      (session?.logs || []).forEach((entry) => {
+        if (entry?.type !== "field-action" || !entry.sourceActionLogId) return;
+        const source = actions.get(entry.sourceActionLogId);
+        if (!source) return;
+        entry.text = observationalActionText(source.actorId || entry.observedActorId, source.text);
+        entry.observedActorId = source.actorId || entry.observedActorId || null;
+        entry.observationTextVersion = 2;
+      });
+    });
+    return state;
   }
 
   function enrichObservedActions(nextState, previousState) {
@@ -108,12 +159,14 @@
                 observedActorId: entry.actorId,
                 observedSessionId: sourceSession.id,
                 sourceActionLogId: entry.id,
+                observationTextVersion: 2,
               });
             });
         }
         entry.fieldObservationBroadcasted = true;
       });
     });
+    repairObservedActionTexts(next);
     return next;
   }
 
@@ -137,7 +190,9 @@
 
   const TEST_API = Object.freeze({
     spatialScopeKey,
+    normalizedActionText,
     observationalActionText,
+    repairObservedActionTexts,
     enrichObservedActions,
     stripCompletedNarrationMarkers,
     visibleSystemEntries,
@@ -293,6 +348,7 @@
         enrichObservedActions(parsedNext, previous);
         provisionalIds = markProvisionalNarrationResults(parsedNext, previous);
         stripCompletedNarrationMarkers(parsedNext);
+        repairObservedActionTexts(parsedNext);
         nextValue = JSON.stringify(parsedNext);
       }
     }
