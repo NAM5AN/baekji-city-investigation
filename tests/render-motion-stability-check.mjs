@@ -25,7 +25,7 @@ assert.match(css, /motion-stable-existing\.motion-system-new/);
 assert.match(css, /animation:\s*none\s*!important/);
 
 const guardIndex = index.indexOf("render-motion-stability.js?v=0.3.44");
-const motionIndex = index.indexOf("retro-motion.js?v=0.3.33");
+const motionIndex = index.indexOf("retro-motion.js?v=0.3.46");
 assert.ok(guardIndex >= 0, "render stability guard must be loaded");
 assert.ok(motionIndex >= 0, "retro motion script must be loaded");
 assert.ok(guardIndex < motionIndex, "stability guard must observe renders before retro motion");
