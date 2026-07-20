@@ -5,11 +5,11 @@ const html = fs.readFileSync("index.html", "utf8");
 const css = fs.readFileSync("retro-motion.css", "utf8");
 const js = fs.readFileSync("retro-motion.js", "utf8");
 
-assert.match(html, /retro-motion\.css\?v=0\.3\.30/, "모션 CSS가 버전과 함께 로드되어야 합니다.");
-assert.match(html, /retro-motion\.js\?v=0\.3\.30/, "모션 JS가 버전과 함께 로드되어야 합니다.");
+assert.match(html, /retro-motion\.css\?v=0\.3\.31/, "모션 CSS가 버전과 함께 로드되어야 합니다.");
+assert.match(html, /retro-motion\.js\?v=0\.3\.31/, "모션 JS가 버전과 함께 로드되어야 합니다.");
 assert.ok(html.indexOf("mobile-bidirectional-swipe.js") < html.indexOf("retro-motion.js"), "모션 레이어는 기존 모바일 전환 로직 뒤에 로드되어야 합니다.");
 
-assert.match(js, /new MutationObserver\(scheduleProcess\)/, "앱 화면 교체를 감지해야 합니다.");
+assert.match(js, /const appObserver = new MutationObserver/, "앱 화면 교체를 감지해야 합니다.");
 assert.match(js, /\.retro-system-line/, "SYSTEM 로그 신규 항목을 추적해야 합니다.");
 assert.match(js, /\.retro-chat-message, \.retro-chat-divider/, "채팅 신규 항목을 추적해야 합니다.");
 assert.match(js, /routeChanged/, "같은 화면 재렌더와 실제 화면 이동을 구분해야 합니다.");
@@ -18,6 +18,8 @@ assert.match(js, /knownChat/, "기존 채팅의 반복 애니메이션을 방지
 assert.match(js, /slice\(-8\)/, "한 번에 재생되는 신규 항목 수를 제한해야 합니다.");
 assert.match(js, /prefers-reduced-motion: reduce/, "사용자의 동작 줄이기 설정을 확인해야 합니다.");
 assert.doesNotMatch(js, /setInterval\(/, "애니메이션 감지를 위한 무한 주기 타이머를 사용하면 안 됩니다.");
+assert.match(js, /function typeText/, "새 채팅과 SYSTEM 문장의 타이핑 효과가 필요합니다.");
+assert.match(js, /motion-map-unfold/, "지도 모달의 세로 전개 효과가 필요합니다.");
 
 assert.match(css, /motion-page-enter/, "페이지 진입 애니메이션이 필요합니다.");
 assert.match(css, /motion-system-new/, "SYSTEM 로그 등장 애니메이션이 필요합니다.");
