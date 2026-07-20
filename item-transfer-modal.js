@@ -106,15 +106,22 @@
   function decorateInventory() {
     const state = read();
     const inventory = state?.characters?.[T.uid()]?.inventory || {};
+    const findItem = (reference) => inventory[reference] || Object.values(inventory).find((candidate) => candidate?.itemId === reference);
     document.querySelectorAll("[data-item-modal]").forEach((row) => {
       if (row.querySelector(".retro-item-state-badge")) return;
-      const reference = row.dataset.itemModal;
-      const item = inventory[reference] || Object.values(inventory).find((candidate) => candidate?.itemId === reference);
+      const item = findItem(row.dataset.itemModal);
       if (!item) return;
       const badge = document.createElement("small");
       badge.className = "retro-item-state-badge";
       badge.textContent = T.label(item);
       row.appendChild(badge);
+    });
+    document.querySelectorAll("[data-transfer-item] option[value]").forEach((option) => {
+      if (!option.value || option.dataset.stateDecorated === "true") return;
+      const item = findItem(option.value);
+      if (!item) return;
+      option.textContent = `${T.display(item)} · ${T.label(item)} ×${item.quantity}`;
+      option.dataset.stateDecorated = "true";
     });
   }
 
