@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "check": "node --check app.js && node --check party-flow-sync.js && node --check server.mjs && node --check data/image-map.js && node tests/data-check.mjs && node tests/ux-flow-check.mjs && node tests/v037-behavior-check.mjs && node tests/media-ui-check.mjs && node tests/font-ui-check.mjs && node tests/all-screen-retro-check.mjs && node tests/map-ui-check.mjs && node tests/readability-ui-check.mjs && node tests/ai-server-check.mjs && node tests/vercel-deploy-check.mjs && node tests/party-flow-check.mjs",
+    "check": "node --check app.js && node --check action-log-sync.js && node --check party-flow-sync.js && node --check server.mjs && node --check data/image-map.js && node tests/data-check.mjs && node tests/ux-flow-check.mjs && node tests/v037-behavior-check.mjs && node tests/media-ui-check.mjs && node tests/font-ui-check.mjs && node tests/all-screen-retro-check.mjs && node tests/map-ui-check.mjs && node tests/readability-ui-check.mjs && node tests/ai-server-check.mjs && node tests/vercel-deploy-check.mjs && node tests/party-flow-check.mjs && node tests/action-log-sync-check.mjs",
     "zip": "python scripts/make-zip.py"
   }
 }
