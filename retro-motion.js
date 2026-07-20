@@ -19,6 +19,7 @@
   let lastValues = new Map();
 
   const cleanupTimers = new WeakMap();
+  const typingTimers = new WeakMap();
 
   function routeKey() {
     return location.hash.replace(/^#\/?/, "") || "login";
@@ -73,11 +74,73 @@
     entries.forEach(({ signature }) => target.add(signature));
   }
 
-  function animateNewEntries(entries, known, className) {
+  function ensureSystemTypingTarget(element) {
+    const existing = element.querySelector(".retro-character-log-text, .retro-system-copy");
+    if (existing) return existing;
+    const time = element.querySelector(".retro-log-time");
+    const nodes = [...element.childNodes].filter((node) => node !== time && node.nodeType === Node.TEXT_NODE);
+    const text = nodes.map((node) => node.textContent || "").join("");
+    if (!text.trim()) return null;
+    element.dataset.motionTyping = "true";
+    const target = document.createElement("span");
+    target.className = "retro-system-copy";
+    target.textContent = text;
+    nodes.forEach((node) => node.remove());
+    element.appendChild(target);
+    return target;
+  }
+
+  function typingTargetFor(element, kind) {
+    if (kind === "chat") return element.querySelector(".retro-chat-bubble");
+    if (kind === "system") return ensureSystemTypingTarget(element);
+    return null;
+  }
+
+  function typeText(target, { speed = 9, maxDuration = 680 } = {}) {
+    if (!target || !motionEnabled()) return;
+    const original = String(target.textContent || "");
+    if (!original.trim() || original.length < 2) return;
+    const previous = typingTimers.get(target);
+    if (previous) clearTimeout(previous);
+
+    const characters = [...original];
+    const delay = Math.max(4, Math.min(speed, Math.floor(maxDuration / Math.max(1, characters.length))));
+    let index = 0;
+    target.dataset.motionTyping = "true";
+    target.classList.add("motion-type-target", "is-typing");
+    target.textContent = "";
+
+    const step = () => {
+      if (!target.isConnected) return;
+      index = Math.min(characters.length, index + Math.max(1, Math.ceil(characters.length / 70)));
+      target.textContent = characters.slice(0, index).join("");
+      if (index < characters.length) {
+        const timer = setTimeout(step, delay);
+        typingTimers.set(target, timer);
+        return;
+      }
+      target.textContent = original;
+      target.classList.remove("is-typing");
+      typingTimers.delete(target);
+      setTimeout(() => {
+        target.classList.remove("motion-type-target");
+        delete target.dataset.motionTyping;
+        const line = target.closest("[data-motion-typing]");
+        if (line && line !== target) delete line.dataset.motionTyping;
+      }, 50);
+    };
+
+    const timer = setTimeout(step, 42);
+    typingTimers.set(target, timer);
+  }
+
+  function animateNewEntries(entries, known, className, kind) {
     const newEntries = entries.filter(({ signature }) => !known.has(signature)).slice(-8);
     newEntries.forEach(({ element }, index) => {
       element.style.setProperty("--motion-index", String(index));
       animateOnce(element, className, 880);
+      const target = typingTargetFor(element, kind);
+      if (target) setTimeout(() => typeText(target, { speed: kind === "system" ? 7 : 9 }), index * 34 + 65);
     });
     replaceKnown(known, entries);
   }
@@ -189,8 +252,8 @@
       replaceKnown(knownSystem, systemEntries);
       replaceKnown(knownChat, chatEntries);
     } else {
-      animateNewEntries(systemEntries, knownSystem, "motion-system-new");
-      animateNewEntries(chatEntries, knownChat, "motion-chat-new");
+      animateNewEntries(systemEntries, knownSystem, "motion-system-new", "system");
+      animateNewEntries(chatEntries, knownChat, "motion-chat-new", "chat");
       animateTabChange(tab);
       animateLocationChange(locationText);
       animateSpecialState(special);
@@ -212,27 +275,45 @@
     frameId = requestAnimationFrame(() => requestAnimationFrame(processRender));
   }
 
-  function animateAddedChildren(root, selector, className) {
+  function isTypingMutation(mutation) {
+    const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
+    return Boolean(target?.closest?.("[data-motion-typing]"));
+  }
+
+  function animateModalRoot(root) {
     const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (!(node instanceof Element)) return;
-          const candidates = [node, ...node.querySelectorAll(selector)].filter((element) => element.matches(selector));
-          candidates.forEach((element, index) => {
-            element.style.setProperty("--motion-index", String(index));
-            animateOnce(element, className, 760);
-          });
-        });
+      if (!mutations.some((mutation) => mutation.addedNodes.length)) return;
+      requestAnimationFrame(() => {
+        const backdrop = root.querySelector(".retro-modal-backdrop");
+        const modal = root.querySelector(".retro-modal");
+        if (!backdrop || !modal) return;
+        animateOnce(backdrop, "motion-modal-backdrop", 520);
+        animateOnce(modal, modal.classList.contains("retro-map-modal") ? "motion-map-unfold" : "motion-modal-enter", 760);
       });
+    });
+    observer.observe(root, { childList: true });
+    return observer;
+  }
+
+  function animateToastRoot(root) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof Element)) return;
+        const toast = node.matches(".toast") ? node : node.querySelector(".toast");
+        if (toast) animateOnce(toast, "motion-toast-enter", 760);
+      }));
     });
     observer.observe(root, { childList: true, subtree: true });
     return observer;
   }
 
-  const appObserver = new MutationObserver(scheduleProcess);
+  const appObserver = new MutationObserver((mutations) => {
+    if (mutations.every(isTypingMutation)) return;
+    scheduleProcess();
+  });
   appObserver.observe(app, { childList: true, subtree: true });
-  if (modalRoot) animateAddedChildren(modalRoot, ":scope > *, .modal, .dialog, [role='dialog']", "motion-modal-enter");
-  if (toastRoot) animateAddedChildren(toastRoot, ":scope > *, .toast", "motion-toast-enter");
+  if (modalRoot) animateModalRoot(modalRoot);
+  if (toastRoot) animateToastRoot(toastRoot);
 
   document.addEventListener("click", (event) => {
     const button = event.target.closest("button, [role='button']");
@@ -249,6 +330,7 @@
     routeKey,
     elementSignatures,
     motionEnabled,
+    typeText,
   });
 
   scheduleProcess();
