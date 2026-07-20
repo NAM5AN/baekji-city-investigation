@@ -1,0 +1,23 @@
+/* 기존 채팅·시스템 로그는 UI 재렌더 시 다시 출력되지 않는다. */
+html[data-retro-motion="ready"] .motion-stable-existing.motion-chat-new,
+html[data-retro-motion="ready"] .motion-stable-existing.motion-system-new {
+  animation: none !important;
+  animation-delay: 0ms !important;
+  opacity: 1 !important;
+  transform: none !important;
+  clip-path: none !important;
+}
+
+html[data-retro-motion="ready"] .motion-stable-existing.motion-system-new::after {
+  animation: none !important;
+  opacity: 0 !important;
+}
+
+html[data-retro-motion="ready"] .motion-stable-existing .motion-type-target,
+html[data-retro-motion="ready"] .motion-stable-existing [data-motion-typing="true"] {
+  animation: none !important;
+}
+
+.motion-stable-pending {
+  visibility: hidden !important;
+}
