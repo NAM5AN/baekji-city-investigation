@@ -3,7 +3,7 @@
   "version": 2,
   "git": {
     "deploymentEnabled": {
-      "pages-test": false
+      "pages-test": true
     }
   },
   "functions": {
