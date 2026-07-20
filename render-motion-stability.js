@@ -55,7 +55,16 @@
     const previousKey = element.dataset.motionEntryId;
     const previousState = element.dataset.motionStability;
     if (previousKey === key && previousState) {
-      if (pending) element.classList.add("retro-action-result-pending");
+      if (pending) {
+        element.classList.add("retro-action-result-pending", "motion-stable-pending");
+        return;
+      }
+      if (previousState !== "pending") return;
+
+      element.classList.remove("retro-action-result-pending", "motion-stable-pending", "motion-stable-existing");
+      element.dataset.motionStability = "new";
+      element.classList.add("motion-stable-new");
+      seen.add(key);
       return;
     }
 
