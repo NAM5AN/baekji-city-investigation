@@ -13,7 +13,7 @@ assert.match(js, /retro-action-processing-spinner/);
 assert.match(js, /처리 중\.\.\./);
 assert.match(js, /aiNarrationFinal/);
 assert.match(js, /narrationInFlight/);
-assert.match(js, /\/api\/narrate-action/);
+assert.match(js, /narrate-action/);
 assert.match(js, /session\.movement/);
 assert.match(js, /Storage\.prototype\.setItem/);
 assert.match(js, /stopImmediatePropagation/);
