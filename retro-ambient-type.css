@@ -1,0 +1,147 @@
+/* 백지도시 배경·타이핑·지도 전개 모션 · v0.3.31 */
+body.retro-mode.retro-login-mode,
+body.retro-mode.retro-home-mode {
+  position: relative;
+  isolation: isolate;
+  background-color: #bdbdb5;
+  animation: retro-ambient-breathe 14s ease-in-out infinite;
+}
+
+body.retro-mode.retro-login-mode::before,
+body.retro-mode.retro-home-mode::before {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+  opacity: .34;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 5px, rgba(8,8,8,.12) 6px, transparent 7px 13px),
+    repeating-linear-gradient(90deg, transparent 0 19px, rgba(255,255,255,.18) 20px 21px, transparent 22px 37px),
+    radial-gradient(circle at 24% 16%, rgba(0,0,0,.18) 0 1px, transparent 2px),
+    radial-gradient(circle at 76% 58%, rgba(255,255,255,.28) 0 1px, transparent 2px);
+  background-size: auto, auto, 11px 9px, 13px 15px;
+  mix-blend-mode: multiply;
+  animation: retro-static-drift 9s steps(12, end) infinite;
+}
+
+body.retro-mode.retro-login-mode::after,
+body.retro-mode.retro-home-mode::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  inset: -28% 0 0;
+  pointer-events: none;
+  opacity: .2;
+  background:
+    repeating-linear-gradient(90deg,
+      transparent 0 5%, rgba(16,16,14,.26) 5.5% 6.2%, transparent 7% 13%,
+      rgba(16,16,14,.12) 14% 17%, transparent 18% 25%);
+  mask-image: linear-gradient(to bottom, transparent 0 18%, #000 31% 62%, transparent 82% 100%);
+  transform: translateY(-34%);
+  animation: retro-dissolve-flow 17s cubic-bezier(.55,.03,.32,.98) infinite;
+}
+
+body.retro-mode.retro-login-mode #app,
+body.retro-mode.retro-home-mode #app,
+body.retro-mode.retro-login-mode #modal-root,
+body.retro-mode.retro-home-mode #modal-root,
+body.retro-mode.retro-login-mode #toast-root,
+body.retro-mode.retro-home-mode #toast-root {
+  position: relative;
+  z-index: 1;
+}
+
+.retro-system-line .retro-system-copy {
+  color: inherit;
+  font-family: var(--font-body);
+  font-size: inherit;
+}
+
+.motion-type-target.is-typing::after {
+  content: "■";
+  display: inline-block;
+  margin-left: 2px;
+  font-size: .72em;
+  line-height: 1;
+  animation: retro-type-caret 120ms steps(2, end) infinite;
+}
+
+.motion-modal-backdrop {
+  animation: retro-modal-backdrop-in 220ms steps(4, end) both;
+}
+
+.motion-map-unfold {
+  transform-origin: top center;
+  animation: retro-map-unfold 560ms steps(12, end) both;
+}
+
+@keyframes retro-ambient-breathe {
+  0%, 100% { background-color: #bdbdb5; }
+  42% { background-color: #9f9f98; }
+  56% { background-color: #979790; }
+  74% { background-color: #b5b5ad; }
+}
+
+@keyframes retro-static-drift {
+  0%, 13%, 100% { transform: translate(0,0); opacity: .22; filter: contrast(1); }
+  14% { transform: translate(2px,-1px); opacity: .48; filter: contrast(1.8); }
+  16% { transform: translate(-3px,1px); opacity: .3; }
+  18% { transform: translate(1px,2px); opacity: .44; }
+  22%, 63% { transform: translate(0,0); opacity: .24; filter: contrast(1.1); }
+  64% { transform: translate(-2px,0); opacity: .5; filter: contrast(2); }
+  67% { transform: translate(3px,1px); opacity: .26; }
+  71% { transform: translate(0,0); opacity: .34; filter: contrast(1); }
+}
+
+@keyframes retro-dissolve-flow {
+  0%, 18% { transform: translateY(-38%) scaleY(.72); opacity: 0; }
+  27% { opacity: .13; }
+  47% { transform: translateY(-8%) scaleY(1.05); opacity: .28; }
+  66% { transform: translateY(24%) scaleY(1.28); opacity: .18; }
+  82%, 100% { transform: translateY(52%) scaleY(1.5); opacity: 0; }
+}
+
+@keyframes retro-type-caret {
+  0%, 48% { opacity: 1; }
+  49%, 100% { opacity: 0; }
+}
+
+@keyframes retro-modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes retro-map-unfold {
+  0% { opacity: 0; transform: scaleY(.025); clip-path: inset(0 0 97% 0); filter: contrast(2); }
+  18% { opacity: 1; transform: scaleY(.16); clip-path: inset(0 0 83% 0); }
+  37% { transform: scaleY(.36); clip-path: inset(0 0 62% 0); }
+  55% { transform: scaleY(.58); clip-path: inset(0 0 39% 0); }
+  72% { transform: scaleY(.79); clip-path: inset(0 0 18% 0); }
+  88% { transform: scaleY(1.02); clip-path: inset(0 0 0 0); filter: contrast(1.25); }
+  100% { opacity: 1; transform: scaleY(1); clip-path: inset(0 0 0 0); filter: none; }
+}
+
+@media (max-width: 980px) {
+  body.retro-mode.retro-login-mode::before,
+  body.retro-mode.retro-home-mode::before { opacity: .25; }
+  body.retro-mode.retro-login-mode::after,
+  body.retro-mode.retro-home-mode::after { opacity: .14; }
+  .motion-map-unfold { animation-duration: 430ms; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.retro-mode.retro-login-mode,
+  body.retro-mode.retro-home-mode,
+  body.retro-mode.retro-login-mode::before,
+  body.retro-mode.retro-home-mode::before,
+  body.retro-mode.retro-login-mode::after,
+  body.retro-mode.retro-home-mode::after,
+  .motion-type-target.is-typing::after,
+  .motion-modal-backdrop,
+  .motion-map-unfold {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
