@@ -9,6 +9,7 @@ assert.match(source, /initialChoiceClosed/);
 assert.match(source, /\[data-close-choice-panel\]/);
 assert.match(source, /motionEntryId/);
 assert.match(source, /entry\?\.actionNarrationPending/);
+assert.match(source, /previousState !== "pending"/);
 assert.match(source, /motion-stable-existing/);
 assert.match(source, /visibleSystemEntries/);
 assert.match(source, /visibleChatEntries/);
@@ -18,7 +19,7 @@ assert.match(css, /motion-stable-existing\.motion-chat-new/);
 assert.match(css, /motion-stable-existing\.motion-system-new/);
 assert.match(css, /animation:\s*none\s*!important/);
 
-const guardIndex = index.indexOf("render-motion-stability.js?v=0.3.39");
+const guardIndex = index.indexOf("render-motion-stability.js?v=0.3.40");
 const motionIndex = index.indexOf("retro-motion.js?v=0.3.33");
 assert.ok(guardIndex >= 0, "render stability guard must be loaded");
 assert.ok(motionIndex >= 0, "retro motion script must be loaded");
