@@ -39,7 +39,7 @@ export function classifySpeechVisibility(raw) {
   const text = compact(raw);
   const quote = extractQuotedSpeech(text);
   const privateSpeech = /(혼잣말|중얼|웅얼|속삭|나지막|작은\s*목소리|입안에서)/.test(text);
-  const publicSpeech = /(소리\s*(?:를\s*)?(?:지르|지른|질러)|소리치|외치|고함|고성|큰\s*소리|목청|고래고래|비명|호통|함성|크게\s*(?:말|부르))/.test(text);
+  const publicSpeech = /(소리\s*(?:를\s*)?(?:크게\s*)?(?:지르|지른|질러)|크게\s*소리(?:를)?\s*(?:지르|지른|질러)|소리치|외치|고함|고성|큰\s*소리|목청|고래고래|비명|호통|함성|크게\s*(?:말|부르))/.test(text);
   if (privateSpeech && !publicSpeech) return { mode: "PRIVATE", quote };
   if (publicSpeech) return { mode: quote ? "PUBLIC_QUOTE" : "PUBLIC", quote };
   return { mode: "NONE", quote };
