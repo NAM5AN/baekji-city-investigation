@@ -1,17 +1,57 @@
 @media (max-width: 980px) {
+  html.mobile-non-investigation-route,
+  html.mobile-non-investigation-route body,
   body:not([data-mobile-investigation-route="1"]) {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
     overscroll-behavior: auto !important;
-    touch-action: auto !important;
+    touch-action: pan-y !important;
   }
 
+  html.mobile-non-investigation-route #app,
+  html.mobile-non-investigation-route .shell,
   body:not([data-mobile-investigation-route="1"]) #app,
   body:not([data-mobile-investigation-route="1"]) .shell {
     width: 100% !important;
     height: auto !important;
-    min-height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: none !important;
     overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: pan-y !important;
+  }
+
+  html.mobile-non-investigation-route main.container,
+  body:not([data-mobile-investigation-route="1"]) main.container {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    touch-action: pan-y !important;
+  }
+
+  html.mobile-non-investigation-route body.retro-home-mode .container,
+  body.retro-home-mode:not([data-mobile-investigation-route="1"]) .container {
+    padding-bottom: max(14px, env(safe-area-inset-bottom)) !important;
+  }
+
+  html.mobile-non-investigation-route body.retro-home-mode .section:last-child,
+  body.retro-home-mode:not([data-mobile-investigation-route="1"]) .section:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  html.mobile-non-investigation-route #modal-root:empty,
+  html.mobile-non-investigation-route #toast-root:empty,
+  body:not([data-mobile-investigation-route="1"]) #modal-root:empty,
+  body:not([data-mobile-investigation-route="1"]) #toast-root:empty {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
   }
 
   body:not([data-mobile-investigation-route="1"]) [data-mobile-investigation-toggle],
