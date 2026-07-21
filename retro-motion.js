@@ -7,8 +7,7 @@
   if (!app) return;
 
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-  const knownSystem = new Set();
-  const knownChat = new Set();
+  const cleanupTimers = new WeakMap();
   let initialized = false;
   let frameId = 0;
   let lastRoute = "";
@@ -17,9 +16,6 @@
   let lastLocation = "";
   let lastSpecial = "";
   let lastValues = new Map();
-
-  const cleanupTimers = new WeakMap();
-  const typingTimers = new WeakMap();
 
   function routeKey() {
     return location.hash.replace(/^#\/?/, "") || "login";
@@ -47,6 +43,15 @@
     cleanupTimers.set(element, timer);
   }
 
+  function cleanupTypingArtifacts(root = document) {
+    root.querySelectorAll?.(".motion-type-target, [data-motion-typing='true']").forEach((target) => {
+      const fullText = target.dataset?.motionFullText;
+      if (fullText != null && target.textContent !== fullText) target.textContent = fullText;
+      target.classList.remove("motion-type-target", "is-typing");
+      delete target.dataset.motionTyping;
+    });
+  }
+
   function flashScreen() {
     if (!motionEnabled()) return;
     let flash = document.getElementById("retro-motion-flash");
@@ -57,140 +62,6 @@
       document.body.appendChild(flash);
     }
     animateOnce(flash, "is-active", 430);
-  }
-
-  function signatureText(element) {
-    const target = element.querySelector(".retro-character-log-text, .retro-system-copy, .retro-chat-bubble");
-    const remembered = target?.dataset.motionFullText || element.dataset.motionFullText;
-    return String(remembered || element.textContent || "").replace(/\s+/g, " ").trim();
-  }
-
-  function elementSignatures(selector) {
-    const counts = new Map();
-    return [...document.querySelectorAll(selector)]
-      .filter((element) => !element.classList.contains("retro-action-result-pending"))
-      .map((element) => {
-        const text = signatureText(element);
-        const count = (counts.get(text) || 0) + 1;
-        counts.set(text, count);
-        return { element, signature: `${text}::${count}` };
-      });
-  }
-
-  function replaceKnown(target, entries) {
-    target.clear();
-    entries.forEach(({ signature }) => target.add(signature));
-  }
-
-  function rememberFullText(target, text = target?.textContent || "") {
-    if (!target) return "";
-    const fullText = String(target.dataset.motionFullText || text || "");
-    if (fullText) target.dataset.motionFullText = fullText;
-    return fullText;
-  }
-
-  function ensureSystemTypingTarget(element) {
-    const existing = element.querySelector(".retro-character-log-text, .retro-system-copy");
-    if (existing) {
-      rememberFullText(existing);
-      return existing;
-    }
-    const time = element.querySelector(".retro-log-time");
-    const nodes = [...element.childNodes].filter((node) => node !== time && node.nodeType === Node.TEXT_NODE);
-    const text = nodes.map((node) => node.textContent || "").join("");
-    if (!text.trim()) return null;
-    element.dataset.motionTyping = "true";
-    const target = document.createElement("span");
-    target.className = "retro-system-copy";
-    target.textContent = text;
-    target.dataset.motionFullText = text;
-    nodes.forEach((node) => node.remove());
-    element.appendChild(target);
-    return target;
-  }
-
-  function typingTargetFor(element, kind) {
-    if (kind === "chat") {
-      const target = element.querySelector(".retro-chat-bubble");
-      rememberFullText(target);
-      return target;
-    }
-    if (kind === "system") return ensureSystemTypingTarget(element);
-    return null;
-  }
-
-  function completeTypingTarget(target) {
-    if (!target) return;
-    const original = rememberFullText(target);
-    const timer = typingTimers.get(target);
-    if (timer) clearTimeout(timer);
-    typingTimers.delete(target);
-    if (original) target.textContent = original;
-    target.classList.remove("is-typing", "motion-type-target");
-    delete target.dataset.motionTyping;
-    const line = target.closest("[data-motion-typing]");
-    if (line && line !== target) delete line.dataset.motionTyping;
-  }
-
-  function completeInterruptedTyping() {
-    document.querySelectorAll(".motion-type-target.is-typing, [data-motion-typing='true'].motion-type-target").forEach(completeTypingTarget);
-  }
-
-  function typeText(target, { speed = 9, maxDuration = 680 } = {}) {
-    if (!target || !motionEnabled()) return;
-    const original = rememberFullText(target);
-    if (!original.trim() || original.length < 2) return;
-    const previous = typingTimers.get(target);
-    if (previous) clearTimeout(previous);
-
-    const characters = [...original];
-    const delay = Math.max(4, Math.min(speed, Math.floor(maxDuration / Math.max(1, characters.length))));
-    let index = 0;
-    target.dataset.motionTyping = "true";
-    target.classList.add("motion-type-target", "is-typing");
-    target.textContent = "";
-
-    const step = () => {
-      if (!target.isConnected) {
-        typingTimers.delete(target);
-        return;
-      }
-      index = Math.min(characters.length, index + Math.max(1, Math.ceil(characters.length / 70)));
-      target.textContent = characters.slice(0, index).join("");
-      if (index < characters.length) {
-        const timer = setTimeout(step, delay);
-        typingTimers.set(target, timer);
-        return;
-      }
-      target.textContent = original;
-      target.classList.remove("is-typing");
-      typingTimers.delete(target);
-      setTimeout(() => {
-        target.classList.remove("motion-type-target");
-        delete target.dataset.motionTyping;
-        const line = target.closest("[data-motion-typing]");
-        if (line && line !== target) delete line.dataset.motionTyping;
-      }, 50);
-    };
-
-    const timer = setTimeout(step, 42);
-    typingTimers.set(target, timer);
-  }
-
-  function animateNewEntries(entries, known, className, kind) {
-    const newEntries = entries
-      .filter(({ signature, element }) => !known.has(signature) && !element.classList.contains("retro-action-result-pending"))
-      .slice(-8);
-    newEntries.forEach(({ element }, index) => {
-      element.style.setProperty("--motion-index", String(index));
-      animateOnce(element, className, 880);
-      const target = typingTargetFor(element, kind);
-      if (target) setTimeout(() => {
-        if (!element.isConnected || element.classList.contains("retro-action-result-pending")) return;
-        typeText(target, { speed: kind === "system" ? 7 : 9 });
-      }, index * 34 + 65);
-    });
-    replaceKnown(known, entries);
   }
 
   function animatePage() {
@@ -213,6 +84,19 @@
       animateOnce(element, "motion-cascade-item", 720);
     });
     flashScreen();
+  }
+
+  function animateNewEntries() {
+    const entries = [...document.querySelectorAll(
+      ".motion-stable-new:not([data-motion-animated='true'])"
+    )].filter((element) => !element.classList.contains("retro-action-result-pending")).slice(-8);
+
+    entries.forEach((element, index) => {
+      element.dataset.motionAnimated = "true";
+      element.style.setProperty("--motion-index", String(index));
+      const isChat = element.matches(".retro-chat-message, .retro-chat-divider");
+      animateOnce(element, isChat ? "motion-chat-new" : "motion-system-new", 880);
+    });
   }
 
   function activeTab() {
@@ -286,29 +170,25 @@
 
   function processRender() {
     frameId = 0;
+    cleanupTypingArtifacts(app);
+
     const route = routeKey();
     const mountedSession = sessionId();
     const routeChanged = !initialized || route !== lastRoute || mountedSession !== lastSessionId;
     const tab = activeTab();
     const locationText = currentLocation();
     const special = specialStateSignature();
-    const systemEntries = elementSignatures(".retro-system-line");
-    const chatEntries = elementSignatures(".retro-chat-message, .retro-chat-divider");
 
     if (routeChanged) {
       animatePage();
-      replaceKnown(knownSystem, systemEntries);
-      replaceKnown(knownChat, chatEntries);
     } else {
-      animateNewEntries(systemEntries, knownSystem, "motion-system-new", "system");
-      animateNewEntries(chatEntries, knownChat, "motion-chat-new", "chat");
+      animateNewEntries();
       animateTabChange(tab);
       animateLocationChange(locationText);
       animateSpecialState(special);
     }
 
     animateChangedValues(routeChanged);
-
     lastRoute = route;
     lastSessionId = mountedSession;
     lastTab = tab;
@@ -319,13 +199,8 @@
   }
 
   function scheduleProcess() {
-    if (frameId) cancelAnimationFrame(frameId);
+    if (frameId) return;
     frameId = requestAnimationFrame(() => requestAnimationFrame(processRender));
-  }
-
-  function isTypingMutation(mutation) {
-    const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
-    return Boolean(target?.closest?.("[data-motion-typing]"));
   }
 
   function animateModalRoot(root) {
@@ -340,7 +215,6 @@
       });
     });
     observer.observe(root, { childList: true });
-    return observer;
   }
 
   function animateToastRoot(root) {
@@ -352,15 +226,10 @@
       }));
     });
     observer.observe(root, { childList: true, subtree: true });
-    return observer;
   }
 
-  const appObserver = new MutationObserver((mutations) => {
-    if (mutations.every(isTypingMutation)) return;
-    completeInterruptedTyping();
-    scheduleProcess();
-  });
-  appObserver.observe(app, { childList: true, subtree: true });
+  const appObserver = new MutationObserver(scheduleProcess);
+  appObserver.observe(app, { childList: true });
   if (modalRoot) animateModalRoot(modalRoot);
   if (toastRoot) animateToastRoot(toastRoot);
 
@@ -372,18 +241,17 @@
 
   reduceMotion?.addEventListener?.("change", () => {
     document.documentElement.dataset.retroMotion = "ready";
-    completeInterruptedTyping();
+    cleanupTypingArtifacts(app);
     scheduleProcess();
   });
 
   window.__BAEKJI_RETRO_MOTION_TEST__ = Object.freeze({
     routeKey,
-    signatureText,
-    elementSignatures,
     motionEnabled,
-    typeText,
-    completeInterruptedTyping,
+    cleanupTypingArtifacts,
+    animateNewEntries,
   });
 
+  cleanupTypingArtifacts(app);
   scheduleProcess();
 })();

@@ -1,0 +1,156 @@
+/* 조사 장면 채널 전환 · 행동 선택 재생 억제 · 조원 초대 2열 카드 */
+
+.retro-scene-frame {
+  isolation: isolate;
+}
+
+.retro-channel-noise {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    repeating-linear-gradient(to bottom, rgba(255,255,255,.42) 0 1px, rgba(0,0,0,.22) 2px 4px, transparent 5px 8px),
+    repeating-linear-gradient(90deg, transparent 0 13px, rgba(255,255,255,.22) 14px 16px, rgba(0,0,0,.18) 17px 19px),
+    rgba(18,18,16,.16);
+  mix-blend-mode: hard-light;
+}
+
+.retro-scene-frame.is-channel-switching {
+  animation: retro-channel-frame 720ms steps(9, end) both;
+}
+
+.retro-scene-frame.is-channel-switching .retro-scene-media,
+.retro-scene-frame.is-channel-switching .retro-image-placeholder {
+  animation: retro-channel-picture 720ms steps(10, end) both;
+}
+
+.retro-scene-frame.is-channel-switching .retro-channel-noise {
+  animation: retro-channel-static 720ms steps(12, end) both;
+}
+
+.retro-scene-frame.is-channel-switching .retro-location-card,
+.retro-scene-frame.is-channel-switching .retro-field-card,
+.retro-scene-frame.is-channel-switching .retro-motion-overlay {
+  animation: retro-channel-overlay-hold 720ms steps(8, end) both;
+}
+
+body[data-choice-motion-suppressed] .retro-choice-launch,
+body[data-choice-motion-suppressed] .retro-scene-actions,
+.retro-choice-no-enter,
+.retro-choice-no-enter.motion-modal-enter {
+  animation: none !important;
+}
+
+.retro-invite-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.retro-invite-card {
+  min-width: 0;
+  display: grid !important;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin: 0 !important;
+  padding: 16px !important;
+}
+
+.retro-invite-profile {
+  width: 64px;
+  height: 64px;
+  display: block;
+  border: 3px solid #111;
+  background: #dcdcd6;
+  object-fit: cover;
+  image-rendering: pixelated;
+  box-shadow: 3px 3px 0 #111;
+}
+
+.retro-invite-card .list-main {
+  min-width: 0;
+}
+
+.retro-invite-card .list-title,
+.retro-invite-card .list-sub {
+  overflow-wrap: anywhere;
+}
+
+@keyframes retro-channel-frame {
+  0% { filter: grayscale(1) contrast(2.1) brightness(.42); transform: translateX(0); }
+  8% { filter: grayscale(1) contrast(3) brightness(1.45); transform: translateX(-9px) skewX(-1deg); }
+  16% { filter: grayscale(1) contrast(2.5) brightness(.18); transform: translateX(8px); }
+  27% { filter: grayscale(1) contrast(3.2) brightness(1.2); transform: translateX(-4px) scaleY(.97); }
+  39% { filter: grayscale(1) contrast(2.2) brightness(.34); transform: translateX(5px); }
+  52% { filter: grayscale(1) contrast(2.8) brightness(1.08); transform: translateX(-2px) scaleY(1.015); }
+  68% { filter: grayscale(1) contrast(1.8) brightness(.72); transform: translateX(2px); }
+  82% { filter: grayscale(1) contrast(1.45) brightness(.94); transform: translateX(-1px); }
+  100% { filter: none; transform: none; }
+}
+
+@keyframes retro-channel-picture {
+  0% { clip-path: inset(46% 0 46% 0); transform: scaleX(1.08) translateX(-4%); }
+  11% { clip-path: inset(5% 0 72% 0); transform: scaleX(.95) translateX(7%); }
+  22% { clip-path: inset(69% 0 4% 0); transform: scaleX(1.12) translateX(-8%); }
+  34% { clip-path: inset(18% 0 48% 0); transform: scaleX(.98) translateX(5%); }
+  48% { clip-path: inset(53% 0 14% 0); transform: scaleX(1.06) translateX(-3%); }
+  61% { clip-path: inset(4% 0 31% 0); transform: scaleX(1.02) translateX(2%); }
+  76% { clip-path: inset(13% 0 8% 0); transform: scaleX(1.015); }
+  100% { clip-path: inset(0); transform: none; }
+}
+
+@keyframes retro-channel-static {
+  0%, 100% { opacity: 0; transform: translateY(-14%); }
+  7% { opacity: .94; transform: translateY(3%); }
+  16% { opacity: .28; transform: translateY(-7%); }
+  28% { opacity: .86; transform: translateY(15%); }
+  39% { opacity: .18; transform: translateY(-2%); }
+  53% { opacity: .68; transform: translateY(9%); }
+  69% { opacity: .24; transform: translateY(-5%); }
+  82% { opacity: .42; transform: translateY(4%); }
+}
+
+@keyframes retro-channel-overlay-hold {
+  0%, 55% { opacity: 0; }
+  70% { opacity: .45; }
+  100% { opacity: 1; }
+}
+
+@media (max-width: 760px) {
+  .retro-invite-grid {
+    gap: 9px;
+  }
+
+  .retro-invite-card {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 9px;
+    padding: 11px !important;
+  }
+
+  .retro-invite-profile {
+    width: 48px;
+    height: 48px;
+    box-shadow: 2px 2px 0 #111;
+  }
+
+  .retro-invite-card > .button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .retro-scene-frame.is-channel-switching,
+  .retro-scene-frame.is-channel-switching .retro-scene-media,
+  .retro-scene-frame.is-channel-switching .retro-image-placeholder,
+  .retro-scene-frame.is-channel-switching .retro-channel-noise,
+  .retro-scene-frame.is-channel-switching .retro-location-card,
+  .retro-scene-frame.is-channel-switching .retro-field-card,
+  .retro-scene-frame.is-channel-switching .retro-motion-overlay {
+    animation-duration: 1ms !important;
+  }
+}

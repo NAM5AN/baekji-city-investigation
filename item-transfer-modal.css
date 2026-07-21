@@ -16,6 +16,8 @@
 .retro-transfer-info dt, .retro-transfer-info dd { margin: 0; padding: 9px 11px; font-size: 12px; }
 .retro-transfer-info dt { font-weight: 700; background: rgba(0,0,0,.06); border-right: 1px solid rgba(0,0,0,.25); }
 .retro-transfer-note { margin: 13px 18px 0; font-size: 12px; line-height: 1.55; opacity: .7; }
+.retro-transfer-waiting-copy { display: flex; align-items: center; gap: 8px; margin: 15px 18px 0; padding: 11px 12px; border: 1px dashed rgba(0,0,0,.45); background: rgba(0,0,0,.035); font-size: 13px; }
+.retro-transfer-wait-dot { width: 8px; height: 8px; flex: 0 0 auto; background: #191919; animation: retro-transfer-wait-pulse 1.2s steps(2, end) infinite; }
 .retro-transfer-timer { margin: 14px 18px 0; font-size: 12px; }
 .retro-transfer-timer > span { display: flex; justify-content: space-between; margin-bottom: 7px; }
 .retro-transfer-timer > div { height: 7px; overflow: hidden; border: 1px solid #161616; background: rgba(0,0,0,.08); }
@@ -24,6 +26,10 @@
 .retro-transfer-actions .retro-modal-button { margin: 0; width: 100%; }
 .retro-transfer-actions .danger, .retro-transfer-actions .hold { background: #deded9; color: #111; }
 .retro-transfer-actions .primary { background: #181818; color: #fff; }
+.retro-transfer-sender-actions { grid-template-columns: 1fr; }
+.retro-transfer-sender-actions .danger { min-height: 43px; }
 .retro-transfer-resume-launch { margin-right: 8px; border: 2px solid #161616; background: #f6f6f2; box-shadow: 3px 3px 0 rgba(0,0,0,.25); font: inherit; padding: 10px 13px; cursor: pointer; }
 .retro-item-state-badge { margin-left: auto; padding: 2px 6px; border: 1px solid currentColor; font-size: 10px; line-height: 1.2; opacity: .68; white-space: nowrap; }
+@keyframes retro-transfer-wait-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 @media (max-width: 640px) { .retro-transfer-actions { grid-template-columns: 1fr; } .retro-transfer-resume-launch { margin-right: 6px; padding: 9px 10px; font-size: 12px; } }
+@media (prefers-reduced-motion: reduce) { .retro-transfer-wait-dot { animation: none; opacity: 1; } }
