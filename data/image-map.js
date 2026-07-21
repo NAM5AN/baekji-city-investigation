@@ -11,7 +11,11 @@
   const IMAGE_OVERRIDES = {
     scene: {
       byNode: {
-        E_G_PLAZA: {\n          src: "assets/illustrations/scenes/E_G_PLAZA.png",\n          alt: "백화가 진행 중인 해오름역 환승구역의 흑백 조사 풍경",\n          position: "center",\n        },
+        E_G_PLAZA: {
+          src: "assets/illustrations/scenes/E_G_PLAZA.png",
+          alt: "백화가 진행 중인 해오름역 환승구역의 흑백 조사 풍경",
+          position: "center",
+        },
       },
       byDetail: {
         // E_G_INFO: { src: "assets/illustrations/details/E_G_INFO.png", position: "center" },
