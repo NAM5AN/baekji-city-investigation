@@ -5,13 +5,15 @@
   const DATA = window.DAY1_DATA;
   if (!DATA) return;
 
-  const DEFAULT_HEADLINES = {
-    E: {
-      a: "해오름역의 시계와 안내 설비가 미세하게 어긋나 있다.",
-      b: "해오름역 곳곳에 다른 시간의 방송과 시설 상태가 겹쳐 보인다.",
-      c: "해오름역의 승강장 번호와 도착 시각이 반복해서 어긋난다.",
-      d: "해오름역의 여러 시간대가 동시에 겹치며 공간 일부가 사라지고 있다.",
-    },
+  const SAFE_LIGHT_NAMES = {
+    a: "초록빛",
+    b: "파란빛",
+    c: "붉은빛",
+    d: "흰빛",
+  };
+
+  const ZONE_DESCRIPTIONS = {
+    E: "해오름역은 지상 환승광장과 지하 대합실, 승강장으로 이어진다.",
   };
 
   const TUTORIAL_RULES = [
@@ -29,20 +31,14 @@
     return state?.sessions?.[decodeURIComponent(match[1])] || null;
   }
 
-  function firstSentence(value) {
-    const clean = String(value || "").trim();
-    if (!clean) return "현재 조사 구역의 공간 상태가 불안정하게 변하고 있다.";
-    const sentence = clean.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || clean;
-    return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
-  }
-
   function headlineFor(session) {
     const zoneId = String(DATA.meta?.zone?.id || session?.destination || "");
     const variantId = String(session?.variant || "");
-    const custom = window.BAEKJI_BRIEFING_HEADLINES || {};
-    return custom?.[zoneId]?.[variantId]
-      || DEFAULT_HEADLINES?.[zoneId]?.[variantId]
-      || firstSentence(DATA.variants?.[variantId]?.situation);
+    const light = SAFE_LIGHT_NAMES[variantId] || "옅은빛";
+    const zoneName = String(DATA.meta?.zone?.name || "조사 구역");
+    const description = ZONE_DESCRIPTIONS[zoneId]
+      || `${zoneName}은 여러 출입구와 내부 통로로 이어진다.`;
+    return `${light}의 ${description}`;
   }
 
   function applyBriefingTutorial() {
