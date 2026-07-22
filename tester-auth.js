@@ -5,9 +5,11 @@
   const SUPABASE_KEY = "sb_publishable_g-cXysHfl260KTtSRLABTw_4wnaaxDY";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const DEMO_USER_IDS = ["test_a", "test_b", "test_c"];
   const users = new Map();
   const nativeValues = Object.values.bind(Object);
   let busy = false;
+  let repairingState = false;
 
   const normalize = (value) => String(value || "").replace(/\s+/g, "").toLowerCase();
   const toUser = (row) => ({
@@ -15,6 +17,27 @@
     initial: Array.from(String(row.character_name || "?"))[0] || "?", note: "초대 테스터 계정",
     profilePhoto: String(row.profile_photo || ""), isTestOnly: true,
   });
+
+  function blankCharacter(userId) {
+    return {
+      id: userId,
+      contamination: 0,
+      symptom: "안정",
+      inventory: {},
+      currentPartyId: null,
+      currentSessionId: null,
+      onlineAt: null,
+    };
+  }
+
+  function blankWorld() {
+    const characters = {};
+    DEMO_USER_IDS.forEach((userId) => { characters[userId] = blankCharacter(userId); });
+    return {
+      version: 3, storyDay: 1, loopId: "LOOP-001", eventSeq: 0, sessionSeq: 0,
+      characters, parties: {}, sessions: {}, itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
+    };
+  }
 
   function install(user) {
     if (!user?.id) return user;
@@ -46,18 +69,62 @@
     return payload;
   }
 
-  function ensureCharacter(userId) {
+  function repairCharacter(character, userId) {
+    const next = character && typeof character === "object" && !Array.isArray(character)
+      ? character : blankCharacter(userId);
+    let changed = next !== character;
+    if (next.id !== userId) { next.id = userId; changed = true; }
+    const contamination = Number(next.contamination);
+    const normalizedContamination = Number.isFinite(contamination) ? Math.min(100, Math.max(0, contamination)) : 0;
+    if (next.contamination !== normalizedContamination) { next.contamination = normalizedContamination; changed = true; }
+    if (typeof next.symptom !== "string" || !next.symptom.trim()) { next.symptom = "안정"; changed = true; }
+    if (!next.inventory || typeof next.inventory !== "object" || Array.isArray(next.inventory)) { next.inventory = {}; changed = true; }
+    if (!("currentPartyId" in next)) { next.currentPartyId = null; changed = true; }
+    if (!("currentSessionId" in next)) { next.currentSessionId = null; changed = true; }
+    if (!("onlineAt" in next)) { next.onlineAt = null; changed = true; }
+    return { character: next, changed };
+  }
+
+  function repairTesterCharacters({ touchCurrent = false } = {}) {
+    if (repairingState) return false;
     let state;
     try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
-    if (!state || state.version !== 3) state = {
-      version: 3, storyDay: 1, loopId: "LOOP-001", eventSeq: 0, sessionSeq: 0,
-      characters: {}, parties: {}, sessions: {}, itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
-    };
+    if (!state || state.version !== 3) state = blankWorld();
     state.characters ||= {};
-    state.characters[userId] ||= {
-      id: userId, contamination: 0, symptom: "안정", inventory: {},
-      currentPartyId: null, currentSessionId: null, onlineAt: null,
-    };
+    state.parties ||= {};
+    state.sessions ||= {};
+    state.itemClaimsByVariant ||= { a: {}, b: {}, c: {}, d: {} };
+    let changed = !localStorage.getItem(GLOBAL_KEY);
+    const requiredIds = new Set([...DEMO_USER_IDS, ...users.keys()]);
+    requiredIds.forEach((userId) => {
+      const repaired = repairCharacter(state.characters[userId], userId);
+      state.characters[userId] = repaired.character;
+      changed ||= repaired.changed;
+    });
+    const currentId = sessionStorage.getItem(USER_KEY);
+    if (touchCurrent && currentId && requiredIds.has(currentId)) {
+      const character = state.characters[currentId];
+      const now = Date.now();
+      if (!Number.isFinite(Number(character.onlineAt)) || now - Number(character.onlineAt || 0) > 30000) {
+        character.onlineAt = now;
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+    repairingState = true;
+    try { localStorage.setItem(GLOBAL_KEY, JSON.stringify(state)); }
+    finally { repairingState = false; }
+    return true;
+  }
+
+  function ensureCharacter(userId) {
+    repairTesterCharacters();
+    let state;
+    try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
+    if (!state || state.version !== 3) state = blankWorld();
+    state.characters ||= {};
+    const repaired = repairCharacter(state.characters[userId], userId);
+    state.characters[userId] = repaired.character;
     state.characters[userId].onlineAt = Date.now();
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(state));
   }
@@ -141,10 +208,27 @@
 
     const form = login.querySelector("[data-tester-form]");
     const file = form?.querySelector('input[name="photo"]');
-    file?.addEventListener("change", () => {
+    let selectedFile = null;
+    let selectedPhotoData = "";
+    file?.addEventListener("change", async () => {
       const preview = form.querySelector("[data-tester-preview]");
-      if (!file.files?.[0] || !preview) return;
-      const url = URL.createObjectURL(file.files[0]); preview.src = url; preview.hidden = false; preview.onload = () => URL.revokeObjectURL(url);
+      const message = form.querySelector("[data-tester-message]");
+      selectedFile = file.files?.[0] || null;
+      selectedPhotoData = "";
+      if (!selectedFile || !preview) {
+        if (preview) { preview.hidden = true; preview.removeAttribute("src"); }
+        return;
+      }
+      try {
+        selectedPhotoData = await compress(selectedFile);
+        preview.src = selectedPhotoData;
+        preview.hidden = false;
+        if (message) message.textContent = "";
+      } catch (error) {
+        preview.hidden = true;
+        preview.removeAttribute("src");
+        if (message) message.textContent = errorText(error.code || error.message);
+      }
     });
     form?.addEventListener("input", (event) => { if (event.target?.name === "pin") event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4); });
     form?.querySelector("[data-tester-submit]")?.addEventListener("click", async () => {
@@ -159,7 +243,8 @@
         const photo = file?.files?.[0];
         if (!name) throw Object.assign(new Error("INVALID_CHARACTER_NAME"), { code: "INVALID_CHARACTER_NAME" });
         if (!/^\d{4}$/.test(pin)) throw Object.assign(new Error("INVALID_PIN"), { code: "INVALID_PIN" });
-        const rows = await rpc("baekji_tester_signup", { p_character_name: name, p_pin: pin, p_profile_photo: await compress(photo) });
+        const photoData = photo && photo === selectedFile && selectedPhotoData ? selectedPhotoData : await compress(photo);
+        const rows = await rpc("baekji_tester_signup", { p_character_name: name, p_pin: pin, p_profile_photo: photoData });
         if (!rows?.[0]) throw new Error("SIGNUP_FAILED");
         finishLogin(toUser(rows[0]));
       } catch (error) { if (message) message.textContent = errorText(error.code || error.message); }
@@ -167,15 +252,77 @@
     });
   }
 
-  function decorate() {
-    const user = users.get(sessionStorage.getItem(USER_KEY));
-    if (!user?.profilePhoto) return;
+  function testerUserByName(name) {
+    const normalizedName = normalize(name);
+    return Array.from(users.values()).find((user) => normalize(user.name) === normalizedName) || null;
+  }
+
+  function profileImage(user, className) {
+    const img = document.createElement("img");
+    img.className = className;
+    img.src = user.profilePhoto;
+    img.alt = `${user.name} 프로필 사진`;
+    return img;
+  }
+
+  function decorateTopbar(user) {
     document.querySelectorAll(".topbar-meta .badge").forEach((badge) => {
-      if (badge.querySelector(".tester-profile-avatar")) return;
-      const img = document.createElement("img"); img.className = "tester-profile-avatar"; img.src = user.profilePhoto; img.alt = ""; badge.prepend(img);
+      let img = badge.querySelector(".tester-profile-avatar");
+      if (!img) { img = profileImage(user, "tester-profile-avatar"); badge.prepend(img); }
+      else if (img.src !== user.profilePhoto) img.src = user.profilePhoto;
     });
   }
 
-  new MutationObserver(() => { enhanceLogin(); decorate(); }).observe(document.documentElement, { childList: true, subtree: true });
-  rpc("baekji_tester_list_accounts", {}).then((rows) => { (rows || []).forEach((row) => install(toUser(row))); }).catch((error) => console.warn("[tester-auth]", error));
+  function decorateMembers() {
+    document.querySelectorAll(".member").forEach((member) => {
+      const user = testerUserByName(member.querySelector(".list-title")?.textContent || "");
+      const avatar = member.querySelector(".member-avatar");
+      if (!user?.profilePhoto || !avatar) return;
+      let img = avatar.querySelector(".tester-member-avatar");
+      if (!img) {
+        avatar.textContent = "";
+        avatar.classList.add("has-profile-photo");
+        img = profileImage(user, "tester-member-avatar");
+        avatar.append(img);
+      } else if (img.src !== user.profilePhoto) img.src = user.profilePhoto;
+    });
+  }
+
+  function decorateContamination() {
+    const userId = sessionStorage.getItem(USER_KEY);
+    if (!userId || !users.has(userId)) return;
+    let state;
+    try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
+    const value = Number(state?.characters?.[userId]?.contamination);
+    const contamination = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
+    document.querySelectorAll(".card.kpi").forEach((card) => {
+      if (!card.querySelector(".muted.small")?.textContent?.includes("개인 오염도")) return;
+      const number = card.querySelector(".kpi-value");
+      const bar = card.querySelector(".progress > span");
+      if (number) number.textContent = `${contamination}%`;
+      if (bar) bar.style.width = `${contamination}%`;
+    });
+  }
+
+  function decorate() {
+    const user = users.get(sessionStorage.getItem(USER_KEY));
+    if (user?.profilePhoto) decorateTopbar(user);
+    decorateMembers();
+    decorateContamination();
+  }
+
+  function refresh() {
+    enhanceLogin();
+    repairTesterCharacters();
+    decorate();
+  }
+
+  new MutationObserver(refresh).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) queueMicrotask(refresh); });
+  window.addEventListener("baekji-cloud-sync", () => queueMicrotask(refresh));
+  rpc("baekji_tester_list_accounts", {}).then((rows) => {
+    (rows || []).forEach((row) => install(toUser(row)));
+    repairTesterCharacters({ touchCurrent: true });
+    refresh();
+  }).catch((error) => console.warn("[tester-auth]", error));
 })();
