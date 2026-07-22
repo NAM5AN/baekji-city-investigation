@@ -1,0 +1,12 @@
+.briefing-member-icon.has-profile-photo {
+  padding: 0;
+  overflow: hidden;
+  background: #11110f;
+}
+
+.tester-briefing-avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
