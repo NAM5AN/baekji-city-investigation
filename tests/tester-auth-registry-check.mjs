@@ -37,6 +37,8 @@ const context = vm.createContext({
   queueMicrotask,
   setTimeout,
   clearTimeout,
+  addEventListener() {},
+  removeEventListener() {},
   localStorage: {
     getItem(key) { return localValues.has(key) ? localValues.get(key) : null; },
     setItem(key, value) { localValues.set(key, String(value)); },
