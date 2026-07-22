@@ -67,7 +67,6 @@
     ensureCharacter(user.id);
     sessionStorage.setItem(USER_KEY, user.id);
     location.hash = "#/home";
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
   }
 
   async function compress(file) {
@@ -99,18 +98,18 @@
     return `<button class="button ghost block tester-signup-toggle" type="button" data-tester-toggle>테스터 계정 가입</button>
       <section class="tester-signup-card card pad" data-tester-card hidden>
         <div class="login-form-heading"><span class="brand-mark">초</span><div><strong>테스터 계정 가입</strong><small>TEST_ONLY · 정식 배포 전 삭제</small></div></div>
-        <form data-tester-form>
+        <div data-tester-form>
           <div class="tester-photo-field">
             <label class="tester-photo-picker" for="tester-photo"><img data-tester-preview alt="프로필 사진 미리보기" hidden><span>사진 선택</span></label>
-            <input id="tester-photo" name="photo" type="file" accept="image/png,image/jpeg,image/webp" required>
+            <input id="tester-photo" name="photo" type="file" accept="image/png,image/jpeg,image/webp">
             <p>정사각형 256px로 자동 압축됩니다.</p>
           </div>
-          <div class="field"><label for="tester-name">캐릭터 이름</label><input id="tester-name" name="name" maxlength="20" autocomplete="nickname" required></div>
-          <div class="field"><label for="tester-pin">비밀번호</label><input id="tester-pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="숫자 4자리" required></div>
+          <div class="field"><label for="tester-name">캐릭터 이름</label><input id="tester-name" name="name" maxlength="20" autocomplete="nickname"></div>
+          <div class="field"><label for="tester-pin">비밀번호</label><input id="tester-pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="숫자 4자리"></div>
           <p class="tester-account-note">비밀번호는 암호화 해시로 저장되며 계정과 사진은 테스트 기간에만 보관됩니다.</p>
           <p class="login-error" data-tester-message aria-live="polite"></p>
-          <button class="button primary block" type="submit">가입하고 접속</button>
-        </form>
+          <button class="button primary block" type="button" data-tester-submit>가입하고 접속</button>
+        </div>
       </section>`;
   }
 
@@ -148,16 +147,19 @@
       const url = URL.createObjectURL(file.files[0]); preview.src = url; preview.hidden = false; preview.onload = () => URL.revokeObjectURL(url);
     });
     form?.addEventListener("input", (event) => { if (event.target?.name === "pin") event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4); });
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault(); if (busy) return; busy = true;
+    form?.querySelector("[data-tester-submit]")?.addEventListener("click", async () => {
+      if (busy) return; busy = true;
       const message = form.querySelector("[data-tester-message]");
-      const button = form.querySelector('button[type="submit"]');
+      const button = form.querySelector("[data-tester-submit]");
       if (button) button.disabled = true;
       if (message) message.textContent = "계정을 저장하고 있습니다…";
       try {
-        const data = new FormData(form); const pin = String(data.get("pin") || "");
+        const name = form.querySelector('input[name="name"]')?.value.trim() || "";
+        const pin = form.querySelector('input[name="pin"]')?.value || "";
+        const photo = file?.files?.[0];
+        if (!name) throw Object.assign(new Error("INVALID_CHARACTER_NAME"), { code: "INVALID_CHARACTER_NAME" });
         if (!/^\d{4}$/.test(pin)) throw Object.assign(new Error("INVALID_PIN"), { code: "INVALID_PIN" });
-        const rows = await rpc("baekji_tester_signup", { p_character_name: String(data.get("name") || "").trim(), p_pin: pin, p_profile_photo: await compress(data.get("photo")) });
+        const rows = await rpc("baekji_tester_signup", { p_character_name: name, p_pin: pin, p_profile_photo: await compress(photo) });
         if (!rows?.[0]) throw new Error("SIGNUP_FAILED");
         finishLogin(toUser(rows[0]));
       } catch (error) { if (message) message.textContent = errorText(error.code || error.message); }
