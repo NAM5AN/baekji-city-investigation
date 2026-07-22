@@ -12,6 +12,7 @@
   let repairingState = false;
 
   const normalize = (value) => String(value || "").replace(/\s+/g, "").toLowerCase();
+  const hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
   const toUser = (row) => ({
     id: String(row.id), loginId: String(row.character_name), name: String(row.character_name),
     initial: Array.from(String(row.character_name || "?"))[0] || "?", note: "초대 테스터 계정",
@@ -39,19 +40,46 @@
     };
   }
 
+  function isDemoUserRegistry(target) {
+    if (!target || typeof target !== "object") return false;
+    return DEMO_USER_IDS.every((userId) => {
+      if (!hasOwn(target, userId)) return false;
+      const candidate = target[userId];
+      return candidate && typeof candidate.loginId === "string" && typeof candidate.password === "string";
+    });
+  }
+
+  function defineDynamicUserBridge(userId) {
+    Object.defineProperty(Object.prototype, userId, {
+      configurable: true,
+      enumerable: false,
+      get() {
+        return isDemoUserRegistry(this) ? users.get(userId) : undefined;
+      },
+      set(value) {
+        if (this === Object.prototype) return;
+        Object.defineProperty(this, userId, {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value,
+        });
+      },
+    });
+  }
+
   function install(user) {
     if (!user?.id) return user;
     users.set(user.id, user);
-    Object.defineProperty(Object.prototype, user.id, {
-      configurable: true, enumerable: false, writable: true, value: user,
-    });
+    defineDynamicUserBridge(user.id);
     return user;
   }
 
   Object.values = function patchedValues(target) {
     const output = nativeValues(target);
-    return target?.test_a && target?.test_b && target?.test_c
-      ? output.concat(Array.from(users.values())) : output;
+    if (!isDemoUserRegistry(target)) return output;
+    const knownIds = new Set(output.map((entry) => entry?.id).filter(Boolean));
+    return output.concat(Array.from(users.values()).filter((user) => !knownIds.has(user.id)));
   };
 
   async function rpc(name, body) {
@@ -97,7 +125,8 @@
     let changed = !localStorage.getItem(GLOBAL_KEY);
     const requiredIds = new Set([...DEMO_USER_IDS, ...users.keys()]);
     requiredIds.forEach((userId) => {
-      const repaired = repairCharacter(state.characters[userId], userId);
+      const current = hasOwn(state.characters, userId) ? state.characters[userId] : null;
+      const repaired = repairCharacter(current, userId);
       state.characters[userId] = repaired.character;
       changed ||= repaired.changed;
     });
@@ -123,7 +152,8 @@
     try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
     if (!state || state.version !== 3) state = blankWorld();
     state.characters ||= {};
-    const repaired = repairCharacter(state.characters[userId], userId);
+    const current = hasOwn(state.characters, userId) ? state.characters[userId] : null;
+    const repaired = repairCharacter(current, userId);
     state.characters[userId] = repaired.character;
     state.characters[userId].onlineAt = Date.now();
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(state));
