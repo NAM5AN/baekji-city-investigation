@@ -12,23 +12,46 @@ function sendJson(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
-async function readWorldState(env, fetchImpl = globalThis.fetch) {
-  const url = env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
-  const key = env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
-  const response = await fetchImpl(`${url}/rest/v1/rpc/baekji_mvp_get_state`, {
+function supabaseConfig(env) {
+  return {
+    url: env.SUPABASE_URL || DEFAULT_SUPABASE_URL,
+    key: env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY,
+  };
+}
+
+async function rpc(env, name, body, fetchImpl = globalThis.fetch) {
+  const { url, key } = supabaseConfig(env);
+  const response = await fetchImpl(`${url}/rest/v1/rpc/${name}`, {
     method: "POST",
     headers: {
       apikey: key,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({ p_state_key: STATE_KEY }),
+    body: JSON.stringify(body),
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`WORLD_STATE_${response.status}`);
-  const payload = await response.json();
+  if (!response.ok) throw new Error(`${name}_${response.status}`);
+  return response.json();
+}
+
+async function readWorldState(env, fetchImpl = globalThis.fetch) {
+  const payload = await rpc(env, "baekji_mvp_get_state", { p_state_key: STATE_KEY }, fetchImpl);
   const row = Array.isArray(payload) ? payload[0] || null : payload;
   return row?.state?.version === 3 ? { state: row.state, revision: Number(row.revision || 0) } : { state: null, revision: 0 };
+}
+
+async function readCharacterDirectory(env, fetchImpl = globalThis.fetch) {
+  try {
+    const rows = await rpc(env, "baekji_tester_list_accounts", {}, fetchImpl);
+    return (Array.isArray(rows) ? rows : []).map((row) => ({
+      id: String(row?.id || ""),
+      name: String(row?.character_name || row?.id || ""),
+      profilePhoto: String(row?.profile_photo || ""),
+    })).filter((row) => row.id);
+  } catch {
+    return [];
+  }
 }
 
 export async function adminSnapshotHandler(request, response, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
@@ -36,13 +59,17 @@ export async function adminSnapshotHandler(request, response, { env = process.en
   const auth = verifyAdminRequest(request, env);
   if (!auth.ok) return sendJson(response, auth.status, { ok: false, code: auth.code });
   try {
-    const world = await readWorldState(env, fetchImpl);
+    const [world, directory] = await Promise.all([
+      readWorldState(env, fetchImpl),
+      readCharacterDirectory(env, fetchImpl),
+    ]);
     return sendJson(response, 200, {
       ok: true,
       admin: auth.admin,
       revision: world.revision,
       serverTime: Date.now(),
       state: world.state,
+      directory,
     });
   } catch (error) {
     return sendJson(response, 502, { ok: false, code: "WORLD_STATE_UNAVAILABLE", message: String(error?.message || error) });
@@ -53,4 +80,4 @@ export default async function handler(request, response) {
   return adminSnapshotHandler(request, response);
 }
 
-export { readWorldState };
+export { readWorldState, readCharacterDirectory };
