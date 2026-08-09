@@ -1,4 +1,4 @@
-import { verifyAdminRequest } from "./_admin-auth.mjs";
+import { adminSessionTokenFromRequest } from "./_admin-auth.mjs";
 
 const DEFAULT_SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
 const DEFAULT_SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
@@ -35,6 +35,14 @@ async function rpc(env, name, body, fetchImpl = globalThis.fetch) {
   return response.json();
 }
 
+async function verifyAdminSession(env, token, fetchImpl = globalThis.fetch) {
+  if (!token) return null;
+  const rows = await rpc(env, "baekji_admin_session_check", { p_session_token: token }, fetchImpl);
+  const row = Array.isArray(rows) ? rows[0] || null : null;
+  if (!row?.login_id) return null;
+  return { id: String(row.login_id), name: String(row.display_name || row.login_id), role: "ADMIN" };
+}
+
 async function readWorldState(env, fetchImpl = globalThis.fetch) {
   const payload = await rpc(env, "baekji_mvp_get_state", { p_state_key: STATE_KEY }, fetchImpl);
   const row = Array.isArray(payload) ? payload[0] || null : payload;
@@ -56,16 +64,18 @@ async function readCharacterDirectory(env, fetchImpl = globalThis.fetch) {
 
 export async function adminSnapshotHandler(request, response, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   if (request.method !== "GET") return sendJson(response, 405, { ok: false, code: "METHOD_NOT_ALLOWED" });
-  const auth = verifyAdminRequest(request, env);
-  if (!auth.ok) return sendJson(response, auth.status, { ok: false, code: auth.code });
+  const token = adminSessionTokenFromRequest(request);
+  if (!token) return sendJson(response, 401, { ok: false, code: "ADMIN_SESSION_REQUIRED" });
   try {
+    const admin = await verifyAdminSession(env, token, fetchImpl);
+    if (!admin) return sendJson(response, 401, { ok: false, code: "ADMIN_SESSION_INVALID" });
     const [world, directory] = await Promise.all([
       readWorldState(env, fetchImpl),
       readCharacterDirectory(env, fetchImpl),
     ]);
     return sendJson(response, 200, {
       ok: true,
-      admin: auth.admin,
+      admin,
       revision: world.revision,
       serverTime: Date.now(),
       state: world.state,
@@ -80,4 +90,4 @@ export default async function handler(request, response) {
   return adminSnapshotHandler(request, response);
 }
 
-export { readWorldState, readCharacterDirectory };
+export { verifyAdminSession, readWorldState, readCharacterDirectory };
