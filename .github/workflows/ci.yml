@@ -18,6 +18,12 @@ jobs:
       - name: Probe live tester login RPC
         id: tester_login
         run: node tests/tester-auth-live-check.mjs probe-login
+      - name: "FAIL: tester Supabase host DNS error"
+        if: steps.tester_login.outputs.category == 'DNS_ERROR'
+        run: exit 1
+      - name: "FAIL: tester Supabase network error"
+        if: steps.tester_login.outputs.category == 'NETWORK_ERROR'
+        run: exit 1
       - name: "FAIL: tester auth publishable key rejected"
         if: steps.tester_login.outputs.category == 'INVALID_API_KEY'
         run: exit 1
@@ -31,7 +37,7 @@ jobs:
         if: steps.tester_login.outputs.category == 'MISSING_FUNCTION'
         run: exit 1
       - name: "FAIL: tester login RPC other HTTP error"
-        if: steps.tester_login.outputs.category != 'OK' && steps.tester_login.outputs.category != 'INVALID_API_KEY' && steps.tester_login.outputs.category != 'JWT_ERROR' && steps.tester_login.outputs.category != 'PERMISSION_DENIED' && steps.tester_login.outputs.category != 'MISSING_FUNCTION'
+        if: steps.tester_login.outputs.category != 'OK' && steps.tester_login.outputs.category != 'DNS_ERROR' && steps.tester_login.outputs.category != 'NETWORK_ERROR' && steps.tester_login.outputs.category != 'INVALID_API_KEY' && steps.tester_login.outputs.category != 'JWT_ERROR' && steps.tester_login.outputs.category != 'PERMISSION_DENIED' && steps.tester_login.outputs.category != 'MISSING_FUNCTION'
         run: exit 1
       - name: Live tester signup RPC probe
         if: steps.tester_login.outputs.category == 'OK'
