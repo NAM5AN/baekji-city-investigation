@@ -24,12 +24,6 @@ const sessionValues = new Map();
 
 const context = vm.createContext({
   console,
-  Map,
-  Set,
-  Object,
-  Array,
-  String,
-  Date,
   Event: class Event { constructor(type, init = {}) { this.type = type; this.bubbles = !!init.bubbles; this.cancelable = !!init.cancelable; } },
   queueMicrotask,
   setTimeout,
@@ -70,21 +64,19 @@ vm.runInContext(authSource, context, { filename: "tester-auth.js" });
 await new Promise((resolve) => setTimeout(resolve, 0));
 await new Promise((resolve) => setTimeout(resolve, 0));
 
-const registry = {
+context.__registry = {
   test_a: { id: "test_a", loginId: "캐릭터A", password: "1234", name: "테스트 캐릭터 A" },
   test_b: { id: "test_b", loginId: "캐릭터B", password: "1234", name: "테스트 캐릭터 B" },
   test_c: { id: "test_c", loginId: "캐릭터C", password: "1234", name: "테스트 캐릭터 C" },
 };
-context.__registry = registry;
 
 const attached = vm.runInContext("window.__BAEKJI_TESTER_REGISTRY_GUARD__.attachRegistry(__registry)", context);
 assert.equal(attached, true, "guard should attach the real app user registry");
-assert.equal(registry[testerId]?.name, "산", "existing tester should be copied into the app registry");
-assert.equal(Object.prototype.hasOwnProperty.call(context.Object.prototype, testerId), false, "tester UUID must never remain on Object.prototype");
+assert.equal(vm.runInContext(`__registry[${JSON.stringify(testerId)}]?.name`, context), "산", "existing tester should be copied into the app registry");
+assert.equal(vm.runInContext(`Object.prototype.hasOwnProperty.call(Object.prototype, ${JSON.stringify(testerId)})`, context), false, "tester UUID must never remain on Object.prototype");
 assert.equal(vm.runInContext(`({})[${JSON.stringify(testerId)}]`, context), undefined, "ordinary objects must not inherit tester profiles");
 
-const futureUser = { id: futureId, name: "미래 테스터", loginId: "미래 테스터", profilePhoto: "", isTestOnly: true };
-context.__futureUser = futureUser;
+context.__futureUser = { id: futureId, name: "미래 테스터", loginId: "미래 테스터", profilePhoto: "", isTestOnly: true };
 vm.runInContext(`Object.defineProperty(Object.prototype, ${JSON.stringify(futureId)}, {
   configurable: true,
   enumerable: false,
@@ -92,8 +84,8 @@ vm.runInContext(`Object.defineProperty(Object.prototype, ${JSON.stringify(future
   set(value) { Object.defineProperty(this, ${JSON.stringify(futureId)}, { configurable: true, enumerable: true, writable: true, value }); }
 })`, context);
 
-assert.equal(registry[futureId]?.name, "미래 테스터", "future signup should be injected directly into the attached app registry");
-assert.equal(Object.prototype.hasOwnProperty.call(context.Object.prototype, futureId), false, "future tester UUID must also stay off Object.prototype");
+assert.equal(vm.runInContext(`__registry[${JSON.stringify(futureId)}]?.name`, context), "미래 테스터", "future signup should be injected directly into the attached app registry");
+assert.equal(vm.runInContext(`Object.prototype.hasOwnProperty.call(Object.prototype, ${JSON.stringify(futureId)})`, context), false, "future tester UUID must also stay off Object.prototype");
 assert.equal(vm.runInContext("Object.values(__registry).filter((entry) => entry?.isTestOnly).length", context), 2, "native Object.values should enumerate tester users from own registry properties only");
 assert.equal(vm.runInContext("window.__BAEKJI_TESTER_REGISTRY_GUARD__.prototypeClean(__futureUser.id)", context), true);
 
