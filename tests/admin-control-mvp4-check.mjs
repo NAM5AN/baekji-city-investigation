@@ -96,7 +96,8 @@ const css = await readFile(new URL("../admin-control-mvp4.css", import.meta.url)
 const api = await readFile(new URL("../api/admin-control.mjs", import.meta.url), "utf8");
 const auditApi = await readFile(new URL("../api/admin-audit.mjs", import.meta.url), "utf8");
 const migration = await readFile(new URL("../supabase/migrations/0002_admin_control_mvp4.sql", import.meta.url), "utf8");
-const vercel = await readFile(new URL("../vercel.json", import.meta.url), "utf8");
+const vercelRaw = await readFile(new URL("../vercel.json", import.meta.url), "utf8");
+const vercel = JSON.parse(vercelRaw);
 const cloud = await readFile(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
 
 assert.match(html, /CONTROL · MVP 4/);
@@ -125,8 +126,10 @@ assert.match(migration, /create or replace function public\.baekji_admin_state_a
 assert.match(migration, /for update/);
 assert.match(migration, /world_revision_before/);
 assert.match(migration, /request_id text not null unique/);
-assert.match(vercel, /"source": "\/api\/admin-control"/);
-assert.match(vercel, /"source": "\/api\/admin-audit"/);
+assert.ok(vercel.rewrites.some((rule) => rule.source === "/api/admin-control" && rule.destination === "/api/admin-control.mjs"));
+assert.ok(vercel.rewrites.some((rule) => rule.source === "/api/admin-audit" && rule.destination === "/api/admin-audit.mjs"));
+assert.ok(vercel.functions["api/admin-control.mjs"]);
+assert.ok(vercel.functions["api/admin-audit.mjs"]);
 assert.match(cloud, /reconcileAdminControl/);
 assert.match(cloud, /applyAdminControlPatch/);
 assert.match(cloud, /Number\(patch\.seq \|\| 0\) > localSeq/);
