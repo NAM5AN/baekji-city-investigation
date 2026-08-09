@@ -5,7 +5,7 @@ const html = await readFile(new URL("../admin-dashboard.html", import.meta.url),
 const css = await readFile(new URL("../admin-observation-mvp2.css", import.meta.url), "utf8");
 const js = await readFile(new URL("../admin-observation-mvp2.js", import.meta.url), "utf8");
 
-assert.match(html, /READ ONLY · MVP 2/);
+assert.match(html, /OBSERVE · COMMUNICATION · MVP 3/);
 assert.match(html, /admin-observation-mvp2\.css\?v=0\.2\.0/);
 assert.match(html, /admin-observation-mvp2\.js\?v=0\.2\.0/);
 assert.match(html, /admin-chat-badge">MVP 3/);
@@ -44,4 +44,4 @@ assert.match(css, /\.admin-observe-alert/);
 assert.match(css, /\.admin-observe-log-list/);
 assert.match(css, /@media\(max-width:760px\)/);
 
-console.log("PASS: admin MVP2 supports one-screen floor/branch observation, modal drill-down/backtracking, contextual logs, and read-only live refresh");
+console.log("PASS: admin MVP2 observation remains intact inside the MVP3 communications shell");
