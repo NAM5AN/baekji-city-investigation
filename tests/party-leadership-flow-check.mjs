@@ -35,6 +35,7 @@ assert.equal(created.parties.party_new.creatorId, "leader");
 assert.deepEqual(Array.from(created.parties.party_new.memberIds), ["leader"]);
 assert.equal(base.characters.leader.currentPartyId, null, "leader creation helper must be pure");
 assert.equal(api.isPartyLeader(created, "leader", "party_new"), true);
+assert.equal(api.partyRoute("party_new"), "#/party/party_new");
 
 created.parties.party_new.invitedIds.push("member");
 const accepted = api.acceptInviteAsMemberState(created, "party_new", "member");
@@ -70,7 +71,9 @@ assert.match(source, /조사조를 생성하면 이번 조사조의 조장이 �
 assert.match(source, /data-member-confirm-composition/);
 assert.match(source, /data-member-ready/);
 assert.match(source, /currentPartyId\) card\.remove\(\)/, "busy invite candidates should be removed from leader invite list");
-assert.match(index, /party-leadership-flow\.js\?v=0\.3\.64/);
-assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.64") < index.indexOf("party-flow-sync.js?v=0.3.63"), "leadership interception must load before party-flow-sync");
+assert.match(source, /replaceChildren\(\)/, "warning modal must be fully cleared instead of leaving a click-blocking backdrop");
+assert.doesNotMatch(source, /new MutationObserver/, "leadership UI must not self-trigger through a DOM observer");
+assert.match(index, /party-leadership-flow\.js\?v=0\.3\.65/);
+assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.65") < index.indexOf("party-flow-sync.js?v=0.3.63"), "leadership interception must load before party-flow-sync");
 
-console.log("PASS: leader warning, member-only confirmation/ready flow, and busy invite filtering");
+console.log("PASS: leader warning, member confirmation/ready flow, stable navigation, and busy invite filtering");
