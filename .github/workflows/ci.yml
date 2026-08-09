@@ -42,3 +42,6 @@ jobs:
       - name: Live tester signup RPC probe
         if: steps.tester_login.outputs.category == 'OK'
         run: node tests/tester-auth-live-check.mjs signup
+      - name: Live cloud state RPC probe
+        if: steps.tester_login.outputs.category == 'OK'
+        run: node tests/tester-auth-live-check.mjs cloud
