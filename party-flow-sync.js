@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const ENHANCEMENT_VERSION = "0.3.19";
+  const ENHANCEMENT_VERSION = "0.3.63";
   const USER_LABELS = {
     test_a: { name: "테스트 캐릭터 A", initial: "A" },
     test_b: { name: "테스트 캐릭터 B", initial: "B" },
@@ -28,6 +28,14 @@
       !unique(party.memberIds).includes(userId) &&
       !unique(party.declinedIds).includes(userId)
     );
+  }
+
+  function invitationPopupAllowed(snapshot, userId, page) {
+    if (!snapshot || !userId || ["login", "investigate", "result"].includes(page)) return false;
+    const sessionId = snapshot.characters?.[userId]?.currentSessionId;
+    const session = sessionId ? snapshot.sessions?.[sessionId] : null;
+    if (!session) return true;
+    return session.status === "BRIEFING";
   }
 
   function briefingRequiredMemberIds(session, party) {
@@ -88,6 +96,7 @@
 
   const TEST_API = Object.freeze({
     pendingInvitationsFor,
+    invitationPopupAllowed,
     briefingRequiredMemberIds,
     allBriefingMembersConfirmed,
     routeSyncTarget,
@@ -170,7 +179,7 @@
 
   function showInvitationModal(snapshot, userId) {
     const [page] = routeParts();
-    if (page !== "home") {
+    if (!invitationPopupAllowed(snapshot, userId, page)) {
       clearInvitationModal();
       return;
     }
@@ -420,6 +429,7 @@
     const userId = currentUserId();
     if (!syncRoute(snapshot, userId)) scheduleEnhancement();
   });
+  window.addEventListener("baekji-cloud-sync", scheduleEnhancement);
   window.addEventListener("pageshow", scheduleEnhancement);
 
   const observer = new MutationObserver(scheduleEnhancement);
