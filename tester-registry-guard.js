@@ -9,8 +9,6 @@
   const DEMO_IDS = ["test_a", "test_b", "test_c"];
   const testerUsers = new Map();
   let appRegistry = null;
-  let captureTimer = 0;
-  let captureStartedAt = Date.now();
 
   function hasOwn(target, key) {
     return Object.prototype.hasOwnProperty.call(target, key);
@@ -45,6 +43,14 @@
     return true;
   }
 
+  function registerTester(user) {
+    const id = String(user?.id || "");
+    if (!UUID_RE.test(id) || !user || typeof user !== "object") return false;
+    testerUsers.set(id, user);
+    syncRegistry();
+    return true;
+  }
+
   function fakeDemoRegistry() {
     return {
       test_a: { id: "test_a", loginId: "캐릭터A", password: "1234" },
@@ -72,80 +78,27 @@
     }
 
     if (user?.isTestOnly && String(user.id) === id) {
-      testerUsers.set(id, user);
-      syncRegistry();
+      registerTester(user);
       return target;
     }
 
     return nativeDefineProperty(target, property, descriptor);
   };
 
-  function clearProbeUI(form, idInput, passwordInput, previous) {
-    if (idInput) idInput.value = previous.id;
-    if (passwordInput) passwordInput.value = previous.password;
-    const error = form?.querySelector?.("[data-login-error]");
-    if (error?.textContent === "아이디 또는 비밀번호가 일치하지 않습니다.") error.textContent = "";
+  function captureRegistryValues(target) {
+    if (!appRegistry && isDemoRegistry(target)) attachRegistry(target);
+    return nativeObjectValues(target);
   }
 
-  function tryCaptureRegistry() {
-    if (appRegistry) return;
-    const form = document.querySelector?.("[data-login-form]");
-    const idInput = form?.querySelector?.("[data-login-id]");
-    const passwordInput = form?.querySelector?.("[data-login-password]");
-
-    if (!form || !idInput || !passwordInput) {
-      if (Date.now() - captureStartedAt < 8000) captureTimer = setTimeout(tryCaptureRegistry, 30);
-      return;
-    }
-
-    const previousValues = Object.values;
-    if (previousValues === nativeObjectValues) {
-      if (Date.now() - captureStartedAt < 8000) captureTimer = setTimeout(tryCaptureRegistry, 30);
-      return;
-    }
-
-    Object.values = function captureDemoRegistry(target) {
-      if (isDemoRegistry(target)) {
-        attachRegistry(target);
-        return nativeObjectValues(target);
-      }
-      return previousValues(target);
-    };
-
-    const previous = { id: idInput.value, password: passwordInput.value };
-    idInput.value = "__registry_probe__";
-    passwordInput.value = "";
-    try {
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    } catch {
-      // 다음 재시도에서 다시 캡처합니다.
-    } finally {
-      clearProbeUI(form, idInput, passwordInput, previous);
-    }
-
-    if (!appRegistry && Date.now() - captureStartedAt < 8000) {
-      Object.values = previousValues;
-      captureTimer = setTimeout(tryCaptureRegistry, 30);
-      return;
-    }
-
-    if (appRegistry) {
-      Object.values = nativeObjectValues;
-      const currentId = sessionStorage.getItem("baekji_city_mvp_current_user_v034");
-      if (currentId && testerUsers.has(currentId)) {
-        queueMicrotask(() => window.dispatchEvent(new Event("hashchange")));
-      }
-    }
-  }
+  Object.values = captureRegistryValues;
 
   const api = Object.freeze({
     attachRegistry,
+    registerTester,
     testerCount: () => testerUsers.size,
     hasTester: (id) => testerUsers.has(String(id)),
     registryAttached: () => Boolean(appRegistry),
     prototypeClean: (id) => !hasOwn(Object.prototype, String(id)),
   });
   window.__BAEKJI_TESTER_REGISTRY_GUARD__ = api;
-
-  captureTimer = setTimeout(tryCaptureRegistry, 0);
 })();
