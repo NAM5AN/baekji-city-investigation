@@ -104,13 +104,25 @@
     }
   }
 
-  function replayIntoAppLogin(form, userId) {
+  function replayIntoAppLogin(form, user) {
+    const nameInput = form.querySelector("[data-login-id]");
+    const originalName = String(nameInput?.value || "");
+    const userId = String(user?.id || "");
+
+    // tester-auth.js still owns legacy tester-name login interception. The core app,
+    // however, also accepts user.id as a login alias. Use the UUID only for this
+    // synchronous handoff so the legacy name interceptor cannot capture it again.
+    if (nameInput) nameInput.value = userId;
     passThroughForms.add(form);
-    const replay = new Event("submit", { bubbles: true, cancelable: true });
-    form.dispatchEvent(replay);
-    passThroughForms.delete(form);
+    try {
+      const replay = new Event("submit", { bubbles: true, cancelable: true });
+      form.dispatchEvent(replay);
+    } finally {
+      passThroughForms.delete(form);
+    }
 
     if (sessionStorage.getItem(USER_KEY) !== userId) {
+      if (nameInput?.isConnected !== false) nameInput.value = originalName;
       throw new Error("APP_LOGIN_HANDOFF_FAILED");
     }
   }
@@ -119,10 +131,7 @@
     const form = event.target;
     if (!form?.matches?.("[data-login-form]")) return;
 
-    if (passThroughForms.has(form)) {
-      passThroughForms.delete(form);
-      return;
-    }
+    if (passThroughForms.has(form)) return;
 
     const nameInput = form.querySelector("[data-login-id]");
     const passwordInput = form.querySelector("[data-login-password]");
@@ -149,8 +158,7 @@
       if (!guard?.registerTester?.(user)) throw new Error("TESTER_REGISTRY_UNAVAILABLE");
 
       ensureCharacter(user.id);
-      if (message) message.textContent = "";
-      replayIntoAppLogin(form, user.id);
+      replayIntoAppLogin(form, user);
       window.dispatchEvent(new CustomEvent("baekji-tester-fast-login", { detail: { userId: user.id } }));
     } catch (error) {
       if (message?.isConnected !== false) {
