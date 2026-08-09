@@ -7,6 +7,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const DEMO_LOGIN_IDS = new Set(["캐릭터A", "캐릭터B", "캐릭터C"].map(normalize));
   const busyForms = new WeakSet();
+  const passThroughForms = new WeakSet();
 
   function normalize(value) {
     return String(value || "").replace(/\s+/g, "").toLowerCase();
@@ -17,12 +18,13 @@
     return Boolean(name) && !DEMO_LOGIN_IDS.has(name);
   }
 
-  function toUser(row) {
+  function toUser(row, password = "") {
     const name = String(row?.character_name || "").trim();
     return {
       id: String(row?.id || ""),
       loginId: name,
       name,
+      password: String(password || ""),
       initial: Array.from(name || "?")[0] || "?",
       note: "초대 테스터 계정",
       profilePhoto: String(row?.profile_photo || ""),
@@ -75,7 +77,6 @@
     if (!character.inventory || typeof character.inventory !== "object") character.inventory = {};
     if (!("currentPartyId" in character)) character.currentPartyId = null;
     if (!("currentSessionId" in character)) character.currentSessionId = null;
-    character.onlineAt = Date.now();
     snapshot.characters[userId] = character;
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
   }
@@ -103,9 +104,26 @@
     }
   }
 
+  function replayIntoAppLogin(form, userId) {
+    passThroughForms.add(form);
+    const replay = new Event("submit", { bubbles: true, cancelable: true });
+    form.dispatchEvent(replay);
+    passThroughForms.delete(form);
+
+    if (sessionStorage.getItem(USER_KEY) !== userId) {
+      throw new Error("APP_LOGIN_HANDOFF_FAILED");
+    }
+  }
+
   async function handleSubmit(event) {
     const form = event.target;
     if (!form?.matches?.("[data-login-form]")) return;
+
+    if (passThroughForms.has(form)) {
+      passThroughForms.delete(form);
+      return;
+    }
+
     const nameInput = form.querySelector("[data-login-id]");
     const passwordInput = form.querySelector("[data-login-password]");
     const name = String(nameInput?.value || "").trim();
@@ -122,25 +140,33 @@
     if (message) message.textContent = "계정을 확인하고 있습니다…";
 
     try {
-      const row = await rpcLogin(name, String(passwordInput?.value || ""));
+      const pin = String(passwordInput?.value || "");
+      const row = await rpcLogin(name, pin);
       if (!row?.id) throw new Error("LOGIN_FAILED");
-      const user = toUser(row);
+
+      const user = toUser(row, pin);
       const guard = window.__BAEKJI_TESTER_REGISTRY_GUARD__;
       if (!guard?.registerTester?.(user)) throw new Error("TESTER_REGISTRY_UNAVAILABLE");
+
       ensureCharacter(user.id);
-      sessionStorage.setItem(USER_KEY, user.id);
       if (message) message.textContent = "";
+      replayIntoAppLogin(form, user.id);
       window.dispatchEvent(new CustomEvent("baekji-tester-fast-login", { detail: { userId: user.id } }));
-      location.hash = "#/home";
     } catch (error) {
-      if (message) {
-        message.textContent = error?.name === "AbortError"
-          ? "로그인 서버 응답이 지연되고 있습니다. 다시 시도해 주세요."
-          : "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
+      if (message?.isConnected !== false) {
+        if (message) {
+          if (error?.name === "AbortError") {
+            message.textContent = "로그인 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.";
+          } else if (String(error?.message || "") === "APP_LOGIN_HANDOFF_FAILED") {
+            message.textContent = "로그인 연결을 완료하지 못했습니다. 다시 시도해 주세요.";
+          } else {
+            message.textContent = "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
+          }
+        }
       }
     } finally {
       busyForms.delete(form);
-      if (submit) submit.disabled = false;
+      if (submit?.isConnected !== false) submit.disabled = false;
     }
   }
 
