@@ -23,36 +23,53 @@
     flex: 0 0 auto;
   }
 
+  /* Mobile panes are two separate screens. Never place them side-by-side. */
   body.mobile-investigation-active .retro-investigation {
-    --mobile-investigation-transform: translate3d(0, 0, 0);
     position: relative !important;
-    display: flex !important;
+    display: block !important;
     flex: 1 1 auto;
-    width: 200vw !important;
-    min-width: 200vw !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
     height: calc(100dvh - var(--mobile-investigation-topbar, 0px)) !important;
     min-height: 0 !important;
-    overflow: visible !important;
-    transform: var(--mobile-investigation-transform);
-    transition: transform 220ms steps(4, end);
-    will-change: transform;
+    overflow: hidden !important;
+    transform: none !important;
+    transition: none !important;
+    will-change: auto !important;
     touch-action: pan-y;
+    contain: layout paint;
   }
 
   body.mobile-investigation-active .retro-left-column,
   body.mobile-investigation-active .retro-right-panel {
     position: relative !important;
-    flex: 0 0 100vw !important;
-    width: 100vw !important;
+    width: 100% !important;
     min-width: 0 !important;
-    max-width: 100vw !important;
+    max-width: 100% !important;
     height: 100% !important;
     min-height: 0 !important;
     overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  body.mobile-investigation-field .retro-left-column {
+    display: grid !important;
+  }
+
+  body.mobile-investigation-field .retro-right-panel {
+    display: none !important;
+  }
+
+  body.mobile-investigation-chat .retro-left-column {
+    display: none !important;
+  }
+
+  body.mobile-investigation-chat .retro-right-panel {
+    display: flex !important;
   }
 
   body.mobile-investigation-active .retro-left-column {
-    display: grid !important;
     grid-template-rows: 62% 0 38% !important;
   }
 
@@ -90,10 +107,9 @@
   }
 
   body.mobile-investigation-active .retro-right-panel {
-    display: flex !important;
     flex-direction: column;
     background: var(--paper, #f3f3ee);
-    border-left: 4px solid #111;
+    border-left: 0 !important;
   }
 
   body.mobile-investigation-active .retro-panel-tabs {
