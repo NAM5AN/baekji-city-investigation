@@ -17,6 +17,8 @@ jobs:
       - run: npm run check
       - name: Tester registry guard check
         run: node --check tester-registry-guard.js && node tests/tester-registry-guard-check.mjs
+      - name: Tester MutationObserver loop check
+        run: node tests/tester-mutation-loop-check.mjs
       - name: Supabase recovery wiring check
         run: node tests/supabase-recovery-wiring-check.mjs
       - name: Probe live tester login RPC
