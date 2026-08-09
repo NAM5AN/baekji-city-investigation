@@ -34,14 +34,14 @@
 
   function stableArrayKey(value) {
     if (value == null || typeof value !== "object") return `p:${JSON.stringify(value)}`;
-    const direct = value.id ?? value.key ?? value.token ?? value.sequenceNo ?? value.sequence_no;
+    const direct = value.id ?? value.key ?? value.token ?? value.sequenceNo ?? value.sequence_no ?? value.requestId;
     if (direct != null) return `i:${String(direct)}`;
     return `o:${JSON.stringify([
-      value.type ?? value.kind ?? value.eventType ?? "",
+      value.type ?? value.kind ?? value.eventType ?? value.action ?? "",
       value.at ?? value.createdAt ?? value.startedAt ?? "",
       value.actorId ?? value.actor_character_id ?? "",
       value.text ?? value.publicText ?? value.public_text ?? "",
-      value.scopeKey ?? value.routeId ?? value.objectId ?? "",
+      value.scopeKey ?? value.routeId ?? value.objectId ?? value.targetId ?? "",
     ])}`;
   }
 
@@ -73,6 +73,88 @@
       return result;
     }
     return local === undefined ? remote : local;
+  }
+
+  function hasOwn(object, key) {
+    return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
+  }
+
+  function adminControlSeq(state) {
+    return Math.max(0, Number(state?.adminControlSeq || 0));
+  }
+
+  function adminControlHistory(state) {
+    return (Array.isArray(state?.adminControlPatches) ? state.adminControlPatches : [])
+      .filter((patch) => Number(patch?.seq || 0) > 0)
+      .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+  }
+
+  function applyAdminControlPatch(state, patch) {
+    if (!state || state.version !== 3 || !patch || typeof patch !== "object") return state;
+    const action = String(patch.action || "");
+    const data = patch.data && typeof patch.data === "object" ? patch.data : {};
+    const targetId = String(patch.targetId || "");
+
+    if (action === "CHARACTER_STATUS") {
+      const character = state.characters?.[targetId];
+      if (!character) return state;
+      if (hasOwn(data, "contamination")) character.contamination = Math.max(0, Math.min(100, Number(data.contamination) || 0));
+      if (hasOwn(data, "symptom")) character.symptom = String(data.symptom || "안정");
+      return state;
+    }
+
+    if (action === "INVENTORY_SET") {
+      const characterId = String(data.characterId || targetId);
+      const itemId = String(data.itemId || "");
+      const character = state.characters?.[characterId];
+      if (!character || !itemId) return state;
+      if (!character.inventory || typeof character.inventory !== "object") character.inventory = {};
+      if (data.item == null) delete character.inventory[itemId];
+      else character.inventory[itemId] = { ...data.item, itemId };
+      return state;
+    }
+
+    if (action === "SESSION_CONTROL") {
+      const session = state.sessions?.[targetId];
+      if (!session) return state;
+      if (hasOwn(data, "nodeId")) {
+        session.currentNode = String(data.nodeId || session.currentNode || "");
+        session.currentDetailId = null;
+      }
+      if (data.clearTransient === true) {
+        session.movement = null;
+        session.activeEncounter = null;
+        session.choiceReveal = { type: "persistent-menu", at: Number(patch.at || Date.now()) };
+      }
+      if (hasOwn(data, "variant")) session.variant = String(data.variant || session.variant || "a");
+      if (hasOwn(data, "status")) {
+        session.status = String(data.status || session.status || "ACTIVE");
+        session.endedAt = session.status === "COMPLETED" ? Number(patch.at || Date.now()) : null;
+      }
+      return state;
+    }
+
+    return state;
+  }
+
+  function reconcileAdminControl(remote, local, merged) {
+    if (!merged || merged.version !== 3) return merged;
+    const localSeq = adminControlSeq(local);
+    const remoteSeq = adminControlSeq(remote);
+    const history = mergeArrays(adminControlHistory(remote), adminControlHistory(local))
+      .filter((patch) => Number(patch?.seq || 0) > 0)
+      .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
+      .slice(-1000);
+
+    if (remoteSeq > localSeq) {
+      adminControlHistory(remote)
+        .filter((patch) => Number(patch.seq || 0) > localSeq && Number(patch.seq || 0) <= remoteSeq)
+        .forEach((patch) => applyAdminControlPatch(merged, patch));
+    }
+
+    merged.adminControlSeq = Math.max(localSeq, remoteSeq);
+    if (history.length) merged.adminControlPatches = history;
+    return merged;
   }
 
   function writerId() {
@@ -185,7 +267,7 @@
     try {
       let result = await putRemoteState(localState, revision);
       if (result?.accepted === false && result.state?.version === 3) {
-        const merged = mergeValues(result.state, localState);
+        const merged = reconcileAdminControl(result.state, localState, mergeValues(result.state, localState));
         result = await putRemoteState(merged, Number(result.revision || 0));
         if (result?.accepted) {
           applyingRemote = true;
@@ -286,6 +368,10 @@
     mergeArrays,
     safeParse,
     stableArrayKey,
+    adminControlSeq,
+    adminControlHistory,
+    applyAdminControlPatch,
+    reconcileAdminControl,
   });
 
   bootstrap();
