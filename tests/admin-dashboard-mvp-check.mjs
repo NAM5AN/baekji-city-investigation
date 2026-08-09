@@ -27,10 +27,12 @@ assert.equal(adminSessionTokenFromRequest({ headers: { cookie: "other=1; baekji_
 assert.match(adminSessionCookie("opaque-token"), /^baekji_admin_session=opaque-token; Path=\/; HttpOnly; Secure; SameSite=Strict;/);
 
 const loginResponse = responseCollector();
+let loginRpcUrl = "";
 let loginRpcBody = null;
 await adminLoginHandler(jsonRequest("POST", { loginId: "AD1", password: "0000" }), loginResponse, {
   env: {},
-  fetchImpl: async (_url, options) => {
+  fetchImpl: async (url, options) => {
+    loginRpcUrl = String(url);
     loginRpcBody = JSON.parse(options.body);
     return {
       ok: true,
@@ -39,6 +41,7 @@ await adminLoginHandler(jsonRequest("POST", { loginId: "AD1", password: "0000" }
   },
 });
 assert.equal(loginResponse.statusCode, 200);
+assert.match(loginRpcUrl, /\/rpc\/baekji_admin_login$/);
 assert.deepEqual(loginRpcBody, { p_login_id: "AD1", p_password: "0000" });
 assert.match(loginResponse.headers["set-cookie"], /HttpOnly/);
 assert.doesNotMatch(loginResponse.body, /opaque-session-token/, "session token must never be exposed to browser JavaScript");
@@ -73,12 +76,18 @@ const responses = [
   { ok: true, json: async () => [{ state: worldState, revision: 7 }] },
   { ok: true, json: async () => [{ id: "a", character_name: "캐릭터 A", profile_photo: "data:image/jpeg;base64,AA" }] },
 ];
+const snapshotCalls = [];
 const authorizedResponse = responseCollector();
 await adminSnapshotHandler({ method: "GET", headers: { cookie: "baekji_admin_session=opaque-session-token" } }, authorizedResponse, {
   env: {},
-  fetchImpl: async () => responses.shift(),
+  fetchImpl: async (url, options) => {
+    snapshotCalls.push({ url: String(url), body: JSON.parse(options.body) });
+    return responses.shift();
+  },
 });
 assert.equal(authorizedResponse.statusCode, 200);
+assert.match(snapshotCalls[0].url, /\/rpc\/baekji_admin_session_verify$/);
+assert.deepEqual(snapshotCalls[0].body, { p_token: "opaque-session-token" });
 const payload = JSON.parse(authorizedResponse.body);
 assert.equal(payload.ok, true);
 assert.equal(payload.admin.id, "AD1");
