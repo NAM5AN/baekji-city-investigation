@@ -47,6 +47,12 @@ const base = {
 assert.deepEqual(Array.from(api.pendingInvitationsFor(base, "test_b"), (party) => party.id), ["party_1"]);
 assert.equal(api.pendingInvitationsFor(base, "test_c").length, 0, "declined invitation must stay hidden");
 
+assert.equal(api.invitationPopupAllowed(base, "test_b", "home"), true, "home should show pending invitations");
+assert.equal(api.invitationPopupAllowed(base, "test_b", "party"), true, "party composition should also show pending invitations");
+assert.equal(api.invitationPopupAllowed(base, "test_b", "briefing"), true, "pre-investigation briefing may show invitations");
+assert.equal(api.invitationPopupAllowed(base, "test_b", "login"), false, "login must not show invitation modal");
+assert.equal(api.invitationPopupAllowed(base, "test_b", "investigate"), false, "active investigation must not show invitation modal");
+
 const accepted = api.acceptInviteState(base, "party_1", "test_b");
 assert.equal(accepted.characters.test_b.currentPartyId, "party_1");
 assert.ok(accepted.parties.party_1.memberIds.includes("test_b"));
@@ -73,10 +79,13 @@ active.sessions.session_1.status = "ACTIVE";
 assert.equal(api.routeSyncTarget(active, "test_a", "home", ""), null, "active sessions must remain on the personal home screen until resume is pressed");
 assert.equal(api.routeSyncTarget(active, "test_a", "briefing", "session_1"), "investigate/session_1");
 assert.equal(api.routeSyncTarget(active, "test_a", "investigate", "session_1"), null);
+assert.equal(api.invitationPopupAllowed(active, "test_a", "home"), false, "once investigation is active invitation popups must stay suppressed");
 
 assert.match(source, /data-party-flow-defer/);
 assert.match(source, /data-party-flow-decline/);
 assert.match(source, /data-party-flow-accept/);
+assert.match(source, /baekji-cloud-sync/, "remote cloud updates should re-check invitation visibility immediately");
+assert.doesNotMatch(source, /if \(page !== "home"\)/, "invitation popup must no longer be home-only");
 assert.match(source, /stopImmediatePropagation\(\)/, "old unrestricted briefing entry must be guarded");
 assert.match(source, /조장의 세션 시작을 기다리는 중/);
 assert.match(source, /모든 조원의 조사가 동시에 시작됩니다/);
