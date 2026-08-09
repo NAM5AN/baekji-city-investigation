@@ -5,6 +5,7 @@ import vm from "node:vm";
 const source = fs.readFileSync(new URL("../mobile-investigation-ui.js", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../mobile-investigation-ui.css", import.meta.url), "utf8");
 const topbarFixCss = fs.readFileSync(new URL("../mobile-investigation-topbar-fix.css", import.meta.url), "utf8");
+const slideCss = fs.readFileSync(new URL("../mobile-investigation-slide.css", import.meta.url), "utf8");
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox, { filename: "mobile-investigation-ui.js" });
@@ -45,4 +46,13 @@ assert.match(topbarFixCss, /body\.mobile-investigation-active \.topbar\s*\{[^}]*
 assert.match(topbarFixCss, /body\.mobile-investigation-active \.shell\s*\{[^}]*padding-top: var\(--mobile-investigation-topbar, 50px\) !important;/s, "shell must reserve the measured topbar height");
 assert.match(topbarFixCss, /height: calc\(100dvh - var\(--mobile-investigation-topbar, 50px\)\) !important/, "pane height must exclude the fixed topbar");
 
-console.log("mobile investigation UI checks passed with hard-separated panes and persistent topbar");
+assert.match(slideCss, /position: absolute !important/);
+assert.match(slideCss, /overflow|isolation: isolate/);
+assert.match(slideCss, /transform 190ms cubic-bezier/);
+assert.match(slideCss, /body\.mobile-investigation-field \.retro-right-panel[\s\S]*translate3d\(100%, 0, 0\)/);
+assert.match(slideCss, /body\.mobile-investigation-chat \.retro-left-column[\s\S]*translate3d\(-100%, 0, 0\)/);
+assert.match(slideCss, /body\.mobile-investigation-chat \.retro-right-panel[\s\S]*translate3d\(0, 0, 0\)/);
+assert.match(slideCss, /pointer-events: none/);
+assert.match(slideCss, /prefers-reduced-motion: reduce/);
+
+console.log("mobile investigation UI checks passed with separated sliding panes and persistent topbar");
