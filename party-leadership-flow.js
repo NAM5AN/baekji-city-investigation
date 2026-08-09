@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.64";
+  const VERSION = "0.3.65";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -91,6 +91,10 @@
     };
   }
 
+  function partyRoute(partyId) {
+    return `#/party/${partyId}`;
+  }
+
   const TEST_API = Object.freeze({
     currentParty,
     isPartyLeader,
@@ -99,12 +103,14 @@
     confirmCompositionAsMemberState,
     setReadyAsMemberState,
     memberControlState,
+    partyRoute,
   });
   window.__BAEKJI_PARTY_LEADERSHIP_TEST__ = TEST_API;
 
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
 
   let refreshQueued = false;
+  let navigationTimer = 0;
 
   function readState() {
     try {
@@ -128,22 +134,27 @@
     return `party_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  function emitRefresh() {
-    try {
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    } catch {
-      window.dispatchEvent(new Event("hashchange"));
-    }
-    window.dispatchEvent(new CustomEvent("baekji-party-leadership", { detail: { version: VERSION } }));
+  function scheduleRefresh() {
+    if (refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(() => {
+      refreshQueued = false;
+      refresh();
+    });
   }
 
   function writeState(snapshot) {
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
-    emitRefresh();
+    window.dispatchEvent(new CustomEvent("baekji-party-leadership", { detail: { version: VERSION } }));
+    scheduleRefresh();
   }
 
-  function clearModal() {
-    document.querySelector("[data-party-leadership-warning]")?.remove();
+  function clearLeadershipModal() {
+    const root = document.getElementById("modal-root");
+    const warning = root?.querySelector?.("[data-party-leadership-warning]") || document.querySelector("[data-party-leadership-warning]");
+    if (warning && root?.contains?.(warning)) root.replaceChildren();
+    else warning?.remove?.();
+    document.querySelectorAll?.("[data-party-leadership-warning]")?.forEach?.((node) => node.remove?.());
   }
 
   function showLeadershipWarning() {
@@ -167,15 +178,38 @@
     requestAnimationFrame(() => root.querySelector("[data-party-leadership-confirm]")?.focus());
   }
 
+  function navigateToParty(partyId) {
+    const target = partyRoute(partyId);
+    clearLeadershipModal();
+    if (location.hash !== target) location.hash = target;
+    clearTimeout(navigationTimer);
+    navigationTimer = setTimeout(() => {
+      clearLeadershipModal();
+      if (location.hash !== target) location.hash = target;
+      scheduleRefresh();
+    }, 40);
+  }
+
   function createPartyAfterWarning() {
     const snapshot = readState();
     const userId = currentUserId();
-    if (!snapshot || !userId || currentParty(snapshot, userId)) return clearModal();
+    if (!snapshot || !userId) {
+      clearLeadershipModal();
+      return;
+    }
+    const existing = currentParty(snapshot, userId);
+    if (existing) {
+      navigateToParty(existing.id);
+      return;
+    }
     const partyId = makePartyId();
     const next = createLeaderPartyState(snapshot, userId, partyId);
-    clearModal();
+    if (next.characters?.[userId]?.currentPartyId !== partyId || !next.parties?.[partyId]) {
+      clearLeadershipModal();
+      return;
+    }
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(next));
-    location.hash = `#/party/${partyId}`;
+    navigateToParty(partyId);
   }
 
   function acceptInviteWithoutOpeningParty(partyId) {
@@ -219,13 +253,16 @@
     const party = snapshot.parties?.[partyId];
     if (!party) return;
     if (party.creatorId !== userId) {
-      location.hash = "#/home";
+      clearLeadershipModal();
+      if (location.hash !== "#/home") location.hash = "#/home";
       return;
     }
     const lead = document.querySelector("main.container.narrow .hero .lead");
-    if (lead) lead.textContent = "이 조사조를 생성한 캐릭터가 이번 조사조의 조장 역할을 맡습니다. 조장은 조원 초대와 세션 시작을 담당합니다.";
+    const leadCopy = "이 조사조를 생성한 캐릭터가 이번 조사조의 조장 역할을 맡습니다. 조장은 조원 초대와 세션 시작을 담당합니다.";
+    if (lead && lead.textContent !== leadCopy) lead.textContent = leadCopy;
     const participantHelp = [...document.querySelectorAll("section.card .card-header .muted.small")].find((node) => String(node.textContent || "").includes("각 캐릭터가 자신의 탭"));
-    if (participantHelp) participantHelp.textContent = "조원은 자신의 홈 화면에서 구성 확인과 준비 완료를 진행합니다.";
+    const helpCopy = "조원은 자신의 홈 화면에서 구성 확인과 준비 완료를 진행합니다.";
+    if (participantHelp && participantHelp.textContent !== helpCopy) participantHelp.textContent = helpCopy;
   }
 
   function decorateMemberHome(snapshot, userId) {
@@ -235,13 +272,18 @@
     if (!controls) return;
     const party = snapshot.parties?.[controls.partyId];
     const openButton = document.querySelector(`[data-open-party="${CSS.escape(controls.partyId)}"]`);
+    const existingControls = document.querySelector(`[data-member-party-controls="${CSS.escape(controls.partyId)}"]`);
+    if (existingControls) {
+      openButton?.remove();
+      return;
+    }
     const item = openButton?.closest(".list-item");
-    if (!item || item.querySelector("[data-member-party-controls]")) return;
+    if (!item) return;
     openButton.remove();
 
     const actions = document.createElement("div");
     actions.className = "button-row";
-    actions.dataset.memberPartyControls = "";
+    actions.dataset.memberPartyControls = controls.partyId;
 
     if (controls.status === "RECRUITING") {
       const button = document.createElement("button");
@@ -274,11 +316,11 @@
 
     const card = item.closest("article.card");
     const help = card?.querySelector(".card-header .muted.small");
-    if (help) help.textContent = "조원은 이곳에서 구성 확인과 준비 완료만 진행합니다.";
+    const helpCopy = "조원은 이곳에서 구성 확인과 준비 완료만 진행합니다.";
+    if (help && help.textContent !== helpCopy) help.textContent = helpCopy;
   }
 
   function refresh() {
-    refreshQueued = false;
     const snapshot = readState();
     const userId = currentUserId();
     if (!snapshot || !userId) return;
@@ -286,12 +328,6 @@
     decorateLeaderPage(snapshot, userId);
     decorateMemberHome(snapshot, userId);
     document.documentElement.dataset.partyLeadershipVersion = VERSION;
-  }
-
-  function scheduleRefresh() {
-    if (refreshQueued) return;
-    refreshQueued = true;
-    queueMicrotask(refresh);
   }
 
   document.addEventListener("click", (event) => {
@@ -304,7 +340,13 @@
       event.stopImmediatePropagation();
       const snapshot = readState();
       const userId = currentUserId();
-      if (!snapshot || !userId || currentParty(snapshot, userId)) return;
+      if (!snapshot || !userId) return;
+      const existing = currentParty(snapshot, userId);
+      if (existing && existing.creatorId === userId) {
+        navigateToParty(existing.id);
+        return;
+      }
+      if (existing) return;
       showLeadershipWarning();
       return;
     }
@@ -312,7 +354,7 @@
     if (target.closest("[data-party-leadership-cancel]")) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      clearModal();
+      clearLeadershipModal();
       return;
     }
 
@@ -359,16 +401,21 @@
       if (snapshot && userId && !isPartyLeader(snapshot, userId, openButton.dataset.openParty)) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        scheduleRefresh();
       }
     }
   }, true);
 
-  window.addEventListener("hashchange", scheduleRefresh);
+  window.addEventListener("hashchange", () => {
+    clearLeadershipModal();
+    scheduleRefresh();
+  });
   window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) scheduleRefresh(); });
   window.addEventListener("baekji-cloud-sync", scheduleRefresh);
-  window.addEventListener("pageshow", scheduleRefresh);
+  window.addEventListener("pageshow", () => {
+    clearLeadershipModal();
+    scheduleRefresh();
+  });
 
-  const observer = new MutationObserver(scheduleRefresh);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  scheduleRefresh();
+  requestAnimationFrame(() => requestAnimationFrame(scheduleRefresh));
 })();
