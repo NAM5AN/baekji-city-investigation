@@ -37,7 +37,7 @@ async function rpc(env, name, body, fetchImpl = globalThis.fetch) {
 
 async function verifyAdminSession(env, token, fetchImpl = globalThis.fetch) {
   if (!token) return null;
-  const rows = await rpc(env, "baekji_admin_session_check", { p_session_token: token }, fetchImpl);
+  const rows = await rpc(env, "baekji_admin_session_verify", { p_token: token }, fetchImpl);
   const row = Array.isArray(rows) ? rows[0] || null : null;
   if (!row?.login_id) return null;
   return { id: String(row.login_id), name: String(row.display_name || row.login_id), role: "ADMIN" };
