@@ -8,25 +8,35 @@ const key = source.match(/const SUPABASE_KEY = "([^"]+)"/)?.[1];
 if (!url || !key) throw new Error("tester-auth Supabase configuration not found");
 
 async function rpc(name, body) {
-  const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
-    method: "POST",
-    headers: {
-      apikey: key,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await response.text();
-  let payload = null;
-  try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
-  console.log(name, "HTTP", response.status, JSON.stringify(payload));
-  return { status: response.status, ok: response.ok, payload };
+  try {
+    const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    let payload = null;
+    try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
+    console.log(name, "HTTP", response.status, JSON.stringify(payload));
+    return { status: response.status, ok: response.ok, payload, networkError: false };
+  } catch (error) {
+    const detail = `${error?.name || "Error"}: ${error?.message || String(error)}${error?.cause?.code ? ` (${error.cause.code})` : ""}`;
+    console.log(name, "NETWORK_ERROR", detail);
+    return { status: 0, ok: false, payload: { message: detail, code: error?.cause?.code || "NETWORK_ERROR" }, networkError: true };
+  }
 }
 
 function classify(result) {
   const message = String(result.payload?.message || result.payload || "");
   const code = String(result.payload?.code || "");
+  if (result.networkError) {
+    if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|name resolution/i.test(`${code} ${message}`)) return "DNS_ERROR";
+    return "NETWORK_ERROR";
+  }
   if (result.status === 401 || /invalid api key/i.test(message)) return "INVALID_API_KEY";
   if (/jwt/i.test(message)) return "JWT_ERROR";
   if (result.status === 403 || /permission denied|not allowed|insufficient privilege/i.test(message)) return "PERMISSION_DENIED";
