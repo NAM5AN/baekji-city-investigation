@@ -24,11 +24,38 @@ async function rpc(name, body) {
   return { status: response.status, ok: response.ok, payload };
 }
 
-async function checkLogin() {
+function classify(result) {
+  const message = String(result.payload?.message || result.payload || "");
+  const code = String(result.payload?.code || "");
+  if (result.status === 401 || /invalid api key/i.test(message)) return "INVALID_API_KEY";
+  if (/jwt/i.test(message)) return "JWT_ERROR";
+  if (result.status === 403 || /permission denied|not allowed|insufficient privilege/i.test(message)) return "PERMISSION_DENIED";
+  if (code === "PGRST202" || /function .* could not be found/i.test(message)) return "MISSING_FUNCTION";
+  if (result.status === 404) return "HTTP_404";
+  if (result.ok) return "OK";
+  return `HTTP_${result.status}`;
+}
+
+function writeOutput(name, value) {
+  const output = process.env.GITHUB_OUTPUT;
+  if (!output) return;
+  fs.appendFileSync(output, `${name}=${String(value).replace(/\r?\n/g, " ")}\n`);
+}
+
+async function probeLogin() {
   const login = await rpc("baekji_tester_login", {
     p_character_name: `__ci_missing_${Date.now()}__`,
     p_pin: "0000",
   });
+  writeOutput("status", login.status);
+  writeOutput("category", classify(login));
+  writeOutput("code", login.payload?.code || "");
+  writeOutput("message", String(login.payload?.message || login.payload || "").slice(0, 240));
+  return login;
+}
+
+async function checkLogin() {
+  const login = await probeLogin();
   if (!login.ok) throw new Error(`tester login RPC unreachable: HTTP ${login.status} ${JSON.stringify(login.payload)}`);
   if (!Array.isArray(login.payload)) throw new Error(`tester login RPC returned unexpected payload: ${JSON.stringify(login.payload)}`);
   console.log("PASS: live tester login RPC is reachable");
@@ -48,6 +75,7 @@ async function checkSignup() {
   console.log("PASS: live tester signup RPC reaches validation");
 }
 
-if (mode === "login") await checkLogin();
+if (mode === "probe-login") await probeLogin();
+else if (mode === "login") await checkLogin();
 else if (mode === "signup") await checkSignup();
 else { await checkLogin(); await checkSignup(); }
