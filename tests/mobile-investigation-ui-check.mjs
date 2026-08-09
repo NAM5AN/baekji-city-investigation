@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../mobile-investigation-ui.js", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../mobile-investigation-ui.css", import.meta.url), "utf8");
+const topbarFixCss = fs.readFileSync(new URL("../mobile-investigation-topbar-fix.css", import.meta.url), "utf8");
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox, { filename: "mobile-investigation-ui.js" });
@@ -39,4 +40,9 @@ assert.match(css, /height: 100dvh/);
 assert.match(css, /retro-mobile-panel-toggle/);
 assert.match(css, /retro-chat-composer/);
 
-console.log("mobile investigation UI checks passed with hard-separated panes");
+assert.match(topbarFixCss, /body\.mobile-investigation-active \.topbar\s*\{[^}]*position: fixed !important;/s, "mobile investigation topbar must stay fixed outside the pane swap");
+assert.match(topbarFixCss, /body\.mobile-investigation-active \.topbar\s*\{[^}]*display: flex !important;/s, "mobile investigation topbar must remain visible");
+assert.match(topbarFixCss, /body\.mobile-investigation-active \.shell\s*\{[^}]*padding-top: var\(--mobile-investigation-topbar, 50px\) !important;/s, "shell must reserve the measured topbar height");
+assert.match(topbarFixCss, /height: calc\(100dvh - var\(--mobile-investigation-topbar, 50px\)\) !important/, "pane height must exclude the fixed topbar");
+
+console.log("mobile investigation UI checks passed with hard-separated panes and persistent topbar");
