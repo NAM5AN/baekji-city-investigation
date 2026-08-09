@@ -26,6 +26,12 @@
     "api/admin-communications.mjs": {
       "maxDuration": 15
     },
+    "api/admin-control.mjs": {
+      "maxDuration": 15
+    },
+    "api/admin-audit.mjs": {
+      "maxDuration": 15
+    },
     "api/player-admin-system.mjs": {
       "maxDuration": 15
     }
@@ -37,6 +43,8 @@
     { "source": "/api/admin-login", "destination": "/api/admin-login.mjs" },
     { "source": "/api/admin-snapshot", "destination": "/api/admin-snapshot.mjs" },
     { "source": "/api/admin-communications", "destination": "/api/admin-communications.mjs" },
+    { "source": "/api/admin-control", "destination": "/api/admin-control.mjs" },
+    { "source": "/api/admin-audit", "destination": "/api/admin-audit.mjs" },
     { "source": "/api/player-admin-system", "destination": "/api/player-admin-system.mjs" },
     { "source": "/api/:path*", "destination": "/api/index.mjs" }
   ],
