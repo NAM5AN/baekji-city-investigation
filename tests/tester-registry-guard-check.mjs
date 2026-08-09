@@ -108,7 +108,6 @@ const reloadSession = new Map([
 const reloadListeners = new Map();
 const reloadContext = vm.createContext({
   console,
-  Reflect,
   sessionStorage: {
     getItem(key) { return reloadSession.has(key) ? reloadSession.get(key) : null; },
     setItem(key, value) { reloadSession.set(key, String(value)); },
@@ -119,11 +118,11 @@ const reloadContext = vm.createContext({
 });
 reloadContext.window = reloadContext;
 vm.runInContext(guardSource, reloadContext, { filename: "tester-registry-guard.js:reload" });
-reloadContext.__registry = {
+vm.runInContext(`globalThis.__registry = {
   test_a: { id: "test_a", loginId: "캐릭터A", password: "1234", name: "테스트 캐릭터 A" },
   test_b: { id: "test_b", loginId: "캐릭터B", password: "1234", name: "테스트 캐릭터 B" },
   test_c: { id: "test_c", loginId: "캐릭터C", password: "1234", name: "테스트 캐릭터 C" },
-};
+};`, reloadContext);
 
 assert.equal(vm.runInContext(`__registry[${JSON.stringify(testerId)}]?.name`, reloadContext), "산", "refresh must resolve the current tester before any async account fetch");
 assert.equal(vm.runInContext(`({})[${JSON.stringify(testerId)}]`, reloadContext), undefined, "the temporary refresh bridge must stay limited to the app user registry");
