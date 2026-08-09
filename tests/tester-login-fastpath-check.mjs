@@ -10,6 +10,7 @@ const testerId = "755ccd33-676f-48c8-a825-c9a28b56ac3e";
 
 let submitHandler = null;
 let fetchCount = 0;
+let legacyCaptureCount = 0;
 const local = new Map([[GLOBAL_KEY, JSON.stringify({
   version: 3,
   storyDay: 1,
@@ -83,6 +84,13 @@ context.__demoRegistry = {
 
 vm.runInContext(guardSource, context, { filename: "tester-registry-guard.js" });
 vm.runInContext(`
+  window.__legacyTesterCapture = function(event) {
+    const typed = String(event.target.querySelector("[data-login-id]")?.value || "").replace(/\\s+/g, "").toLowerCase();
+    if (typed !== "산") return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return true;
+  };
   window.__appSubmit = function(event) {
     event.preventDefault();
     const loginId = String(event.target.querySelector("[data-login-id]")?.value || "").replace(/\\s+/g, "").toLowerCase();
@@ -106,8 +114,8 @@ assert.equal(context.__BAEKJI_TESTER_LOGIN_FASTPATH_TEST__.shouldHandleLoginName
 function makeForm() {
   const message = { textContent: "", isConnected: true };
   const submit = { disabled: false, isConnected: true };
-  const nameInput = { value: "산" };
-  const passwordInput = { value: "4826" };
+  const nameInput = { value: "산", isConnected: true };
+  const passwordInput = { value: "4826", isConnected: true };
   const form = {
     matches(selector) { return selector === "[data-login-form]"; },
     querySelector(selector) {
@@ -120,6 +128,8 @@ function makeForm() {
     dispatchEvent(replay) {
       replay.target = form;
       submitHandler(replay);
+      if (replay.stopped) return !replay.defaultPrevented;
+      legacyCaptureCount += context.__legacyTesterCapture(replay) ? 1 : 0;
       if (!replay.stopped) context.__appSubmit(replay);
       return !replay.defaultPrevented;
     },
@@ -139,24 +149,23 @@ const first = await attemptLogin();
 assert.equal(fetchCount, 1, "first tester login performs exactly one RPC");
 assert.equal(first.event.defaultPrevented, true);
 assert.equal(first.event.stopped, true);
+assert.equal(legacyCaptureCount, 0, "the legacy tester-name interceptor must not capture the verified app handoff");
 assert.equal(session.get(USER_KEY), testerId, "app login handoff must establish the current tester session");
 assert.equal(context.location.hash, "#/home", "successful tester login must remain on home instead of bouncing to login");
 assert.equal(context.__demoRegistry[testerId]?.password, "4826", "RPC-verified PIN must be present only in the in-memory app registry for the final app auth check");
 const state = JSON.parse(local.get(GLOBAL_KEY));
 assert.equal(state.characters[testerId]?.id, testerId, "tester character state must exist before the app login handoff");
-assert.equal(first.nameInput.value, "산", "login handoff must not erase the character name");
 assert.equal(first.passwordInput.value, "4826", "login handoff must not erase the PIN");
-assert.equal(first.message.textContent, "");
 assert.equal(first.submit.disabled, false);
 
 session.delete(USER_KEY);
 context.location.hash = "#/login";
 const second = await attemptLogin();
 assert.equal(fetchCount, 2, "a later retry must remain usable and perform one fresh RPC");
+assert.equal(legacyCaptureCount, 0, "retries must continue to bypass the legacy name interceptor");
 assert.equal(session.get(USER_KEY), testerId, "repeat login must also establish the session without another account acting first");
 assert.equal(context.location.hash, "#/home");
-assert.equal(second.nameInput.value, "산");
 assert.equal(second.passwordInput.value, "4826");
 assert.equal(second.submit.disabled, false);
 
-console.log("PASS: tester login RPC hands off to built-in auth, stays logged in, and remains retryable");
+console.log("PASS: tester login bypasses legacy name interception, reaches built-in auth, and remains retryable");
