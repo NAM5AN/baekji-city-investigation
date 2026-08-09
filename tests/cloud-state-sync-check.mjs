@@ -8,7 +8,10 @@ assert.match(source, /baekji_mvp_get_state/);
 assert.match(source, /baekji_mvp_get_revision/);
 assert.match(source, /baekji_mvp_put_state/);
 assert.match(source, /p_expected_revision/);
-assert.match(source, /mergeValues\(result\.state, localState\)/);
+assert.match(source, /reconcileAdminControl\(result\.state, localState, mergeValues\(result\.state, localState\)\)/);
+assert.match(source, /applyAdminControlPatch/);
+assert.match(source, /adminControlSeq/);
+assert.match(source, /adminControlPatches/);
 assert.match(source, /new StorageEvent\("storage"/);
 assert.match(source, /ACTIVE_POLL_MS = 1500/);
 assert.match(source, /document\.hidden \? HIDDEN_POLL_MS : ACTIVE_POLL_MS/);
@@ -17,9 +20,9 @@ assert.match(source, /this === localStorage && key === GLOBAL_KEY/);
 assert.match(source, /window\.addEventListener\("online"/);
 assert.match(source, /document\.addEventListener\("visibilitychange"/);
 
-const cloudIndex = index.indexOf("cloud-state-sync.js?v=0.3.29");
+const cloudIndex = index.indexOf("cloud-state-sync.js?v=0.4.0");
 const appIndex = index.indexOf("app.js?v=0.3.18");
 assert.ok(cloudIndex >= 0, "cloud sync script must be loaded");
 assert.ok(cloudIndex < appIndex, "cloud sync must patch storage before the app starts");
 
-console.log("cloud state sync checks passed");
+console.log("cloud state sync checks passed with admin control conflict reconciliation");
