@@ -1,0 +1,76 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import vm from "node:vm";
+
+const source = fs.readFileSync(new URL("../party-leadership-flow.js", import.meta.url), "utf8");
+const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
+const sandbox = { window: {}, console, structuredClone };
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox, { filename: "party-leadership-flow.js" });
+const api = sandbox.window.__BAEKJI_PARTY_LEADERSHIP_TEST__;
+assert.ok(api, "party leadership test API must be exposed");
+
+const base = {
+  version: 3,
+  characters: {
+    leader: { currentPartyId: null, currentSessionId: null },
+    member: { currentPartyId: null, currentSessionId: null },
+    busy: { currentPartyId: "party_busy", currentSessionId: null },
+  },
+  parties: {
+    party_busy: {
+      id: "party_busy",
+      creatorId: "busy",
+      status: "RECRUITING",
+      memberIds: ["busy"], invitedIds: [], declinedIds: [], confirmedBy: [], readyBy: [], sessionId: null,
+    },
+  },
+  sessions: {},
+};
+
+const created = api.createLeaderPartyState(base, "leader", "party_new", 1000);
+assert.equal(created.characters.leader.currentPartyId, "party_new");
+assert.equal(created.parties.party_new.creatorId, "leader");
+assert.deepEqual(Array.from(created.parties.party_new.memberIds), ["leader"]);
+assert.equal(base.characters.leader.currentPartyId, null, "leader creation helper must be pure");
+assert.equal(api.isPartyLeader(created, "leader", "party_new"), true);
+
+created.parties.party_new.invitedIds.push("member");
+const accepted = api.acceptInviteAsMemberState(created, "party_new", "member");
+assert.equal(accepted.characters.member.currentPartyId, "party_new");
+assert.ok(accepted.parties.party_new.memberIds.includes("member"));
+assert.ok(!accepted.parties.party_new.invitedIds.includes("member"));
+assert.equal(api.isPartyLeader(accepted, "member", "party_new"), false);
+
+let controls = api.memberControlState(accepted, "member");
+assert.equal(controls.canConfirm, true, "member must confirm composition separately after accepting");
+assert.equal(controls.canReady, false);
+
+let confirmed = api.confirmCompositionAsMemberState(accepted, "party_new", "member");
+assert.ok(confirmed.parties.party_new.confirmedBy.includes("member"));
+assert.equal(api.memberControlState(confirmed, "member").confirmed, true);
+
+confirmed.parties.party_new.confirmedBy.push("leader");
+confirmed.parties.party_new.status = "COMPOSITION_CONFIRMED";
+controls = api.memberControlState(confirmed, "member");
+assert.equal(controls.canReady, true, "member must still complete ready check");
+
+const ready = api.setReadyAsMemberState(confirmed, "party_new", "member");
+assert.equal(ready.parties.party_new.status, "READY_CHECK");
+assert.ok(ready.parties.party_new.readyBy.includes("member"));
+assert.equal(api.memberControlState(ready, "member").ready, true);
+
+const blocked = api.createLeaderPartyState(base, "busy", "party_other", 1000);
+assert.equal(blocked.characters.busy.currentPartyId, "party_busy", "a current party must block creating another party");
+assert.equal(blocked.parties.party_other, undefined);
+
+assert.match(source, /data-party-leadership-warning/);
+assert.match(source, /조사조를 생성하면 이번 조사조의 조장이 됩니다/);
+assert.match(source, /data-member-confirm-composition/);
+assert.match(source, /data-member-ready/);
+assert.match(source, /currentPartyId\) card\.remove\(\)/, "busy invite candidates should be removed from leader invite list");
+assert.match(index, /party-leadership-flow\.js\?v=0\.3\.64/);
+assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.64") < index.indexOf("party-flow-sync.js?v=0.3.63"), "leadership interception must load before party-flow-sync");
+
+console.log("PASS: leader warning, member-only confirmation/ready flow, and busy invite filtering");
