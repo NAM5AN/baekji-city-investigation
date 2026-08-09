@@ -15,7 +15,24 @@ jobs:
         with:
           node-version: 24
       - run: npm run check
-      - name: Live tester login RPC probe
-        run: node tests/tester-auth-live-check.mjs login
+      - name: Probe live tester login RPC
+        id: tester_login
+        run: node tests/tester-auth-live-check.mjs probe-login
+      - name: "FAIL: tester auth publishable key rejected"
+        if: steps.tester_login.outputs.category == 'INVALID_API_KEY'
+        run: exit 1
+      - name: "FAIL: tester auth JWT/header error"
+        if: steps.tester_login.outputs.category == 'JWT_ERROR'
+        run: exit 1
+      - name: "FAIL: tester auth RPC permission denied"
+        if: steps.tester_login.outputs.category == 'PERMISSION_DENIED'
+        run: exit 1
+      - name: "FAIL: tester login RPC missing"
+        if: steps.tester_login.outputs.category == 'MISSING_FUNCTION'
+        run: exit 1
+      - name: "FAIL: tester login RPC other HTTP error"
+        if: steps.tester_login.outputs.category != 'OK' && steps.tester_login.outputs.category != 'INVALID_API_KEY' && steps.tester_login.outputs.category != 'JWT_ERROR' && steps.tester_login.outputs.category != 'PERMISSION_DENIED' && steps.tester_login.outputs.category != 'MISSING_FUNCTION'
+        run: exit 1
       - name: Live tester signup RPC probe
+        if: steps.tester_login.outputs.category == 'OK'
         run: node tests/tester-auth-live-check.mjs signup
