@@ -8,13 +8,14 @@
   <title>백지도시 · 관리자 관제판</title>
   <link rel="stylesheet" href="admin-dashboard.css?v=0.1.0" />
   <link rel="stylesheet" href="admin-observation-mvp2.css?v=0.2.0" />
+  <link rel="stylesheet" href="admin-communications-mvp3.css?v=0.3.0" />
 </head>
 <body>
   <div class="admin-shell" id="admin-shell">
     <header class="admin-topbar">
       <div class="admin-brand">
         <span class="admin-brand-mark">白</span>
-        <div><strong>백지도시 관제판</strong><small>READ ONLY · MVP 2</small></div>
+        <div><strong>백지도시 관제판</strong><small>OBSERVE · COMMUNICATION · MVP 3</small></div>
       </div>
       <div class="admin-topbar-meta">
         <span data-admin-world-meta>연결 대기</span>
@@ -36,17 +37,13 @@
 
       <aside class="admin-chat-rail" aria-label="관리자 채팅">
         <div class="admin-chat-head">
-          <div><strong>관리자 채팅</strong><small>항상 표시되는 운영진 전용 영역</small></div>
+          <div><strong>관리자 채팅</strong><small>운영진 통신 연결 중</small></div>
           <span class="admin-chat-badge">MVP 3</span>
         </div>
-        <div class="admin-chat-placeholder">
-          <div class="admin-chat-placeholder-icon">···</div>
-          <strong>실시간 채팅 준비 영역</strong>
-          <p>관리자 계정은 연결되었습니다. 실시간 운영진 채팅과 관리자 SYSTEM 전송은 다음 MVP에서 활성화합니다.</p>
-        </div>
+        <div class="admin-chat-placeholder"><strong>관리자 통신 연결 중...</strong></div>
         <div class="admin-chat-compose disabled" aria-disabled="true">
-          <textarea disabled placeholder="다음 MVP에서 활성화됩니다."></textarea>
-          <div><button type="button" disabled>SYSTEM 전송</button><button type="button" disabled>보내기</button></div>
+          <textarea disabled placeholder="연결 중..."></textarea>
+          <div><button type="button" disabled>운영 SYSTEM</button><button type="button" disabled>보내기</button></div>
         </div>
       </aside>
     </main>
@@ -56,5 +53,6 @@
   <script src="data/day1-data.js?v=0.3.18"></script>
   <script src="admin-dashboard.js?v=0.1.0"></script>
   <script src="admin-observation-mvp2.js?v=0.2.0"></script>
+  <script src="admin-communications-mvp3.js?v=0.3.0"></script>
 </body>
 </html>
