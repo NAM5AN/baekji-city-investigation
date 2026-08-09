@@ -4,7 +4,13 @@ const source = fs.readFileSync(new URL("../tester-auth.js", import.meta.url), "u
 const url = source.match(/const SUPABASE_URL = "([^"]+)"/)?.[1];
 const key = source.match(/const SUPABASE_KEY = "([^"]+)"/)?.[1];
 
-if (!url || !key) throw new Error("tester-auth Supabase configuration not found");
+function fail(title, detail) {
+  const safe = String(detail).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  console.error(`::error title=${title}::${safe}`);
+  throw new Error(detail);
+}
+
+if (!url || !key) fail("tester-auth config", "tester-auth Supabase configuration not found");
 
 async function rpc(name, body) {
   const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
@@ -28,10 +34,10 @@ const login = await rpc("baekji_tester_login", {
 });
 console.log("LOGIN_PROBE", JSON.stringify(login));
 if (!login.ok) {
-  throw new Error(`tester login RPC unreachable: HTTP ${login.status} ${JSON.stringify(login.payload)}`);
+  fail("tester login RPC probe", `HTTP ${login.status} ${JSON.stringify(login.payload)}`);
 }
 if (!Array.isArray(login.payload)) {
-  throw new Error(`tester login RPC returned unexpected payload: ${JSON.stringify(login.payload)}`);
+  fail("tester login RPC payload", JSON.stringify(login.payload));
 }
 
 const signup = await rpc("baekji_tester_signup", {
@@ -41,11 +47,11 @@ const signup = await rpc("baekji_tester_signup", {
 });
 console.log("SIGNUP_INVALID_PIN_PROBE", JSON.stringify(signup));
 if (signup.ok) {
-  throw new Error("tester signup accepted an invalid PIN; probe should not create an account");
+  fail("tester signup validation", "signup accepted an invalid PIN; probe should not create an account");
 }
 const message = String(signup.payload?.message || signup.payload || "");
 if (!message.includes("INVALID_PIN")) {
-  throw new Error(`tester signup RPC failed before validation: HTTP ${signup.status} ${JSON.stringify(signup.payload)}`);
+  fail("tester signup RPC probe", `HTTP ${signup.status} ${JSON.stringify(signup.payload)}`);
 }
 
 console.log("PASS: live tester auth RPC is reachable and signup validation executes");
