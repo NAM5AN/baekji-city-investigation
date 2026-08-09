@@ -325,12 +325,13 @@
     try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
     const value = Number(state?.characters?.[userId]?.contamination);
     const contamination = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
+    const contaminationText = `${contamination}%`;
     document.querySelectorAll(".card.kpi").forEach((card) => {
       if (!card.querySelector(".muted.small")?.textContent?.includes("개인 오염도")) return;
       const number = card.querySelector(".kpi-value");
       const bar = card.querySelector(".progress > span");
-      if (number) number.textContent = `${contamination}%`;
-      if (bar) bar.style.width = `${contamination}%`;
+      if (number && number.textContent !== contaminationText) number.textContent = contaminationText;
+      if (bar && bar.style.width !== contaminationText) bar.style.width = contaminationText;
     });
   }
 
