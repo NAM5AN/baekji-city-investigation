@@ -13,11 +13,15 @@
     },
     "api/interpret-transfer.mjs": {
       "maxDuration": 30
+    },
+    "api/resolve-hazard-flex.mjs": {
+      "maxDuration": 30
     }
   },
   "rewrites": [
     { "source": "/api/narrate-observation", "destination": "/api/narrate-observation.mjs" },
     { "source": "/api/interpret-transfer", "destination": "/api/interpret-transfer.mjs" },
+    { "source": "/api/resolve-hazard-flex", "destination": "/api/resolve-hazard-flex.mjs" },
     { "source": "/api/:path*", "destination": "/api/index.mjs" }
   ],
   "headers": [
