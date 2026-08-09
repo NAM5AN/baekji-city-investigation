@@ -67,6 +67,26 @@
     });
   }
 
+  function decorateInviteCandidates() {
+    document.querySelectorAll(".retro-invite-card").forEach((card) => {
+      const name = card.querySelector(".list-title");
+      const image = card.querySelector(":scope > .retro-invite-profile");
+      if (!name || !image) return;
+
+      const lookupLabel = card.dataset.testerAccountId || name.textContent;
+      const account = accountForLabel(lookupLabel);
+      if (!account) return;
+
+      card.dataset.testerAccountId = account.id;
+      if (name.textContent !== account.name) name.textContent = account.name;
+      if (!account.profilePhoto) return;
+
+      if (image.getAttribute("src") !== account.profilePhoto) image.src = account.profilePhoto;
+      image.alt = `${account.name} 프로필 사진`;
+      image.dataset.testerProfilePhoto = "true";
+    });
+  }
+
   function decorateRelatedCopy() {
     document.querySelectorAll(".briefing-confirmation .retro-flow-notice > span, .retro-invite-modal p").forEach((element) => {
       const next = replaceAccountIds(element.textContent);
@@ -78,6 +98,7 @@
     refreshQueued = false;
     if (!accounts.size) return;
     decorateBriefingMembers();
+    decorateInviteCandidates();
     decorateRelatedCopy();
   }
 
