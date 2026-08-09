@@ -1,7 +1,11 @@
 import fs from "node:fs";
 
 const mode = process.argv[2] || "all";
-const source = fs.readFileSync(new URL("../tester-auth.js", import.meta.url), "utf8");
+const recoveryPath = new URL("../supabase-endpoint-recovery.js", import.meta.url);
+const testerPath = new URL("../tester-auth.js", import.meta.url);
+const source = fs.existsSync(recoveryPath)
+  ? fs.readFileSync(recoveryPath, "utf8")
+  : fs.readFileSync(testerPath, "utf8");
 const url = source.match(/const SUPABASE_URL = "([^"]+)"/)?.[1];
 const key = source.match(/const SUPABASE_KEY = "([^"]+)"/)?.[1];
 
@@ -85,7 +89,21 @@ async function checkSignup() {
   console.log("PASS: live tester signup RPC reaches validation");
 }
 
+async function checkCloud() {
+  const keyName = `__ci_missing_state_${Date.now()}__`;
+  const revision = await rpc("baekji_mvp_get_revision", { p_state_key: keyName });
+  if (!revision.ok || Number(revision.payload) !== 0) {
+    throw new Error(`cloud revision RPC failed: HTTP ${revision.status} ${JSON.stringify(revision.payload)}`);
+  }
+  const state = await rpc("baekji_mvp_get_state", { p_state_key: keyName });
+  if (!state.ok || !Array.isArray(state.payload) || state.payload.length !== 0) {
+    throw new Error(`cloud state RPC failed: HTTP ${state.status} ${JSON.stringify(state.payload)}`);
+  }
+  console.log("PASS: live cloud state RPCs are reachable");
+}
+
 if (mode === "probe-login") await probeLogin();
 else if (mode === "login") await checkLogin();
 else if (mode === "signup") await checkSignup();
-else { await checkLogin(); await checkSignup(); }
+else if (mode === "cloud") await checkCloud();
+else { await checkLogin(); await checkSignup(); await checkCloud(); }
