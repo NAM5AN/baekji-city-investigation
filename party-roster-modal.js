@@ -204,6 +204,10 @@
     const party = partyId ? snapshot?.parties?.[partyId] : null;
     if (!party || !unique(party.memberIds).includes(userId)) return;
 
+    const sessionCreated = Boolean(party.sessionId || party.status === "SESSION_CREATED");
+    const isLeader = party.creatorId === userId;
+    if (isLeader && !sessionCreated) return;
+
     const escapedId = CSS.escape(partyId);
     const existingRosterButton = document.querySelector(`[data-party-roster-open="${escapedId}"]`);
     const legacyOpenButton = document.querySelector(`[data-open-party="${escapedId}"]`);
@@ -211,7 +215,7 @@
     const item = existingRosterButton?.closest(".list-item") || memberControls?.closest(".list-item") || legacyOpenButton?.closest(".list-item");
     if (!item) return;
 
-    legacyOpenButton?.remove();
+    if (sessionCreated) legacyOpenButton?.remove();
     if (existingRosterButton) return;
 
     const button = document.createElement("button");
@@ -254,7 +258,8 @@
       const snapshot = readState();
       const userId = currentUserId();
       const party = snapshot?.parties?.[legacyOpenButton.dataset.openParty];
-      if (party && unique(party.memberIds).includes(userId)) {
+      const sessionCreated = Boolean(party?.sessionId || party?.status === "SESSION_CREATED");
+      if (party && sessionCreated && unique(party.memberIds).includes(userId)) {
         event.preventDefault();
         event.stopImmediatePropagation();
         openModal(party.id);
