@@ -15,5 +15,7 @@ jobs:
         with:
           node-version: 24
       - run: npm run check
-      - name: Live tester auth RPC probe
-        run: node tests/tester-auth-live-check.mjs
+      - name: Live tester login RPC probe
+        run: node tests/tester-auth-live-check.mjs login
+      - name: Live tester signup RPC probe
+        run: node tests/tester-auth-live-check.mjs signup
