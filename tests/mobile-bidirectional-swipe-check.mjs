@@ -25,7 +25,7 @@ assert.match(source, /document\.addEventListener\("touchstart"/);
 assert.doesNotMatch(source, /if \(!\("PointerEvent" in window\)\)/, "PointerEvent 브라우저에서도 touch 백업을 유지해야 합니다.");
 assert.match(source, /data-mobile-investigation-toggle/);
 assert.match(source, /suppressClickUntil/);
-assert.match(index, /party-flow-sync\.js\?v=0\.3\.28/);
+assert.match(index, /party-flow-sync\.js\?v=0\.3\.63/);
 assert.match(index, /mobile-bidirectional-swipe\.js\?v=0\.3\.32/);
 
 console.log("mobile bidirectional swipe checks passed");
