@@ -16,12 +16,16 @@
     },
     "api/resolve-hazard-flex.mjs": {
       "maxDuration": 30
+    },
+    "api/admin-snapshot.mjs": {
+      "maxDuration": 15
     }
   },
   "rewrites": [
     { "source": "/api/narrate-observation", "destination": "/api/narrate-observation.mjs" },
     { "source": "/api/interpret-transfer", "destination": "/api/interpret-transfer.mjs" },
     { "source": "/api/resolve-hazard-flex", "destination": "/api/resolve-hazard-flex.mjs" },
+    { "source": "/api/admin-snapshot", "destination": "/api/admin-snapshot.mjs" },
     { "source": "/api/:path*", "destination": "/api/index.mjs" }
   ],
   "headers": [
@@ -35,6 +39,10 @@
     },
     {
       "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/admin-dashboard.html",
       "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
   ]
