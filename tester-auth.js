@@ -85,7 +85,7 @@
   async function rpc(name, body) {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
       method: "POST",
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Accept: "application/json" },
+      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body), cache: "no-store",
     });
     const payload = await response.json().catch(() => null);
