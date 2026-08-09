@@ -1,0 +1,374 @@
+(() => {
+  "use strict";
+
+  const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const USER_KEY = "baekji_city_mvp_current_user_v034";
+  const VERSION = "0.3.64";
+
+  function clone(value) {
+    if (typeof structuredClone === "function") return structuredClone(value);
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function unique(values) {
+    return [...new Set(Array.isArray(values) ? values : [])];
+  }
+
+  function currentParty(snapshot, userId) {
+    const partyId = snapshot?.characters?.[userId]?.currentPartyId;
+    return partyId ? snapshot.parties?.[partyId] || null : null;
+  }
+
+  function isPartyLeader(snapshot, userId, partyId = null) {
+    const party = partyId ? snapshot?.parties?.[partyId] : currentParty(snapshot, userId);
+    return Boolean(party && party.creatorId === userId);
+  }
+
+  function createLeaderPartyState(snapshot, userId, partyId, createdAt = Date.now()) {
+    const draft = clone(snapshot);
+    const character = draft.characters?.[userId];
+    if (!character || character.currentPartyId) return draft;
+    draft.parties ||= {};
+    draft.parties[partyId] = {
+      id: partyId,
+      name: `해오름역 조사조 ${Object.keys(draft.parties).length + 1}`,
+      creatorId: userId,
+      destination: "E",
+      status: "RECRUITING",
+      memberIds: [userId],
+      invitedIds: [],
+      declinedIds: [],
+      confirmedBy: [],
+      readyBy: [],
+      sessionId: null,
+      createdAt,
+    };
+    character.currentPartyId = partyId;
+    return draft;
+  }
+
+  function acceptInviteAsMemberState(snapshot, partyId, userId) {
+    const draft = clone(snapshot);
+    const party = draft.parties?.[partyId];
+    const character = draft.characters?.[userId];
+    if (!party || !character || party.status !== "RECRUITING" || character.currentPartyId) return draft;
+    if (!unique(party.invitedIds).includes(userId)) return draft;
+    party.memberIds = unique([...(party.memberIds || []), userId]);
+    party.invitedIds = unique(party.invitedIds).filter((id) => id !== userId);
+    party.declinedIds = unique(party.declinedIds).filter((id) => id !== userId);
+    character.currentPartyId = partyId;
+    return draft;
+  }
+
+  function confirmCompositionAsMemberState(snapshot, partyId, userId) {
+    const draft = clone(snapshot);
+    const party = draft.parties?.[partyId];
+    if (!party || party.creatorId === userId || party.status !== "RECRUITING" || !unique(party.memberIds).includes(userId)) return draft;
+    party.confirmedBy = unique([...(party.confirmedBy || []), userId]);
+    if (unique(party.memberIds).every((id) => party.confirmedBy.includes(id))) party.status = "COMPOSITION_CONFIRMED";
+    return draft;
+  }
+
+  function setReadyAsMemberState(snapshot, partyId, userId) {
+    const draft = clone(snapshot);
+    const party = draft.parties?.[partyId];
+    if (!party || party.creatorId === userId || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) || !unique(party.memberIds).includes(userId)) return draft;
+    if (party.status === "COMPOSITION_CONFIRMED") party.status = "READY_CHECK";
+    party.readyBy = unique([...(party.readyBy || []), userId]);
+    return draft;
+  }
+
+  function memberControlState(snapshot, userId) {
+    const party = currentParty(snapshot, userId);
+    if (!party || party.creatorId === userId) return null;
+    return {
+      partyId: party.id,
+      status: party.status,
+      confirmed: unique(party.confirmedBy).includes(userId),
+      ready: unique(party.readyBy).includes(userId),
+      canConfirm: party.status === "RECRUITING" && !unique(party.confirmedBy).includes(userId),
+      canReady: ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) && !unique(party.readyBy).includes(userId),
+    };
+  }
+
+  const TEST_API = Object.freeze({
+    currentParty,
+    isPartyLeader,
+    createLeaderPartyState,
+    acceptInviteAsMemberState,
+    confirmCompositionAsMemberState,
+    setReadyAsMemberState,
+    memberControlState,
+  });
+  window.__BAEKJI_PARTY_LEADERSHIP_TEST__ = TEST_API;
+
+  if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
+
+  let refreshQueued = false;
+
+  function readState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      return parsed?.version === 3 ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function currentUserId() {
+    return sessionStorage.getItem(USER_KEY) || "";
+  }
+
+  function routeParts() {
+    const raw = location.hash.replace(/^#\/?/, "") || "login";
+    return raw.split("/").filter(Boolean);
+  }
+
+  function makePartyId() {
+    return `party_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function emitRefresh() {
+    try {
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    } catch {
+      window.dispatchEvent(new Event("hashchange"));
+    }
+    window.dispatchEvent(new CustomEvent("baekji-party-leadership", { detail: { version: VERSION } }));
+  }
+
+  function writeState(snapshot) {
+    localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
+    emitRefresh();
+  }
+
+  function clearModal() {
+    document.querySelector("[data-party-leadership-warning]")?.remove();
+  }
+
+  function showLeadershipWarning() {
+    const root = document.getElementById("modal-root");
+    if (!root || root.querySelector("[data-party-leadership-warning]")) return;
+    if (root.children.length) return;
+    root.innerHTML = `
+      <div class="retro-invite-backdrop" data-party-leadership-warning>
+        <section class="retro-invite-modal" role="dialog" aria-modal="true" aria-labelledby="party-leader-warning-title">
+          <div class="retro-invite-emblem" aria-hidden="true">!</div>
+          <div class="retro-invite-kicker">PARTY LEADER CONFIRMATION</div>
+          <h2 id="party-leader-warning-title">새 조사조를 구성하시겠습니까?</h2>
+          <p><strong>조사조를 생성하면 이번 조사조의 조장이 됩니다.</strong></p>
+          <p style="margin-top:10px">조사조에 참여하는 동안에는 다른 참가자가 보내는 조사조 초대를 받을 수 없습니다. 조원으로 참여하려는 경우 이 창을 닫고 초대를 기다려 주세요.</p>
+          <div class="retro-invite-actions" style="grid-template-columns:1fr 1.2fr">
+            <button type="button" class="button" data-party-leadership-cancel>취소</button>
+            <button type="button" class="button primary" data-party-leadership-confirm>조사조 만들기</button>
+          </div>
+        </section>
+      </div>`;
+    requestAnimationFrame(() => root.querySelector("[data-party-leadership-confirm]")?.focus());
+  }
+
+  function createPartyAfterWarning() {
+    const snapshot = readState();
+    const userId = currentUserId();
+    if (!snapshot || !userId || currentParty(snapshot, userId)) return clearModal();
+    const partyId = makePartyId();
+    const next = createLeaderPartyState(snapshot, userId, partyId);
+    clearModal();
+    localStorage.setItem(GLOBAL_KEY, JSON.stringify(next));
+    location.hash = `#/party/${partyId}`;
+  }
+
+  function acceptInviteWithoutOpeningParty(partyId) {
+    const snapshot = readState();
+    const userId = currentUserId();
+    if (!snapshot || !userId) return;
+    const next = acceptInviteAsMemberState(snapshot, partyId, userId);
+    if (next.characters?.[userId]?.currentPartyId !== partyId) return;
+    document.querySelector(".retro-invite-backdrop[data-party-flow-modal]")?.remove();
+    writeState(next);
+  }
+
+  function confirmMemberComposition(partyId) {
+    const snapshot = readState();
+    const userId = currentUserId();
+    if (!snapshot || !userId) return;
+    writeState(confirmCompositionAsMemberState(snapshot, partyId, userId));
+  }
+
+  function setMemberReady(partyId) {
+    const snapshot = readState();
+    const userId = currentUserId();
+    if (!snapshot || !userId) return;
+    writeState(setReadyAsMemberState(snapshot, partyId, userId));
+  }
+
+  function hideBusyInviteCandidates(snapshot) {
+    const [page] = routeParts();
+    if (page !== "party") return;
+    document.querySelectorAll(".retro-invite-card, section.card .list-item").forEach((card) => {
+      const button = card.querySelector("[data-invite]");
+      if (!button) return;
+      const targetId = button.dataset.invite;
+      if (snapshot.characters?.[targetId]?.currentPartyId) card.remove();
+    });
+  }
+
+  function decorateLeaderPage(snapshot, userId) {
+    const [page, partyId] = routeParts();
+    if (page !== "party" || !partyId) return;
+    const party = snapshot.parties?.[partyId];
+    if (!party) return;
+    if (party.creatorId !== userId) {
+      location.hash = "#/home";
+      return;
+    }
+    const lead = document.querySelector("main.container.narrow .hero .lead");
+    if (lead) lead.textContent = "이 조사조를 생성한 캐릭터가 이번 조사조의 조장 역할을 맡습니다. 조장은 조원 초대와 세션 시작을 담당합니다.";
+    const participantHelp = [...document.querySelectorAll("section.card .card-header .muted.small")].find((node) => String(node.textContent || "").includes("각 캐릭터가 자신의 탭"));
+    if (participantHelp) participantHelp.textContent = "조원은 자신의 홈 화면에서 구성 확인과 준비 완료를 진행합니다.";
+  }
+
+  function decorateMemberHome(snapshot, userId) {
+    const [page] = routeParts();
+    if (page !== "home") return;
+    const controls = memberControlState(snapshot, userId);
+    if (!controls) return;
+    const party = snapshot.parties?.[controls.partyId];
+    const openButton = document.querySelector(`[data-open-party="${CSS.escape(controls.partyId)}"]`);
+    const item = openButton?.closest(".list-item");
+    if (!item || item.querySelector("[data-member-party-controls]")) return;
+    openButton.remove();
+
+    const actions = document.createElement("div");
+    actions.className = "button-row";
+    actions.dataset.memberPartyControls = "";
+
+    if (controls.status === "RECRUITING") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `button ${controls.confirmed ? "" : "primary"} small`;
+      button.dataset.memberConfirmComposition = controls.partyId;
+      button.disabled = controls.confirmed;
+      button.textContent = controls.confirmed ? "구성 확인 완료" : "구성 확인";
+      actions.appendChild(button);
+    } else if (["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(controls.status)) {
+      const confirmed = document.createElement("span");
+      confirmed.className = "badge green";
+      confirmed.textContent = "구성 확인 완료";
+      actions.appendChild(confirmed);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `button ${controls.ready ? "" : "primary"} small`;
+      button.dataset.memberReady = controls.partyId;
+      button.disabled = controls.ready;
+      button.textContent = controls.ready ? "준비 완료됨" : "준비 완료";
+      actions.appendChild(button);
+    } else {
+      const status = document.createElement("span");
+      status.className = "badge";
+      status.textContent = party?.sessionId ? "세션 생성됨" : "조사조 참여 중";
+      actions.appendChild(status);
+    }
+    item.appendChild(actions);
+
+    const card = item.closest("article.card");
+    const help = card?.querySelector(".card-header .muted.small");
+    if (help) help.textContent = "조원은 이곳에서 구성 확인과 준비 완료만 진행합니다.";
+  }
+
+  function refresh() {
+    refreshQueued = false;
+    const snapshot = readState();
+    const userId = currentUserId();
+    if (!snapshot || !userId) return;
+    hideBusyInviteCandidates(snapshot);
+    decorateLeaderPage(snapshot, userId);
+    decorateMemberHome(snapshot, userId);
+    document.documentElement.dataset.partyLeadershipVersion = VERSION;
+  }
+
+  function scheduleRefresh() {
+    if (refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(refresh);
+  }
+
+  document.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const createButton = target.closest("[data-create-party]");
+    if (createButton) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const snapshot = readState();
+      const userId = currentUserId();
+      if (!snapshot || !userId || currentParty(snapshot, userId)) return;
+      showLeadershipWarning();
+      return;
+    }
+
+    if (target.closest("[data-party-leadership-cancel]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      clearModal();
+      return;
+    }
+
+    if (target.closest("[data-party-leadership-confirm]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      createPartyAfterWarning();
+      return;
+    }
+
+    const acceptButton = target.closest("[data-party-flow-accept], [data-accept]");
+    if (acceptButton) {
+      const partyId = acceptButton.dataset.partyFlowAccept || acceptButton.dataset.accept;
+      const snapshot = readState();
+      const userId = currentUserId();
+      const pending = snapshot?.parties?.[partyId]?.invitedIds?.includes(userId);
+      if (!pending || snapshot?.characters?.[userId]?.currentPartyId) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      acceptInviteWithoutOpeningParty(partyId);
+      return;
+    }
+
+    const confirmButton = target.closest("[data-member-confirm-composition]");
+    if (confirmButton) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      confirmMemberComposition(confirmButton.dataset.memberConfirmComposition);
+      return;
+    }
+
+    const readyButton = target.closest("[data-member-ready]");
+    if (readyButton) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setMemberReady(readyButton.dataset.memberReady);
+      return;
+    }
+
+    const openButton = target.closest("[data-open-party]");
+    if (openButton) {
+      const snapshot = readState();
+      const userId = currentUserId();
+      if (snapshot && userId && !isPartyLeader(snapshot, userId, openButton.dataset.openParty)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }
+  }, true);
+
+  window.addEventListener("hashchange", scheduleRefresh);
+  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) scheduleRefresh(); });
+  window.addEventListener("baekji-cloud-sync", scheduleRefresh);
+  window.addEventListener("pageshow", scheduleRefresh);
+
+  const observer = new MutationObserver(scheduleRefresh);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  scheduleRefresh();
+})();
