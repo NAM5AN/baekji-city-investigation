@@ -96,7 +96,10 @@
 
   function tagSystemEntries(session, bucket) {
     const entries = visibleSystemEntries(session);
-    const lines = [...document.querySelectorAll(".retro-system-scroll .retro-system-line")];
+    // Administrator-directed SYSTEM cards live in the same visual timeline but
+    // are not part of session.logs. Exclude them so native animation indices
+    // remain aligned after chronological interleaving.
+    const lines = [...document.querySelectorAll(".retro-system-scroll .retro-system-line:not(.retro-admin-system-line)")];
 
     lines.forEach((line, index) => {
       const entry = entries[index];
