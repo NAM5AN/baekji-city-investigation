@@ -60,11 +60,20 @@ const card = {
   },
 };
 
+class TestEvent {
+  constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
+}
+
 const context = vm.createContext({
   console,
+  Event: TestEvent,
+  CustomEvent: TestEvent,
+  HashChangeEvent: TestEvent,
   queueMicrotask,
   setTimeout,
   clearTimeout,
+  setInterval() { return 1; },
+  clearInterval() {},
   localStorage: {
     getItem(key) { return localValues.has(key) ? localValues.get(key) : null; },
     setItem(key, value) { localValues.set(key, String(value)); },
@@ -75,7 +84,7 @@ const context = vm.createContext({
     setItem(key, value) { sessionValues.set(key, String(value)); },
     removeItem(key) { sessionValues.delete(key); },
   },
-  location: { hash: "#/home" },
+  location: { hash: "#/home", href: "https://example.test/" },
   document: {
     documentElement: {},
     querySelector() { return null; },
