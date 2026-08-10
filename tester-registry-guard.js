@@ -8,10 +8,19 @@
   const nativeDefineProperty = Object.defineProperty;
   const nativeObjectValues = Object.values;
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const DEMO_IDS = ["test_a", "test_b", "test_c"];
+  const LEGACY_DEMO_IDS = ["test_a", "test_b", "test_c"];
+  const LEGACY_NAME_TO_ID = new Map([
+    ["테스트 캐릭터 a", "test_a"],
+    ["테스트 캐릭터 b", "test_b"],
+    ["테스트 캐릭터 c", "test_c"],
+  ]);
   const testerUsers = new Map();
   const sessionBridgeIds = new Set();
   let appRegistry = null;
+
+  function normalizeName(value) {
+    return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
 
   function hasOwn(target, key) {
     return Object.prototype.hasOwnProperty.call(target, key);
@@ -19,7 +28,7 @@
 
   function isDemoRegistry(target) {
     if (!target || typeof target !== "object") return false;
-    return DEMO_IDS.every((id) => {
+    return LEGACY_DEMO_IDS.every((id) => {
       if (!hasOwn(target, id)) return false;
       const user = target[id];
       return user && typeof user.loginId === "string" && typeof user.password === "string";
@@ -56,6 +65,18 @@
       profilePhoto: String(user?.profilePhoto || ""),
       isTestOnly: true,
     };
+  }
+
+  function suppressLegacyDemoUsers() {
+    if (!appRegistry) return false;
+    let changed = false;
+    testerUsers.forEach((user) => {
+      const legacyId = LEGACY_NAME_TO_ID.get(normalizeName(user?.name));
+      if (!legacyId || !hasOwn(appRegistry, legacyId)) return;
+      Reflect.deleteProperty(appRegistry, legacyId);
+      changed = true;
+    });
+    return changed;
   }
 
   function installSessionLookupBridge(user) {
@@ -102,6 +123,7 @@
         value: user,
       });
     });
+    suppressLegacyDemoUsers();
   }
 
   function attachRegistry(target) {
@@ -192,8 +214,10 @@
     attachRegistry,
     registerTester,
     rememberCurrentTester,
+    suppressLegacyDemoUsers,
     testerCount: () => testerUsers.size,
     hasTester: (id) => testerUsers.has(String(id)),
+    values: () => Array.from(testerUsers.values()),
     registryAttached: () => Boolean(appRegistry),
     prototypeClean: (id) => !hasOwn(Object.prototype, String(id)),
     sessionProfileKey: SESSION_PROFILE_KEY,
