@@ -28,12 +28,12 @@ const lookup = new Map([["test_c", "테스트 캐릭터 C"]]);
 const output = api.pairTransferRecords(records, lookup);
 assert.equal(output.length, 2, "paired transfer logs must collapse from two rows to one");
 assert.equal(output[0].row, "in");
-assert.equal(output[0].text, "테스트 캐릭터 C가 해오름역 조사조 2에서 해오름역 조사조 3로 이동했다.");
+assert.equal(output[0].text, "테스트 캐릭터 C가 해오름역 조사조 2에서 해오름역 조사조 3 소속으로 이동했다.");
 assert.equal(output[0].sourceParty, "해오름역 조사조 2");
 assert.equal(output[0].targetParty, "해오름역 조사조 3");
 assert.equal(output[1].row, "other");
 assert.match(source, /data\.directory/);
 assert.match(source, /partyTransferCanonical/);
-assert.match(html, /admin-transfer-log-fix\.js\?v=0\.5\.1/);
+assert.match(html, /admin-transfer-log-fix\.js\?v=0\.5\.2/);
 
 console.log("PASS: admin transfer log shows a character name and one canonical source-to-target movement row");
