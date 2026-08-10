@@ -93,6 +93,10 @@ assert.match(source, /data-party-self-leave/, "roster modal needs a self-leave a
 assert.match(source, /card\.hidden = Boolean\(party\)/, "received invitations must hide while the user belongs to a party");
 assert.match(source, /rosterButtons\.forEach/, "member home must deduplicate roster buttons");
 assert.match(source, /party-membership-ready-only/, "leader participant status must be reduced to readiness only");
-assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.83/, "membership UX fix must be loaded after the party overlays");
+assert.match(source, /if \(keep\.textContent !== "조원 보기"\) keep\.textContent = "조원 보기";/, "member-home decoration must not rewrite identical text on every MutationObserver pass");
+assert.match(source, /if \(help && help\.textContent !== helpCopy\) help\.textContent = helpCopy;/, "leader decoration must only mutate help text when it actually changes");
+assert.doesNotMatch(source, /queueMicrotask\(refresh\)/, "membership observer refresh must yield to the browser instead of creating an unbounded microtask chain");
+assert.match(source, /setTimeout\(refresh, 16\)/, "membership observer refresh should be frame-throttled");
+assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.84/, "membership UX fix must be cache-bumped after the observer-loop repair");
 
-console.log("PASS: readiness-only roster, self leave, leader kick, invite hiding, roster dedupe, and cloud removal repair");
+console.log("PASS: readiness-only roster, self leave, leader kick, invite hiding, roster dedupe, cloud removal repair, and observer-loop guard");
