@@ -1,0 +1,2 @@
+.topbar-meta > .badge:not(:last-of-type) .tester-profile-avatar{display:none!important}
+.topbar-meta > .badge:last-of-type .tester-profile-avatar{display:inline-block}
