@@ -9,6 +9,7 @@ vm.createContext(sandbox);
 vm.runInContext(source, sandbox, { filename: "party-membership-ux-fix.js" });
 const api = sandbox.window.__BAEKJI_PARTY_MEMBERSHIP_UX_TEST__;
 assert.ok(api, "party membership UX test API must exist");
+const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function world() {
   return {
@@ -47,24 +48,24 @@ sessionWorld.parties.p1.sessionId = "s1";
 assert.equal(api.membershipChangeAllowed(sessionWorld.parties.p1), false, "membership is locked after a session exists");
 
 const selfLeft = api.removeMemberState(world(), "p1", "member_b", "member_b", 1000);
-assert.deepEqual(selfLeft.parties.p1.memberIds, ["leader", "member_c"], "member can leave their own party");
+assert.deepEqual(plain(selfLeft.parties.p1.memberIds), ["leader", "member_c"], "member can leave their own party");
 assert.equal(selfLeft.characters.member_b.currentPartyId, null);
 assert.equal(selfLeft.parties.p1.status, "RECRUITING", "membership changes reopen composition");
-assert.deepEqual(selfLeft.parties.p1.confirmedBy, [], "composition confirmation resets after membership changes");
-assert.deepEqual(selfLeft.parties.p1.readyBy, [], "ready state resets after membership changes");
+assert.deepEqual(plain(selfLeft.parties.p1.confirmedBy), [], "composition confirmation resets after membership changes");
+assert.deepEqual(plain(selfLeft.parties.p1.readyBy), [], "ready state resets after membership changes");
 assert.equal(selfLeft.partyMembershipRemovals["p1:member_b"].kind, "SELF_LEAVE");
 assert.equal(selfLeft.partyMembershipRemovals["p1:member_b"].active, true);
 
 const kicked = api.removeMemberState(world(), "p1", "member_c", "leader", 1100);
-assert.deepEqual(kicked.parties.p1.memberIds, ["leader", "member_b"], "leader can remove another member");
+assert.deepEqual(plain(kicked.parties.p1.memberIds), ["leader", "member_b"], "leader can remove another member");
 assert.equal(kicked.characters.member_c.currentPartyId, null);
 assert.equal(kicked.partyMembershipRemovals["p1:member_c"].kind, "LEADER_KICK");
 
 const cannotKickLeader = api.removeMemberState(world(), "p1", "leader", "leader", 1200);
-assert.deepEqual(cannotKickLeader.parties.p1.memberIds, ["leader", "member_b", "member_c"], "leader cannot remove themselves with the kick action");
+assert.deepEqual(plain(cannotKickLeader.parties.p1.memberIds), ["leader", "member_b", "member_c"], "leader cannot remove themselves with the kick action");
 
 const cannotLeaveAfterSession = api.removeMemberState(sessionWorld, "p1", "member_b", "member_b", 1300);
-assert.deepEqual(cannotLeaveAfterSession.parties.p1.memberIds, ["leader", "member_b", "member_c"], "party membership is not mutated after session creation");
+assert.deepEqual(plain(cannotLeaveAfterSession.parties.p1.memberIds), ["leader", "member_b", "member_c"], "party membership is not mutated after session creation");
 
 const staleMerge = structuredClone(selfLeft);
 staleMerge.parties.p1.memberIds.push("member_b");
