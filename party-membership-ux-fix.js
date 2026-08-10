@@ -4,8 +4,14 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const JOIN_INTENT_KEY = "baekji_city_party_join_intent_v1";
+  const NOTICE_SEEN_KEY_PREFIX = "baekji_city_party_membership_notice_seen_v1:";
   const STYLE_ID = "baekji-party-membership-ux-style";
-  const VERSION = "0.3.84";
+  const VERSION = "0.3.85";
+  const DEMO_NAMES = {
+    test_a: "테스트 캐릭터 A",
+    test_b: "테스트 캐릭터 B",
+    test_c: "테스트 캐릭터 C",
+  };
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -43,7 +49,27 @@
     party.membershipChangedAt = at;
   }
 
-  function removeMemberState(snapshot, partyId, memberId, actorId, at = Date.now()) {
+  function appendMembershipNotice(draft, { party, memberId, actorId, kind, memberName, at }) {
+    draft.partyMembershipNotices ||= {};
+    const noticeId = `membership_${Number(at || Date.now())}_${String(memberId || "")}_${String(kind || "")}`;
+    draft.partyMembershipNotices[noticeId] = {
+      id: noticeId,
+      partyId: String(party?.id || ""),
+      partyName: String(party?.name || "조사조"),
+      memberId: String(memberId || ""),
+      memberName: String(memberName || DEMO_NAMES[memberId] || "조원"),
+      leaderId: String(party?.creatorId || ""),
+      actorId: String(actorId || ""),
+      kind: String(kind || ""),
+      at: Number(at || Date.now()),
+    };
+    const entries = Object.values(draft.partyMembershipNotices)
+      .filter(Boolean)
+      .sort((a, b) => Number(b?.at || 0) - Number(a?.at || 0));
+    entries.slice(100).forEach((notice) => { if (notice?.id) delete draft.partyMembershipNotices[notice.id]; });
+  }
+
+  function removeMemberState(snapshot, partyId, memberId, actorId, at = Date.now(), memberName = "") {
     const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     const character = draft?.characters?.[memberId];
@@ -60,19 +86,37 @@
     party.confirmedBy = unique(party.confirmedBy).filter((id) => id !== memberId);
     party.readyBy = unique(party.readyBy).filter((id) => id !== memberId);
     if (party.readyStateBy && typeof party.readyStateBy === "object") delete party.readyStateBy[memberId];
+    if (party.membershipReinvitedAtBy && typeof party.membershipReinvitedAtBy === "object") delete party.membershipReinvitedAtBy[memberId];
     if (character.currentPartyId === partyId) character.currentPartyId = null;
     if (!party.sessionId) character.currentSessionId = null;
 
     resetCompositionAfterMembershipChange(party, at);
     draft.partyMembershipRemovals ||= {};
+    const kind = selfLeave ? "SELF_LEAVE" : "LEADER_KICK";
     draft.partyMembershipRemovals[removalKey(partyId, memberId)] = {
       partyId,
       memberId,
       actorId,
-      kind: selfLeave ? "SELF_LEAVE" : "LEADER_KICK",
+      kind,
       active: true,
       at,
     };
+    appendMembershipNotice(draft, { party, memberId, actorId, kind, memberName, at });
+    return draft;
+  }
+
+  function markReinviteState(snapshot, partyId, memberId, at = Date.now()) {
+    const draft = clone(snapshot);
+    const party = draft?.parties?.[partyId];
+    if (!party || !membershipChangeAllowed(party)) return draft;
+    if (!unique(party.invitedIds).includes(memberId)) return draft;
+    const removal = draft.partyMembershipRemovals?.[removalKey(partyId, memberId)];
+    if (!removal?.active || Number(at) <= Number(removal.at || 0)) return draft;
+    party.membershipReinvitedAtBy = party.membershipReinvitedAtBy && typeof party.membershipReinvitedAtBy === "object"
+      ? { ...party.membershipReinvitedAtBy }
+      : {};
+    party.membershipReinvitedAtBy[memberId] = Math.max(Number(party.membershipReinvitedAtBy[memberId] || 0), Number(at));
+    party.declinedIds = unique(party.declinedIds).filter((id) => id !== memberId);
     return draft;
   }
 
@@ -86,6 +130,7 @@
       : {};
     const previous = Number(party.membershipJoinedAtBy[memberId] || 0);
     if (at > previous) party.membershipJoinedAtBy[memberId] = at;
+    if (party.membershipReinvitedAtBy && typeof party.membershipReinvitedAtBy === "object") delete party.membershipReinvitedAtBy[memberId];
     const removal = draft.partyMembershipRemovals?.[removalKey(partyId, memberId)];
     if (removal && Number(at) > Number(removal.at || 0)) {
       removal.active = false;
@@ -109,6 +154,8 @@
         changed = true;
         return;
       }
+      const reinvitedAt = Number(party.membershipReinvitedAtBy?.[removal.memberId] || 0);
+      const preserveFreshInvite = reinvitedAt > Number(removal.at || 0);
       const before = JSON.stringify({
         members: party.memberIds,
         invited: party.invitedIds,
@@ -120,7 +167,8 @@
         sessionId: character?.currentSessionId,
       });
       party.memberIds = unique(party.memberIds).filter((id) => id !== removal.memberId);
-      party.invitedIds = unique(party.invitedIds).filter((id) => id !== removal.memberId);
+      if (!preserveFreshInvite) party.invitedIds = unique(party.invitedIds).filter((id) => id !== removal.memberId);
+      else party.invitedIds = unique(party.invitedIds);
       party.declinedIds = unique(party.declinedIds).filter((id) => id !== removal.memberId);
       party.confirmedBy = unique(party.confirmedBy).filter((id) => id !== removal.memberId);
       party.readyBy = unique(party.readyBy).filter((id) => id !== removal.memberId);
@@ -153,6 +201,7 @@
     effectiveReady,
     membershipChangeAllowed,
     removeMemberState,
+    markReinviteState,
     markMemberJoinedState,
     repairMembershipRemovals,
     readyStateText,
@@ -162,6 +211,7 @@
 
   let refreshQueued = false;
   let repairing = false;
+  let pendingConfirmation = null;
 
   function readState(raw = null) {
     try {
@@ -227,11 +277,16 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      .party-membership-ready-only{display:inline-flex;align-items:center;white-space:nowrap}
-      .party-member-kick,.party-roster-self-leave{white-space:nowrap}
+      .party-membership-ready-only{display:inline-flex;align-items:center;white-space:nowrap;order:2}
+      .party-member-kick{order:1}.party-member-kick,.party-roster-self-leave{white-space:nowrap}
       .party-roster-member[data-party-membership-row]{grid-template-columns:56px minmax(0,1fr) auto}
       .party-roster-member[data-party-membership-row] .party-roster-self-leave{align-self:center}
-      @media(max-width:520px){.party-roster-member[data-party-membership-row]{grid-template-columns:50px minmax(0,1fr);}.party-roster-member[data-party-membership-row] .party-roster-self-leave{grid-column:1/-1;width:100%}}
+      .party-membership-backdrop{position:fixed;inset:0;z-index:520;display:grid;place-items:center;padding:20px;background:rgba(12,12,12,.72)}
+      .party-membership-modal{width:min(500px,100%);background:var(--paper,#f6f6f2);color:#111;border:4px double #111;box-shadow:8px 8px 0 #111;padding:24px}
+      .party-membership-kicker{display:inline-block;border:2px solid #111;padding:3px 7px;margin-bottom:12px;font-size:11px;font-weight:900;letter-spacing:.08em}
+      .party-membership-modal h2{margin:0;font-size:28px;line-height:1.15}.party-membership-modal p{margin:14px 0 0;line-height:1.6;white-space:pre-line}
+      .party-membership-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}.party-membership-actions .button{min-width:110px}
+      @media(max-width:520px){.party-roster-member[data-party-membership-row]{grid-template-columns:50px minmax(0,1fr);}.party-roster-member[data-party-membership-row] .party-roster-self-leave{grid-column:1/-1;width:100%}.party-membership-backdrop{padding:14px}.party-membership-modal{padding:18px}.party-membership-actions{display:grid;grid-template-columns:1fr 1fr}.party-membership-actions .button{min-width:0}}
     `;
     document.head.appendChild(style);
   }
@@ -345,9 +400,10 @@
       if (!pills) return;
       const ready = effectiveReady(party, memberId);
       const kick = canEdit && memberId !== party.creatorId
-        ? `<button type="button" class="button danger small party-member-kick" data-party-member-kick="${escapeHtml(partyId)}" data-party-member-id="${escapeHtml(memberId)}">탈퇴시키기</button>`
+        ? `<button type="button" class="button danger small party-member-kick" data-party-member-kick="${escapeHtml(partyId)}" data-party-member-id="${escapeHtml(memberId)}">탈퇴</button>`
         : "";
-      const markup = `<span class="party-ready-state party-membership-ready-only ${ready ? "is-ready" : "is-waiting"}">${ready ? "● 준비 완료" : "○ 준비 대기"}</span>${kick}`;
+      const readyMarkup = `<span class="party-ready-state party-membership-ready-only ${ready ? "is-ready" : "is-waiting"}">${ready ? "● 준비 완료" : "○ 준비 대기"}</span>`;
+      const markup = `${kick}${readyMarkup}`;
       if (pills.innerHTML !== markup) pills.innerHTML = markup;
     });
 
@@ -384,16 +440,114 @@
         button.type = "button";
         button.className = "button danger small party-roster-self-leave";
         button.dataset.partySelfLeave = partyId;
-        button.textContent = "조 탈퇴";
+        button.textContent = "탈퇴";
         row.appendChild(button);
       } else {
         button.dataset.partySelfLeave = partyId;
-        if (button.textContent !== "조 탈퇴") button.textContent = "조 탈퇴";
+        if (button.textContent !== "탈퇴") button.textContent = "탈퇴";
       }
     });
   }
 
-  function performRemoval(partyId, memberId, mode) {
+  function resolveMemberName(partyId, memberId, sourceElement = null) {
+    const sourceRow = sourceElement?.closest?.(".party-roster-member, .member");
+    const sourceName = String(sourceRow?.querySelector?.(".party-roster-name, .list-title")?.textContent || "").trim();
+    if (sourceName) return sourceName;
+    const snapshot = readState();
+    const party = snapshot?.parties?.[partyId];
+    const index = unique(party?.memberIds).indexOf(memberId);
+    if (index >= 0) {
+      const row = document.querySelectorAll(".member-grid .member")[index];
+      const rowName = String(row?.querySelector(".list-title")?.textContent || "").trim();
+      if (rowName) return rowName;
+    }
+    try {
+      const profile = JSON.parse(sessionStorage.getItem("baekji_city_tester_session_profile_v1") || "null");
+      if (String(profile?.id || "") === memberId) {
+        const profileName = String(profile?.name || profile?.characterName || profile?.loginId || "").trim();
+        if (profileName) return profileName;
+      }
+    } catch {
+      // Optional profile cache.
+    }
+    return DEMO_NAMES[memberId] || "조원";
+  }
+
+  function modalRoot() {
+    return document.getElementById("modal-root");
+  }
+
+  function clearMembershipModal() {
+    const root = modalRoot();
+    if (root?.querySelector("[data-party-membership-modal]")) root.replaceChildren();
+  }
+
+  function openConfirmationModal({ title, copy, confirmLabel = "탈퇴", onConfirm }) {
+    const root = modalRoot();
+    if (!root) return false;
+    pendingConfirmation = typeof onConfirm === "function" ? onConfirm : null;
+    root.innerHTML = `
+      <div class="party-membership-backdrop" data-party-membership-modal data-party-membership-confirm>
+        <section class="party-membership-modal" role="dialog" aria-modal="true" aria-labelledby="party-membership-confirm-title">
+          <div class="party-membership-kicker">PARTY MEMBERSHIP</div>
+          <h2 id="party-membership-confirm-title">${escapeHtml(title)}</h2>
+          <p>${escapeHtml(copy)}</p>
+          <div class="party-membership-actions">
+            <button type="button" class="button" data-party-membership-confirm-cancel>취소</button>
+            <button type="button" class="button danger" data-party-membership-confirm-ok>${escapeHtml(confirmLabel)}</button>
+          </div>
+        </section>
+      </div>`;
+    return true;
+  }
+
+  function seenNoticeIds(userId) {
+    try {
+      return unique(JSON.parse(localStorage.getItem(`${NOTICE_SEEN_KEY_PREFIX}${userId}`) || "[]")).map(String);
+    } catch {
+      return [];
+    }
+  }
+
+  function markNoticeSeen(userId, noticeId) {
+    const values = unique([...seenNoticeIds(userId), String(noticeId || "")]).filter(Boolean).slice(-200);
+    localStorage.setItem(`${NOTICE_SEEN_KEY_PREFIX}${userId}`, JSON.stringify(values));
+  }
+
+  function pendingMembershipNotice(snapshot, userId) {
+    const seen = new Set(seenNoticeIds(userId));
+    return Object.values(snapshot?.partyMembershipNotices || {})
+      .filter((notice) => notice && !seen.has(String(notice.id || "")) && [notice.memberId, notice.leaderId].includes(userId))
+      .sort((a, b) => Number(a?.at || 0) - Number(b?.at || 0))[0] || null;
+  }
+
+  function showPendingMembershipNotice(snapshot, userId) {
+    const root = modalRoot();
+    if (!root || root.children.length) return;
+    const notice = pendingMembershipNotice(snapshot, userId);
+    if (!notice?.id) return;
+    markNoticeSeen(userId, notice.id);
+    const isMember = userId === notice.memberId;
+    const title = isMember ? "조사조 탈퇴" : "조원 변동";
+    const copy = isMember
+      ? `${notice.partyName || "조사조"}에서 탈퇴되었습니다.`
+      : notice.kind === "SELF_LEAVE"
+        ? `${notice.memberName || "조원"} 님이 ${notice.partyName || "조사조"}에서 탈퇴했습니다.`
+        : `${notice.memberName || "조원"} 님이 ${notice.partyName || "조사조"}에서 탈퇴 처리되었습니다.`;
+    root.innerHTML = `
+      <div class="party-membership-backdrop" data-party-membership-modal data-party-membership-notice>
+        <section class="party-membership-modal" role="dialog" aria-modal="true" aria-labelledby="party-membership-notice-title">
+          <div class="party-membership-kicker">PARTY UPDATE</div>
+          <h2 id="party-membership-notice-title">${escapeHtml(title)}</h2>
+          <p>${escapeHtml(copy)}</p>
+          <div class="party-membership-actions">
+            <button type="button" class="button primary" data-party-membership-notice-close>확인</button>
+          </div>
+        </section>
+      </div>`;
+  }
+
+  function performRemoval(partyId, memberId, mode, memberName = "") {
     const snapshot = readState();
     const userId = currentUserId();
     if (!snapshot || !userId) return false;
@@ -403,17 +557,25 @@
     const isKick = mode === "kick" && party.creatorId === userId && party.creatorId !== memberId;
     if (!isSelf && !isKick) return false;
 
-    const message = isSelf
-      ? `${party.name || "조사조"}에서 탈퇴할까요?\n탈퇴하면 다른 조사조의 초대를 다시 받을 수 있습니다.`
-      : `선택한 캐릭터를 ${party.name || "조사조"}에서 탈퇴시킬까요?\n조 구성이 변경되어 전원의 준비 상태가 초기화됩니다.`;
-    if (typeof window.confirm === "function" && !window.confirm(message)) return false;
-
-    const next = removeMemberState(snapshot, partyId, memberId, userId, Date.now());
+    const next = removeMemberState(snapshot, partyId, memberId, userId, Date.now(), memberName);
     if (JSON.stringify(next) === JSON.stringify(snapshot)) return false;
-    document.getElementById("modal-root")?.replaceChildren();
+    clearMembershipModal();
+    document.querySelector("[data-party-roster-modal]")?.remove();
     writeState(next, isSelf ? "self-leave" : "leader-kick");
     forceRouteRefresh();
+    setTimeout(scheduleRefresh, 32);
     return true;
+  }
+
+  function stampReinvite(memberId) {
+    const [page, partyId] = routeParts();
+    if (page !== "party" || !partyId || !memberId) return false;
+    const snapshot = readState();
+    const party = snapshot?.parties?.[partyId];
+    if (!party || !unique(party.invitedIds).includes(memberId)) return false;
+    const next = markReinviteState(snapshot, partyId, memberId, Date.now());
+    if (JSON.stringify(next) === JSON.stringify(snapshot)) return false;
+    return writeState(next, "reinvite-stamp");
   }
 
   function refresh() {
@@ -437,6 +599,7 @@
     normalizeMemberHomeButtons(snapshot, userId);
     decorateLeaderParticipants(snapshot, userId);
     decorateRosterModal(snapshot, userId);
+    showPendingMembershipNotice(snapshot, userId);
     document.documentElement.dataset.partyMembershipUxVersion = VERSION;
   }
 
@@ -451,17 +614,58 @@
     if (!target) return;
     const accept = target.closest("[data-party-flow-accept], [data-accept]");
     if (accept) rememberJoinIntent(accept.dataset.partyFlowAccept || accept.dataset.accept);
+    const invite = target.closest("[data-invite]");
+    if (invite) setTimeout(() => stampReinvite(invite.dataset.invite), 0);
   }, true);
 
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
+    const cancel = target.closest("[data-party-membership-confirm-cancel]");
+    if (cancel) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      pendingConfirmation = null;
+      clearMembershipModal();
+      return;
+    }
+
+    const confirm = target.closest("[data-party-membership-confirm-ok]");
+    if (confirm) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const action = pendingConfirmation;
+      pendingConfirmation = null;
+      clearMembershipModal();
+      action?.();
+      return;
+    }
+
+    const noticeClose = target.closest("[data-party-membership-notice-close]");
+    if (noticeClose) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      clearMembershipModal();
+      setTimeout(scheduleRefresh, 32);
+      return;
+    }
+
     const selfLeave = target.closest("[data-party-self-leave]");
     if (selfLeave) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      performRemoval(selfLeave.dataset.partySelfLeave, currentUserId(), "self");
+      const partyId = selfLeave.dataset.partySelfLeave;
+      const snapshot = readState();
+      const party = snapshot?.parties?.[partyId];
+      const memberId = currentUserId();
+      const memberName = resolveMemberName(partyId, memberId, selfLeave);
+      openConfirmationModal({
+        title: "조사조 탈퇴",
+        copy: `${party?.name || "조사조"}에서 탈퇴할까요?\n탈퇴하면 다른 조사조의 초대를 다시 받을 수 있습니다.`,
+        confirmLabel: "탈퇴",
+        onConfirm: () => performRemoval(partyId, memberId, "self", memberName),
+      });
       return;
     }
 
@@ -469,17 +673,34 @@
     if (kick) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      performRemoval(kick.dataset.partyMemberKick, kick.dataset.partyMemberId, "kick");
+      const partyId = kick.dataset.partyMemberKick;
+      const memberId = kick.dataset.partyMemberId;
+      const snapshot = readState();
+      const party = snapshot?.parties?.[partyId];
+      const memberName = resolveMemberName(partyId, memberId, kick);
+      openConfirmationModal({
+        title: "조원 탈퇴 처리",
+        copy: `${memberName} 님을 ${party?.name || "조사조"}에서 탈퇴시킬까요?\n조 구성이 변경되어 전원의 준비 상태가 초기화됩니다.`,
+        confirmLabel: "탈퇴",
+        onConfirm: () => performRemoval(partyId, memberId, "kick", memberName),
+      });
     }
   }, true);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!document.querySelector("[data-party-membership-confirm]")) return;
+    pendingConfirmation = null;
+    clearMembershipModal();
+  });
 
   const app = document.getElementById("app");
   if (app && typeof MutationObserver === "function") {
     new MutationObserver(scheduleRefresh).observe(app, { childList: true, subtree: true });
   }
-  const modalRoot = document.getElementById("modal-root");
-  if (modalRoot && typeof MutationObserver === "function") {
-    new MutationObserver(scheduleRefresh).observe(modalRoot, { childList: true, subtree: true });
+  const modal = document.getElementById("modal-root");
+  if (modal && typeof MutationObserver === "function") {
+    new MutationObserver(scheduleRefresh).observe(modal, { childList: true, subtree: true });
   }
   window.addEventListener("hashchange", scheduleRefresh);
   window.addEventListener("storage", (event) => { if (!event.key || event.key === GLOBAL_KEY) scheduleRefresh(); });
