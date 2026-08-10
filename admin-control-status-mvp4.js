@@ -48,11 +48,13 @@
     if (node.textContent !== text) node.textContent = text;
     node.dataset.adminSyncKind = kind;
     node.dataset.adminSyncVisible = "true";
+    node.hidden = false;
   }
 
   function hide() {
     delete node.dataset.adminSyncVisible;
     delete node.dataset.adminSyncKind;
+    node.hidden = true;
   }
 
   function sync() {
