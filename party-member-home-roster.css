@@ -1,0 +1,15 @@
+.party-member-home-card .card-header{align-items:flex-start}
+.party-member-home-grid{margin-top:18px}
+.party-member-home-row{grid-template-columns:56px minmax(0,1fr) auto;align-items:center}
+.party-member-home-row .member-avatar{overflow:hidden}
+.party-member-home-avatar-image{display:block;width:100%;height:100%;object-fit:cover}
+.party-member-home-main{min-width:0}
+.party-member-inline-ready{display:inline-flex;align-items:center;justify-content:center;min-width:112px;padding:7px 10px;border:2px solid #111;font:inherit;font-size:12px;font-weight:900;letter-spacing:.02em;cursor:pointer;box-shadow:2px 2px 0 #777}
+.party-member-inline-ready.is-waiting{background:#f4f4ef;color:#555}
+.party-member-inline-ready.is-ready{background:#111;color:#fff}
+.party-member-inline-ready:hover,.party-member-inline-ready:focus-visible{outline:2px solid #111;outline-offset:2px}
+@media(max-width:640px){
+  .party-member-home-row{grid-template-columns:50px minmax(0,1fr)}
+  .party-member-home-row .status-pills{grid-column:1/-1;justify-content:flex-end}
+  .party-member-inline-ready,.party-member-home-row .party-ready-state{width:100%;min-width:0}
+}
