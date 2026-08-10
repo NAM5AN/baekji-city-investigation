@@ -1,23 +1,36 @@
 (() => {
   "use strict";
 
-  const SUPABASE_URL = "https://zstgpnwnwmeifgmyeqtz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_g-cXysHfl260KTtSRLABTw_4wnaaxDY";
+  const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
-  const DEMO_USER_IDS = ["test_a", "test_b", "test_c"];
+  const LEGACY_DEMO_IDS = ["test_a", "test_b", "test_c"];
   const users = new Map();
-  const nativeValues = Object.values.bind(Object);
   let busy = false;
   let repairingState = false;
+  let refreshQueued = false;
+  let directorySignature = "";
 
   const normalize = (value) => String(value || "").replace(/\s+/g, "").toLowerCase();
   const hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
   const toUser = (row) => ({
-    id: String(row.id), loginId: String(row.character_name), name: String(row.character_name),
-    initial: Array.from(String(row.character_name || "?"))[0] || "?", note: "초대 테스터 계정",
-    profilePhoto: String(row.profile_photo || ""), isTestOnly: true,
+    id: String(row?.id || ""),
+    loginId: String(row?.character_name || ""),
+    name: String(row?.character_name || ""),
+    password: "",
+    initial: Array.from(String(row?.character_name || "?"))[0] || "?",
+    note: "초대 테스터 계정",
+    profilePhoto: String(row?.profile_photo || ""),
+    isTestOnly: true,
   });
+
+  function install(user) {
+    if (!user?.id) return user;
+    users.set(user.id, user);
+    window.__BAEKJI_TESTER_REGISTRY_GUARD__?.registerTester?.(user);
+    return user;
+  }
 
   function blankCharacter(userId) {
     return {
@@ -32,61 +45,30 @@
   }
 
   function blankWorld() {
-    const characters = {};
-    DEMO_USER_IDS.forEach((userId) => { characters[userId] = blankCharacter(userId); });
     return {
-      version: 3, storyDay: 1, loopId: "LOOP-001", eventSeq: 0, sessionSeq: 0,
-      characters, parties: {}, sessions: {}, itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
+      version: 3,
+      storyDay: 1,
+      loopId: "LOOP-001",
+      eventSeq: 0,
+      sessionSeq: 0,
+      characters: {},
+      parties: {},
+      sessions: {},
+      itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
     };
   }
-
-  function isDemoUserRegistry(target) {
-    if (!target || typeof target !== "object") return false;
-    return DEMO_USER_IDS.every((userId) => {
-      if (!hasOwn(target, userId)) return false;
-      const candidate = target[userId];
-      return candidate && typeof candidate.loginId === "string" && typeof candidate.password === "string";
-    });
-  }
-
-  function defineDynamicUserBridge(userId) {
-    Object.defineProperty(Object.prototype, userId, {
-      configurable: true,
-      enumerable: false,
-      get() {
-        return isDemoUserRegistry(this) ? users.get(userId) : undefined;
-      },
-      set(value) {
-        if (this === Object.prototype) return;
-        Object.defineProperty(this, userId, {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value,
-        });
-      },
-    });
-  }
-
-  function install(user) {
-    if (!user?.id) return user;
-    users.set(user.id, user);
-    defineDynamicUserBridge(user.id);
-    return user;
-  }
-
-  Object.values = function patchedValues(target) {
-    const output = nativeValues(target);
-    if (!isDemoUserRegistry(target)) return output;
-    const knownIds = new Set(output.map((entry) => entry?.id).filter(Boolean));
-    return output.concat(Array.from(users.values()).filter((user) => !knownIds.has(user.id)));
-  };
 
   async function rpc(name, body) {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
       method: "POST",
-      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body), cache: "no-store",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
@@ -113,25 +95,61 @@
     return { character: next, changed };
   }
 
+  function legacyIdReferenced(state, legacyId) {
+    if (sessionStorage.getItem(USER_KEY) === legacyId) return true;
+    const inParty = Object.values(state.parties || {}).some((party) =>
+      party?.creatorId === legacyId ||
+      (party?.memberIds || []).includes(legacyId) ||
+      (party?.invitedIds || []).includes(legacyId)
+    );
+    if (inParty) return true;
+    return Object.values(state.sessions || {}).some((session) => (session?.memberIds || []).includes(legacyId));
+  }
+
+  function dispatchWorldUpdate(oldRaw, newRaw) {
+    if (oldRaw === newRaw) return;
+    try {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: GLOBAL_KEY,
+        oldValue: oldRaw,
+        newValue: newRaw,
+        storageArea: localStorage,
+        url: location.href,
+      }));
+    } catch {
+      const event = new Event("storage");
+      Object.defineProperty(event, "key", { value: GLOBAL_KEY });
+      window.dispatchEvent(event);
+    }
+  }
+
   function repairTesterCharacters({ touchCurrent = false } = {}) {
     if (repairingState) return false;
+    const oldRaw = localStorage.getItem(GLOBAL_KEY);
     let state;
-    try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
+    try { state = JSON.parse(oldRaw || "null"); } catch { state = null; }
     if (!state || state.version !== 3) state = blankWorld();
     state.characters ||= {};
     state.parties ||= {};
     state.sessions ||= {};
     state.itemClaimsByVariant ||= { a: {}, b: {}, c: {}, d: {} };
-    let changed = !localStorage.getItem(GLOBAL_KEY);
-    const requiredIds = new Set([...DEMO_USER_IDS, ...users.keys()]);
-    requiredIds.forEach((userId) => {
+    let changed = !oldRaw;
+
+    users.forEach((user, userId) => {
       const current = hasOwn(state.characters, userId) ? state.characters[userId] : null;
       const repaired = repairCharacter(current, userId);
       state.characters[userId] = repaired.character;
       changed ||= repaired.changed;
     });
+
+    LEGACY_DEMO_IDS.forEach((legacyId) => {
+      if (!hasOwn(state.characters, legacyId) || legacyIdReferenced(state, legacyId)) return;
+      delete state.characters[legacyId];
+      changed = true;
+    });
+
     const currentId = sessionStorage.getItem(USER_KEY);
-    if (touchCurrent && currentId && requiredIds.has(currentId)) {
+    if (touchCurrent && currentId && users.has(currentId)) {
       const character = state.characters[currentId];
       const now = Date.now();
       if (!Number.isFinite(Number(character.onlineAt)) || now - Number(character.onlineAt || 0) > 30000) {
@@ -140,29 +158,36 @@
       }
     }
     if (!changed) return false;
+
+    const newRaw = JSON.stringify(state);
     repairingState = true;
-    try { localStorage.setItem(GLOBAL_KEY, JSON.stringify(state)); }
+    try { localStorage.setItem(GLOBAL_KEY, newRaw); }
     finally { repairingState = false; }
+    dispatchWorldUpdate(oldRaw, newRaw);
     return true;
   }
 
   function ensureCharacter(userId) {
     repairTesterCharacters();
+    const oldRaw = localStorage.getItem(GLOBAL_KEY);
     let state;
-    try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
+    try { state = JSON.parse(oldRaw || "null"); } catch { state = null; }
     if (!state || state.version !== 3) state = blankWorld();
     state.characters ||= {};
     const current = hasOwn(state.characters, userId) ? state.characters[userId] : null;
     const repaired = repairCharacter(current, userId);
     state.characters[userId] = repaired.character;
     state.characters[userId].onlineAt = Date.now();
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(state));
+    const newRaw = JSON.stringify(state);
+    localStorage.setItem(GLOBAL_KEY, newRaw);
+    dispatchWorldUpdate(oldRaw, newRaw);
   }
 
   function finishLogin(user) {
     install(user);
     ensureCharacter(user.id);
     sessionStorage.setItem(USER_KEY, user.id);
+    window.__BAEKJI_TESTER_REGISTRY_GUARD__?.rememberCurrentTester?.();
     location.hash = "#/home";
   }
 
@@ -215,7 +240,12 @@
     if (!login || login.dataset.testerEnhanced) return;
     login.dataset.testerEnhanced = "true";
     const password = login.querySelector("[data-login-password]");
-    if (password) { password.inputMode = "numeric"; password.maxLength = 4; password.pattern = "[0-9]{4}"; password.placeholder = "숫자 4자리"; }
+    if (password) {
+      password.inputMode = "numeric";
+      password.maxLength = 4;
+      password.pattern = "[0-9]{4}";
+      password.placeholder = "숫자 4자리";
+    }
     login.querySelector(".login-demo-note")?.insertAdjacentHTML("beforebegin", markup());
     const toggle = login.querySelector("[data-tester-toggle]");
     const card = login.querySelector("[data-tester-card]");
@@ -224,16 +254,24 @@
     login.addEventListener("submit", async (event) => {
       const name = login.querySelector("[data-login-id]")?.value || "";
       if (!Array.from(users.values()).some((user) => normalize(user.name) === normalize(name))) return;
-      event.preventDefault(); event.stopImmediatePropagation();
-      if (busy) return; busy = true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (busy) return;
+      busy = true;
       const message = login.querySelector("[data-login-error]");
       if (message) message.textContent = "계정을 확인하고 있습니다…";
       try {
-        const rows = await rpc("baekji_tester_login", { p_character_name: name, p_pin: login.querySelector("[data-login-password]")?.value || "" });
+        const rows = await rpc("baekji_tester_login", {
+          p_character_name: name,
+          p_pin: login.querySelector("[data-login-password]")?.value || "",
+        });
         if (!rows?.[0]) throw new Error("LOGIN_FAILED");
         finishLogin(toUser(rows[0]));
-      } catch { if (message) message.textContent = "캐릭터 이름 또는 비밀번호가 일치하지 않습니다."; }
-      finally { busy = false; }
+      } catch {
+        if (message) message.textContent = "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
+      } finally {
+        busy = false;
+      }
     }, true);
 
     const form = login.querySelector("[data-tester-form]");
@@ -260,9 +298,12 @@
         if (message) message.textContent = errorText(error.code || error.message);
       }
     });
-    form?.addEventListener("input", (event) => { if (event.target?.name === "pin") event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4); });
+    form?.addEventListener("input", (event) => {
+      if (event.target?.name === "pin") event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4);
+    });
     form?.querySelector("[data-tester-submit]")?.addEventListener("click", async () => {
-      if (busy) return; busy = true;
+      if (busy) return;
+      busy = true;
       const message = form.querySelector("[data-tester-message]");
       const button = form.querySelector("[data-tester-submit]");
       if (button) button.disabled = true;
@@ -274,11 +315,20 @@
         if (!name) throw Object.assign(new Error("INVALID_CHARACTER_NAME"), { code: "INVALID_CHARACTER_NAME" });
         if (!/^\d{4}$/.test(pin)) throw Object.assign(new Error("INVALID_PIN"), { code: "INVALID_PIN" });
         const photoData = photo && photo === selectedFile && selectedPhotoData ? selectedPhotoData : await compress(photo);
-        const rows = await rpc("baekji_tester_signup", { p_character_name: name, p_pin: pin, p_profile_photo: photoData });
+        const rows = await rpc("baekji_tester_signup", {
+          p_character_name: name,
+          p_pin: pin,
+          p_profile_photo: photoData,
+        });
         if (!rows?.[0]) throw new Error("SIGNUP_FAILED");
         finishLogin(toUser(rows[0]));
-      } catch (error) { if (message) message.textContent = errorText(error.code || error.message); }
-      finally { busy = false; if (button) button.disabled = false; }
+        loadDirectory(true).catch(() => {});
+      } catch (error) {
+        if (message) message.textContent = errorText(error.code || error.message);
+      } finally {
+        busy = false;
+        if (button) button.disabled = false;
+      }
     });
   }
 
@@ -298,8 +348,12 @@
   function decorateTopbar(user) {
     document.querySelectorAll(".topbar-meta .badge").forEach((badge) => {
       let img = badge.querySelector(".tester-profile-avatar");
-      if (!img) { img = profileImage(user, "tester-profile-avatar"); badge.prepend(img); }
-      else if (img.src !== user.profilePhoto) img.src = user.profilePhoto;
+      if (!img) {
+        img = profileImage(user, "tester-profile-avatar");
+        badge.prepend(img);
+      } else if (img.src !== user.profilePhoto) {
+        img.src = user.profilePhoto;
+      }
     });
   }
 
@@ -314,7 +368,9 @@
         avatar.classList.add("has-profile-photo");
         img = profileImage(user, "tester-member-avatar");
         avatar.append(img);
-      } else if (img.src !== user.profilePhoto) img.src = user.profilePhoto;
+      } else if (img.src !== user.profilePhoto) {
+        img.src = user.profilePhoto;
+      }
     });
   }
 
@@ -335,25 +391,53 @@
     });
   }
 
-  function decorate() {
-    const user = users.get(sessionStorage.getItem(USER_KEY));
-    if (user?.profilePhoto) decorateTopbar(user);
-    decorateMembers();
-    decorateContamination();
-  }
-
   function refresh() {
+    refreshQueued = false;
     enhanceLogin();
     repairTesterCharacters();
     decorate();
   }
 
-  new MutationObserver(refresh).observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) queueMicrotask(refresh); });
-  window.addEventListener("baekji-cloud-sync", () => queueMicrotask(refresh));
-  rpc("baekji_tester_list_accounts", {}).then((rows) => {
-    (rows || []).forEach((row) => install(toUser(row)));
+  function scheduleRefresh() {
+    if (refreshQueued) return;
+    refreshQueued = true;
+    setTimeout(refresh, 16);
+  }
+
+  async function loadDirectory(forceRender = false) {
+    const rows = await rpc("baekji_tester_list_accounts", {});
+    const nextUsers = (rows || []).map(toUser).filter((user) => user.id && user.name);
+    const nextSignature = nextUsers
+      .map((user) => `${user.id}:${user.name}:${user.profilePhoto.length}`)
+      .sort()
+      .join("|");
+    nextUsers.forEach(install);
+    const changed = nextSignature !== directorySignature;
+    directorySignature = nextSignature;
     repairTesterCharacters({ touchCurrent: true });
-    refresh();
-  }).catch((error) => console.warn("[tester-auth]", error));
+    scheduleRefresh();
+    if (changed || forceRender) {
+      window.dispatchEvent(new CustomEvent("baekji-tester-directory-ready", {
+        detail: { count: nextUsers.length },
+      }));
+      try { window.dispatchEvent(new HashChangeEvent("hashchange")); }
+      catch { window.dispatchEvent(new Event("hashchange")); }
+    }
+    return nextUsers;
+  }
+
+  window.__BAEKJI_TESTER_AUTH_TEST__ = Object.freeze({
+    toUser,
+    repairCharacter,
+    legacyIdReferenced,
+    directoryUsers: () => Array.from(users.values()),
+  });
+
+  new MutationObserver(scheduleRefresh).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) scheduleRefresh(); });
+  window.addEventListener("baekji-cloud-sync", scheduleRefresh);
+  window.addEventListener("baekji-tester-directory-refresh", () => loadDirectory(true).catch((error) => console.warn("[tester-auth]", error)));
+
+  loadDirectory(true).catch((error) => console.warn("[tester-auth]", error));
+  setInterval(() => loadDirectory(false).catch(() => {}), 12000);
 })();
