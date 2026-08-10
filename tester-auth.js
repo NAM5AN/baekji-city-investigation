@@ -391,6 +391,13 @@
     });
   }
 
+  function decorate() {
+    const user = users.get(sessionStorage.getItem(USER_KEY));
+    if (user?.profilePhoto) decorateTopbar(user);
+    decorateMembers();
+    decorateContamination();
+  }
+
   function refresh() {
     refreshQueued = false;
     enhanceLogin();
