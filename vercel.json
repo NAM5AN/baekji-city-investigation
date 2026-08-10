@@ -2,13 +2,14 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "git": {
-    "deploymentEnabled": false
+    "deploymentEnabled": true
   },
   "functions": {
     "api/index.mjs": { "maxDuration": 30 },
     "api/narrate-observation.mjs": { "maxDuration": 30 },
     "api/interpret-transfer.mjs": { "maxDuration": 30 },
     "api/resolve-hazard-flex.mjs": { "maxDuration": 30 },
+    "api/tester-login.mjs": { "maxDuration": 10 },
     "api/admin-login.mjs": { "maxDuration": 15 },
     "api/admin-snapshot.mjs": { "maxDuration": 15 },
     "api/admin-communications.mjs": { "maxDuration": 15 },
@@ -22,6 +23,7 @@
     { "source": "/api/narrate-observation", "destination": "/api/narrate-observation.mjs" },
     { "source": "/api/interpret-transfer", "destination": "/api/interpret-transfer.mjs" },
     { "source": "/api/resolve-hazard-flex", "destination": "/api/resolve-hazard-flex.mjs" },
+    { "source": "/api/tester-login", "destination": "/api/tester-login.mjs" },
     { "source": "/api/admin-login", "destination": "/api/admin-login.mjs" },
     { "source": "/api/admin-snapshot", "destination": "/api/admin-snapshot.mjs" },
     { "source": "/api/admin-communications", "destination": "/api/admin-communications.mjs" },
