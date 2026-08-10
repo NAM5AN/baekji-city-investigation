@@ -42,6 +42,47 @@
     return true;
   }
 
+  function repairMisroutedSlashAction(entry) {
+    if (entry?.type !== "interaction" || !entry.actorId || !/^\s*\//.test(String(entry.text || ""))) return false;
+    entry.type = "action-input";
+    entry.text = String(entry.text || "").replace(/^\s*\/+\s*/, "");
+    entry.repairedActionRouting = true;
+    return true;
+  }
+
+  function normalizeSystemNarration(entry) {
+    if (!entry || !["CHARACTER_INTERACTION_RESULT", "FLEX_HAZARD_RESPONSE"].includes(entry.kind)) return false;
+    let changed = false;
+
+    if (entry.kind === "CHARACTER_INTERACTION_RESULT") {
+      if (entry.actorId && !entry.interactionActorId) {
+        entry.interactionActorId = entry.actorId;
+        changed = true;
+      }
+      if (entry.actorId) {
+        entry.actorId = null;
+        changed = true;
+      }
+    }
+
+    if (entry.kind === "FLEX_HAZARD_RESPONSE") {
+      if (entry.actorId && !entry.hazardActorId) {
+        entry.hazardActorId = entry.actorId;
+        changed = true;
+      }
+      if (entry.actorId) {
+        entry.actorId = null;
+        changed = true;
+      }
+    }
+
+    if (!entry.systemNarration) {
+      entry.systemNarration = true;
+      changed = true;
+    }
+    return changed;
+  }
+
   function normalizeWorld(raw) {
     let state;
     try { state = JSON.parse(String(raw || "null")); }
@@ -51,19 +92,8 @@
     let changed = false;
     Object.values(state.sessions).forEach((session) => {
       (session?.logs || []).forEach((entry) => {
-        if (entry?.kind === "CHARACTER_INTERACTION_RESULT") {
-          // The player SYSTEM feed classifies non-action narration as visible only
-          // when actorId is empty. Keep source identity separately for admin/audit.
-          if (entry.actorId) {
-            if (!entry.interactionActorId) entry.interactionActorId = entry.actorId;
-            entry.actorId = null;
-            changed = true;
-          }
-          if (!entry.systemNarration) {
-            entry.systemNarration = true;
-            changed = true;
-          }
-        }
+        if (repairMisroutedSlashAction(entry)) changed = true;
+        if (normalizeSystemNarration(entry)) changed = true;
         if (repairObservedActorText(entry)) changed = true;
       });
     });
@@ -93,6 +123,8 @@
     normalizeWorld,
     repairLiveWorld,
     testerName,
+    repairMisroutedSlashAction,
+    normalizeSystemNarration,
   });
 
   repairLiveWorld();
