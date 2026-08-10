@@ -116,4 +116,51 @@ assert.equal(state.sessions.s1.activeEncounter.currentIndex, 1, "actor party pro
 assert.equal(state.sessions.s2.activeEncounter.currentIndex, beforeTargetProgress, "target party progress must not be hijacked by another party's action");
 assert(state.sessions.s2.logs.some((entry) => entry.kind === "CROSS_PARTY_HAZARD_IMPACT"), "target party should see the cross-party incident in its own log");
 
-console.log("PASS: same-field characters from other investigation parties can be targeted without moving the target party");
+const interactionSource = fs.readFileSync("character-interaction-ai.js", "utf8");
+const interactionContext = vm.createContext({ console, window: {}, structuredClone });
+interactionContext.window = interactionContext;
+interactionContext.DAY1_DATA = {};
+vm.runInContext(interactionSource, interactionContext, { filename: "character-interaction-ai.js" });
+const interactionApi = interactionContext.__BAEKJI_CHARACTER_INTERACTION_TEST__;
+assert(interactionApi, "general character interaction test API should be exposed");
+
+const sceneState = {
+  version: 3,
+  characters: {
+    test_b: { id: "test_b", currentSessionId: "scene1" },
+    test_a: { id: "test_a", currentSessionId: "scene2" },
+  },
+  sessions: {
+    scene1: { id: "scene1", status: "ACTIVE", variant: "a", memberIds: ["test_b"], currentNode: "E_ENTRY", currentDetailId: null, logs: [] },
+    scene2: { id: "scene2", status: "ACTIVE", variant: "a", memberIds: ["test_a"], currentNode: "E_ENTRY", currentDetailId: null, logs: [] },
+  },
+};
+const sceneTarget = interactionApi.targetForAction(sceneState, sceneState.sessions.scene1, "test_b", "캐릭터A를 밀친다");
+assert.equal(sceneTarget?.id, "test_a", "demo login alias 캐릭터A should resolve the real same-field target");
+assert.equal(sceneTarget?.sessionId, "scene2");
+assert.equal(interactionApi.particleFor("산", "이/가"), "이");
+assert.equal(interactionApi.particleFor("하늘", "을/를"), "을");
+assert.equal(interactionApi.particleFor("소라", "을/를"), "를");
+assert.equal(interactionApi.particleFor("테스트 캐릭터 A", "을/를"), "를");
+assert.equal(
+  interactionApi.fixNameParticles("산가 테스트 캐릭터 A을 밀친다.", ["산", "테스트 캐릭터 A"]),
+  "산이 테스트 캐릭터 A를 밀친다.",
+  "name particles should be corrected after AI narration",
+);
+const fallbackInteraction = interactionApi.fallbackDecision("캐릭터A를 밀친다", "산", "테스트 캐릭터 A", "stable-seed");
+assert.match(fallbackInteraction.narration, /산이/);
+assert.match(fallbackInteraction.narration, /테스트 캐릭터 A를/);
+assert.equal(interactionApi.shouldDeferToHazard({ activeEncounter: {} }, "캐릭터A를 밀친다"), false, "plain character interaction inside a hazard should still get its own immediate result");
+assert.equal(interactionApi.shouldDeferToHazard({ activeEncounter: {} }, "캐릭터A를 앞세워 위험을 통과한다"), true, "hazard-progress character action should stay with the hazard resolver");
+assert.match(interactionSource, /fieldObservationBroadcasted: true/, "general interaction input must suppress duplicate generic field observation");
+assert.match(interactionSource, /CHARACTER_INTERACTION_RESULT/, "resolved interaction must be copied as one canonical result to observers");
+
+const apiIndexSource = fs.readFileSync("api/index.mjs", "utf8");
+const indexSource = fs.readFileSync("index.html", "utf8");
+assert.match(apiIndexSource, /\/api\/resolve-character-interaction/);
+assert.match(apiIndexSource, /character_interaction_resolution/);
+assert.match(apiIndexSource, /밀기, 당기기, 붙잡기, 때리기/);
+assert.match(indexSource, /character-interaction-ai\.js\?v=0\.3\.98/);
+assert(indexSource.indexOf("character-interaction-ai.js?v=0.3.98") < indexSource.indexOf("cross-party-hazard-interaction.js?v=0.3.76"), "general interaction interceptor must load before the hazard-specific interceptor");
+
+console.log("PASS: same-field characters from other investigation parties can be targeted, general character interactions get AI outcomes, and Korean name particles are normalized");
