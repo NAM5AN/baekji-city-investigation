@@ -10,7 +10,8 @@ const testerId = "755ccd33-676f-48c8-a825-c9a28b56ac3e";
 
 let submitHandler = null;
 let fetchCount = 0;
-let legacyCaptureCount = 0;
+let hashRenderCount = 0;
+let fastLoginEventCount = 0;
 const local = new Map([[GLOBAL_KEY, JSON.stringify({
   version: 3,
   storyDay: 1,
@@ -75,7 +76,11 @@ const context = vm.createContext({
   },
 });
 context.window = context;
-context.dispatchEvent = () => true;
+context.dispatchEvent = (event) => {
+  if (event?.type === "hashchange") hashRenderCount += 1;
+  if (event?.type === "baekji-tester-fast-login") fastLoginEventCount += 1;
+  return true;
+};
 context.__demoRegistry = {
   test_a: { id: "test_a", loginId: "캐릭터A", password: "1234", name: "테스트 캐릭터 A" },
   test_b: { id: "test_b", loginId: "캐릭터B", password: "1234", name: "테스트 캐릭터 B" },
@@ -83,28 +88,10 @@ context.__demoRegistry = {
 };
 
 vm.runInContext(guardSource, context, { filename: "tester-registry-guard.js" });
-vm.runInContext(`
-  window.__legacyTesterCapture = function(event) {
-    const typed = String(event.target.querySelector("[data-login-id]")?.value || "").replace(/\\s+/g, "").toLowerCase();
-    if (typed !== "산") return false;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    return true;
-  };
-  window.__appSubmit = function(event) {
-    event.preventDefault();
-    const loginId = String(event.target.querySelector("[data-login-id]")?.value || "").replace(/\\s+/g, "").toLowerCase();
-    const password = String(event.target.querySelector("[data-login-password]")?.value || "");
-    const user = Object.values(__demoRegistry).find((candidate) => {
-      const aliases = [candidate.loginId, candidate.name, candidate.id].map((value) => String(value || "").replace(/\\s+/g, "").toLowerCase());
-      return aliases.includes(loginId) && password === candidate.password;
-    }) || null;
-    if (!user) return false;
-    sessionStorage.setItem(${JSON.stringify(USER_KEY)}, user.id);
-    location.hash = "#/home";
-    return true;
-  };
-`, context);
+// Simulate app.js touching Object.values(DEMO_USERS) during startup so the guard captures
+// the real in-memory registry before a tester account logs in.
+vm.runInContext("Object.values(__demoRegistry)", context);
+assert.equal(context.__BAEKJI_TESTER_REGISTRY_GUARD__.registryAttached(), true);
 vm.runInContext(source, context, { filename: "tester-login-fastpath.js" });
 
 assert.equal(typeof submitHandler, "function", "fast login submit handler must be registered immediately");
@@ -126,19 +113,12 @@ function makeForm() {
       if (selector === 'button[type="submit"], input[type="submit"]') return submit;
       return null;
     },
-    dispatchEvent(replay) {
-      replay.target = form;
-      submitHandler(replay);
-      if (replay.stopped) return !replay.defaultPrevented;
-      legacyCaptureCount += context.__legacyTesterCapture(replay) ? 1 : 0;
-      if (!replay.stopped) context.__appSubmit(replay);
-      return !replay.defaultPrevented;
-    },
   };
   return { form, message, submit, nameInput, passwordInput };
 }
 
-async function attemptLogin() {
+async function attemptLogin(startHash = "#/login") {
+  context.location.hash = startHash;
   const view = makeForm();
   const event = new TestEvent("submit", { bubbles: true, cancelable: true });
   event.target = view.form;
@@ -150,23 +130,25 @@ const first = await attemptLogin();
 assert.equal(fetchCount, 1, "first tester login performs exactly one RPC");
 assert.equal(first.event.defaultPrevented, true);
 assert.equal(first.event.stopped, true);
-assert.equal(legacyCaptureCount, 0, "the legacy tester-name interceptor must not capture the verified app handoff");
-assert.equal(session.get(USER_KEY), testerId, "app login handoff must establish the current tester session");
-assert.equal(context.location.hash, "#/home", "successful tester login must remain on home instead of bouncing to login");
-assert.equal(context.__demoRegistry[testerId]?.password, "4826", "RPC-verified PIN must be present only in the in-memory app registry for the final app auth check");
+assert.equal(session.get(USER_KEY), testerId, "verified login must establish the current tester session directly");
+assert.equal(context.location.hash, "#/home", "successful tester login must move to home");
+assert.equal(hashRenderCount, 1, "successful login must synchronously request one home render instead of waiting on a form replay");
+assert.equal(fastLoginEventCount, 1);
+assert.equal(context.__demoRegistry[testerId]?.password, "4826", "verified tester must be installed in the in-memory app registry");
 const state = JSON.parse(local.get(GLOBAL_KEY));
-assert.equal(state.characters[testerId]?.id, testerId, "tester character state must exist before the app login handoff");
-assert.equal(first.passwordInput.value, "4826", "login handoff must not erase the PIN");
+assert.equal(state.characters[testerId]?.id, testerId, "tester character state must exist before home renders");
+assert.equal(first.nameInput.value, "산", "login must never replace the visible character name with an internal UUID");
+assert.equal(first.passwordInput.value, "4826", "login must not erase the PIN");
 assert.equal(first.submit.disabled, false);
 
 session.delete(USER_KEY);
-context.location.hash = "#/login";
-const second = await attemptLogin();
+const second = await attemptLogin("#/home");
 assert.equal(fetchCount, 2, "a later retry must remain usable and perform one fresh RPC");
-assert.equal(legacyCaptureCount, 0, "retries must continue to bypass the legacy name interceptor");
 assert.equal(session.get(USER_KEY), testerId, "repeat login must also establish the session without another account acting first");
 assert.equal(context.location.hash, "#/home");
+assert.equal(hashRenderCount, 2, "when the URL is already #/home, login must still force the app to render home immediately");
+assert.equal(second.nameInput.value, "산", "retry must also keep the human-readable character name in the field");
 assert.equal(second.passwordInput.value, "4826");
 assert.equal(second.submit.disabled, false);
 
-console.log("PASS: every tester login, including A/B/C aliases, uses the Supabase account path and remains retryable");
+console.log("PASS: tester login completes directly, keeps the visible name, and forces home render without UUID form replay");
