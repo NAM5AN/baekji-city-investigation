@@ -70,7 +70,7 @@ assert.equal(reopened.parties.p1.confirmedBy.length, 0);
 assert.match(source, /data-party-flow-back-recruiting/);
 assert.match(source, /← 이전 단계/);
 assert.match(source, /data-party-roster-open/);
-assert.match(source, /data-party-flow-briefing-roster-fixed/);
+assert.match(source, /partyFlowBriefingRosterFixed/);
 assert.match(source, /준비 완료/);
 assert.match(source, /준비 대기/);
 assert.match(source, /readyStateBy/);
