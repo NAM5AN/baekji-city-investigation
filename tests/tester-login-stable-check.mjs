@@ -5,14 +5,13 @@ import vm from "node:vm";
 const source = fs.readFileSync("tester-login-stable.js", "utf8");
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
+const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
 const testerId = "6554b60a-be87-4c08-b8b5-8abda89faf5b";
 
 let submitHandler = null;
 let initialFetchCount = 0;
 let lateFetchCount = 0;
-let hashRenderCount = 0;
-let registeredUser = null;
-let remembered = 0;
+let reloadCount = 0;
 const local = new Map([[GLOBAL_KEY, JSON.stringify({
   version: 3,
   storyDay: 1,
@@ -39,14 +38,17 @@ class TestEvent {
   stopImmediatePropagation() { this.stopped = true; }
 }
 
+const location = {
+  pathname: "/",
+  search: "",
+  hash: "#/login",
+  reload() { reloadCount += 1; },
+};
+
 const context = vm.createContext({
   console,
   AbortController,
   Event: TestEvent,
-  HashChangeEvent: TestEvent,
-  CustomEvent: class CustomEvent extends TestEvent {
-    constructor(type, init = {}) { super(type, init); this.detail = init.detail; }
-  },
   setTimeout,
   clearTimeout,
   localStorage: {
@@ -58,7 +60,13 @@ const context = vm.createContext({
     setItem(key, value) { session.set(key, String(value)); },
     removeItem(key) { session.delete(key); },
   },
-  location: { hash: "#/login" },
+  location,
+  history: {
+    replaceState(_state, _title, url) {
+      const hashIndex = String(url).indexOf("#");
+      location.hash = hashIndex >= 0 ? String(url).slice(hashIndex) : "";
+    },
+  },
   document: {
     addEventListener(type, handler) { if (type === "submit") submitHandler = handler; },
   },
@@ -78,14 +86,6 @@ const context = vm.createContext({
   },
 });
 context.window = context;
-context.dispatchEvent = (event) => {
-  if (event?.type === "hashchange") hashRenderCount += 1;
-  return true;
-};
-context.__BAEKJI_TESTER_REGISTRY_GUARD__ = {
-  registerTester(user) { registeredUser = user; return true; },
-  rememberCurrentTester() { remembered += 1; return true; },
-};
 
 vm.runInContext(source, context, { filename: "tester-login-stable.js" });
 assert.equal(typeof submitHandler, "function");
@@ -130,22 +130,25 @@ assert.equal(lateFetchCount, 0, "later fetch wrappers must not own login");
 assert.equal(first.event.defaultPrevented, true);
 assert.equal(first.event.stopped, true);
 assert.equal(first.nameInput.value, "캐릭터A", "internal UUID must never replace the visible login name");
-assert.equal(first.submit.disabled, false, "login button must always recover");
-assert.equal(first.message.textContent, "");
+assert.equal(first.submit.disabled, true, "successful login remains locked until the clean reload takes over");
+assert.equal(first.message.textContent, "접속 중입니다…");
 assert.equal(session.get(USER_KEY), testerId);
 assert.equal(context.location.hash, "#/home");
-assert.equal(registeredUser?.id, testerId);
-assert.equal(registeredUser?.password, "1234");
-assert.equal(remembered, 1);
+assert.equal(reloadCount, 1, "verified login must force a full document reload instead of an in-page hash render");
 assert.equal(JSON.parse(local.get(GLOBAL_KEY)).characters[testerId]?.id, testerId);
-assert.equal(hashRenderCount, 0, "normal login relies on the real hash change instead of double-rendering synchronously");
+const savedProfile = JSON.parse(session.get(SESSION_PROFILE_KEY));
+assert.equal(savedProfile.id, testerId);
+assert.equal(savedProfile.name, "테스트 캐릭터 A");
+assert.equal(savedProfile.password, "", "session bridge must never persist the tester PIN");
 
 session.delete(USER_KEY);
+session.delete(SESSION_PROFILE_KEY);
 const second = await submitLogin("#/home");
 assert.equal(initialFetchCount, 2);
 assert.equal(session.get(USER_KEY), testerId);
-assert.equal(hashRenderCount, 1, "stale #/home + login DOM gets exactly one explicit recovery render");
+assert.equal(context.location.hash, "#/home");
+assert.equal(reloadCount, 2, "stale #/home + login DOM also recovers through a clean reload");
 assert.equal(second.nameInput.value, "캐릭터A");
-assert.equal(second.submit.disabled, false);
+assert.equal(second.submit.disabled, true);
 
-console.log("PASS: single-owner tester login uses captured same-origin fetch, never exposes UUID, and recovers stale home/login DOM");
+console.log("PASS: tester login uses captured same-origin fetch and a clean full reload into the authenticated home");
