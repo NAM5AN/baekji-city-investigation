@@ -108,7 +108,8 @@ vm.runInContext(`
 vm.runInContext(source, context, { filename: "tester-login-fastpath.js" });
 
 assert.equal(typeof submitHandler, "function", "fast login submit handler must be registered immediately");
-assert.equal(context.__BAEKJI_TESTER_LOGIN_FASTPATH_TEST__.shouldHandleLoginName("캐릭터A"), false, "demo accounts remain on the built-in login path");
+assert.equal(context.__BAEKJI_TESTER_LOGIN_FASTPATH_TEST__.shouldHandleLoginName("캐릭터A"), true, "legacy demo login labels must now use the Supabase tester path too");
+assert.equal(context.__BAEKJI_TESTER_LOGIN_FASTPATH_TEST__.loginQueryName("캐릭터A"), "테스트 캐릭터 A", "legacy A/B/C labels are only login aliases for Supabase rows");
 assert.equal(context.__BAEKJI_TESTER_LOGIN_FASTPATH_TEST__.shouldHandleLoginName("산"), true, "tester names use the direct RPC login path");
 
 function makeForm() {
@@ -168,4 +169,4 @@ assert.equal(context.location.hash, "#/home");
 assert.equal(second.passwordInput.value, "4826");
 assert.equal(second.submit.disabled, false);
 
-console.log("PASS: tester login bypasses legacy name interception, reaches built-in auth, and remains retryable");
+console.log("PASS: every tester login, including A/B/C aliases, uses the Supabase account path and remains retryable");
