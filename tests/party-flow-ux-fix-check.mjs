@@ -6,6 +6,9 @@ const source = fs.readFileSync(new URL("../party-flow-ux-fix.js", import.meta.ur
 const css = fs.readFileSync(new URL("../party-flow-ux-fix.css", import.meta.url), "utf8");
 const preflightSource = fs.readFileSync(new URL("../party-preflight-flow-fix.js", import.meta.url), "utf8");
 const preflightCss = fs.readFileSync(new URL("../party-preflight-flow-fix.css", import.meta.url), "utf8");
+const stabilitySource = fs.readFileSync(new URL("../party-ui-stability.js", import.meta.url), "utf8");
+const stabilityCss = fs.readFileSync(new URL("../party-ui-stability.css", import.meta.url), "utf8");
+const presenceLabelSource = fs.readFileSync(new URL("../entry-presence-party-label-fix.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 const sandbox = { window: {}, console, structuredClone };
@@ -24,6 +27,7 @@ const base = {
   parties: {
     p1: {
       id: "p1",
+      name: "해오름역 조사조 1",
       creatorId: "leader",
       status: "RECRUITING",
       memberIds: ["leader", "member2"],
@@ -158,4 +162,41 @@ assert.match(index, /party-preflight-flow-fix\.css\?v=0\.3\.90/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.90/);
 assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.85") < index.indexOf("party-preflight-flow-fix.js?v=0.3.90"), "preflight decorator must run after membership UI normalization");
 
-console.log("PASS: party invite flow plus pre-confirm readiness, strong member ready states, backward party navigation, briefing rollback, and departure copy");
+const stabilitySandbox = { window: {}, console, structuredClone };
+vm.createContext(stabilitySandbox);
+vm.runInContext(stabilitySource, stabilitySandbox, { filename: "party-ui-stability.js" });
+const namingApi = stabilitySandbox.window.__BAEKJI_PARTY_NAME_UI_TEST__;
+assert.ok(namingApi, "party naming and stability test API must be exposed");
+assert.equal(namingApi.isDefaultPartyName("해오름역 조사조 12"), true);
+assert.equal(namingApi.isDefaultPartyName("붉은빛 탐사대"), false);
+
+const renameBase = structuredClone(base);
+renameBase.parties.p1.memberIds = ["leader"];
+const renamed = namingApi.renamePartyState(renameBase, "p1", "leader", "  붉은빛   탐사대  ", 4000);
+assert.equal(renamed.parties.p1.name, "붉은빛 탐사대", "leader must be able to rename the party during preflight");
+assert.equal(renamed.parties.p1.nameCustomized, true);
+assert.equal(renameBase.parties.p1.name, "해오름역 조사조 1", "party rename helper must stay pure");
+assert.equal(namingApi.partyDisplayName(renameBase, renameBase.parties.p1, (id) => id === "leader" ? "테스트A" : ""), "테스트A", "unnamed solo party must be represented by the character name");
+assert.equal(namingApi.partyDisplayName(renamed, renamed.parties.p1, () => "테스트A"), "붉은빛 탐사대", "custom party name must remain visible even for a solo party");
+
+const lockedRename = structuredClone(renameBase);
+lockedRename.parties.p1.status = "SESSION_CREATED";
+lockedRename.parties.p1.sessionId = "s1";
+assert.equal(namingApi.renamePartyState(lockedRename, "p1", "leader", "변경 금지", 4100).parties.p1.name, "해오름역 조사조 1", "party name edits must stop after session creation");
+
+assert.match(stabilitySource, /받은 초대/, "joined member home must immediately hide the impossible invitation box");
+assert.match(stabilitySource, /data-party-preflight-back-confirmed/, "ready-step previous button must be restored in the same paint turn");
+assert.match(stabilitySource, /MutationObserver\(schedulePaint\)/, "party rerenders must be stabilized before the browser paints transient base markup");
+assert.match(stabilitySource, /data-party-name-edit/, "leader hero must expose a party rename control");
+assert.match(stabilitySource, /RECRUITING.*COMPOSITION_CONFIRMED.*READY_CHECK/s, "party rename must stay available through all three preflight steps");
+assert.match(stabilityCss, /party-name-edit-button/, "party rename control needs visible styling");
+assert.match(stabilityCss, /party-name-edit-modal/, "party rename editor needs a dedicated modal style");
+assert.match(presenceLabelSource, /entryPresenceFix/, "special entry presence logs must be normalized");
+assert.match(presenceLabelSource, /PARTY_NAME_UI/, "presence labels must reuse the party display-name contract");
+assert.match(index, /party-ui-stability\.css\?v=0\.3\.91/);
+assert.match(index, /party-ui-stability\.js\?v=0\.3\.91/);
+assert.match(index, /entry-presence-party-label-fix\.js\?v=0\.3\.91/);
+assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.90") < index.indexOf("party-ui-stability.js?v=0.3.91"), "paint guard must run after the existing preflight decorator");
+assert.ok(index.indexOf("party-ui-stability.js?v=0.3.91") < index.indexOf("entry-presence-party-label-fix.js?v=0.3.91"), "presence label normalizer must consume the party display-name API");
+
+console.log("PASS: party preflight stays paint-stable, party names are editable, and unnamed solo parties use character labels");
