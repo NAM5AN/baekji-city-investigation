@@ -2,6 +2,7 @@
   "use strict";
 
   const USER_KEY = "baekji_city_mvp_current_user_v034";
+  const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const ADMIN_ID_PATTERN = /^AD\d+$/i;
   const LEGACY_LOGIN_ALIASES = new Map([
@@ -90,6 +91,20 @@
     };
   }
 
+  function sessionSafeUser(user) {
+    const name = String(user?.name || user?.loginId || "").trim();
+    return {
+      id: String(user?.id || ""),
+      loginId: String(user?.loginId || name),
+      name,
+      password: "",
+      initial: String(user?.initial || Array.from(name || "?")[0] || "?"),
+      note: String(user?.note || "초대 테스터 계정"),
+      profilePhoto: String(user?.profilePhoto || ""),
+      isTestOnly: true,
+    };
+  }
+
   async function verifyLogin(characterName, pin) {
     if (!nativeFetch) throw new Error("FETCH_UNAVAILABLE");
     const controller = new AbortController();
@@ -115,32 +130,34 @@
     }
   }
 
-  function navigateHome() {
-    if (location.hash === "#/home") {
-      try { window.dispatchEvent(new HashChangeEvent("hashchange")); }
-      catch { window.dispatchEvent(new Event("hashchange")); }
-      return;
+  function reloadHome() {
+    const homeUrl = `${location.pathname || "/"}${location.search || ""}#/home`;
+    try {
+      history.replaceState(null, "", homeUrl);
+    } catch {
+      location.hash = "#/home";
     }
-    location.hash = "#/home";
+    location.reload();
   }
 
-  function completeVerifiedLogin(user, pin) {
-    const guard = window.__BAEKJI_TESTER_REGISTRY_GUARD__;
+  function completeVerifiedLogin(user) {
     const userId = String(user?.id || "");
-    if (!userId || !guard?.registerTester?.(user)) throw new Error("TESTER_REGISTRY_UNAVAILABLE");
+    const name = String(user?.name || user?.loginId || "").trim();
+    if (!userId || !name) throw new Error("LOGIN_SESSION_FAILED");
 
     const previousUserId = sessionStorage.getItem(USER_KEY);
-    sessionStorage.setItem(USER_KEY, userId);
+    const previousProfile = sessionStorage.getItem(SESSION_PROFILE_KEY);
     try {
-      guard.rememberCurrentTester?.();
+      sessionStorage.setItem(USER_KEY, userId);
+      sessionStorage.setItem(SESSION_PROFILE_KEY, JSON.stringify(sessionSafeUser(user)));
       ensureCharacter(userId);
       if (sessionStorage.getItem(USER_KEY) !== userId) throw new Error("LOGIN_SESSION_FAILED");
-      navigateHome();
-      window.dispatchEvent(new CustomEvent("baekji-tester-stable-login", { detail: { userId } }));
-      window.dispatchEvent(new CustomEvent("baekji-tester-fast-login", { detail: { userId } }));
+      reloadHome();
     } catch (error) {
       if (previousUserId) sessionStorage.setItem(USER_KEY, previousUserId);
       else sessionStorage.removeItem(USER_KEY);
+      if (previousProfile) sessionStorage.setItem(SESSION_PROFILE_KEY, previousProfile);
+      else sessionStorage.removeItem(SESSION_PROFILE_KEY);
       throw error;
     }
   }
@@ -148,7 +165,7 @@
   function errorMessage(error) {
     if (error?.name === "AbortError") return "로그인 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.";
     if (["LOGIN_SERVER_FAILED", "FETCH_UNAVAILABLE"].includes(String(error?.message || ""))) return "로그인 서버에 연결하지 못했습니다. 다시 시도해 주세요.";
-    if (["LOGIN_SESSION_FAILED", "TESTER_REGISTRY_UNAVAILABLE"].includes(String(error?.message || ""))) return "로그인 연결을 완료하지 못했습니다. 새로고침 후 다시 시도해 주세요.";
+    if (String(error?.message || "") === "LOGIN_SESSION_FAILED") return "로그인 연결을 완료하지 못했습니다. 새로고침 후 다시 시도해 주세요.";
     return "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
   }
 
@@ -175,11 +192,10 @@
     try {
       const payload = await verifyLogin(name, pin);
       const user = toUser(payload, pin);
-      completeVerifiedLogin(user, pin);
-      if (message?.isConnected !== false) message.textContent = "";
+      if (message?.isConnected !== false) message.textContent = "접속 중입니다…";
+      completeVerifiedLogin(user);
     } catch (error) {
       if (message?.isConnected !== false) message.textContent = errorMessage(error);
-    } finally {
       busyForms.delete(form);
       if (submit?.isConnected !== false) submit.disabled = false;
     }
@@ -190,10 +206,11 @@
     loginQueryName,
     shouldHandleLoginName,
     toUser,
+    sessionSafeUser,
     ensureCharacter,
     verifyLogin,
     completeVerifiedLogin,
-    navigateHome,
+    reloadHome,
   });
 
   document.addEventListener("submit", handleSubmit, true);
