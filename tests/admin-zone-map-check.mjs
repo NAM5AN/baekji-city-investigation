@@ -4,6 +4,7 @@ import fs from "node:fs";
 const html = fs.readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const source = fs.readFileSync(new URL("../admin-zone-map.js", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../admin-zone-map.css", import.meta.url), "utf8");
+const liveRender = fs.readFileSync(new URL("../admin-live-render.js", import.meta.url), "utf8");
 const scrollSource = fs.readFileSync(new URL("../admin-scroll-stability.js", import.meta.url), "utf8");
 const mobileCss = fs.readFileSync(new URL("../admin-mobile-shell-polish.css", import.meta.url), "utf8");
 const mobileTopbar = fs.readFileSync(new URL("../admin-mobile-topbar.js", import.meta.url), "utf8");
@@ -11,8 +12,16 @@ const playerMap = fs.readFileSync(new URL("../assets/maps/haeoreum-day1-map.svg"
 
 assert.match(html, /admin-zone-map\.css\?v=0\.6\.0/, "admin dashboard must load zone-map styles with a fresh cache key");
 assert.match(html, /admin-zone-map\.js\?v=0\.6\.0/, "admin dashboard must load zone-map runtime with a fresh cache key");
+assert.match(html, /admin-live-render\.js\?v=0\.6\.3/, "admin dashboard must load no-flicker live renderer");
+assert.ok(html.indexOf("admin-live-render.js?v=0.6.3") > html.indexOf("admin-zone-map.js?v=0.6.0"), "live renderer must load after the zone-map runtime");
 assert.match(html, /admin-scroll-stability\.js\?v=0\.6\.1/, "admin dashboard must load scroll-stability runtime after the zone map");
-assert.ok(html.indexOf("admin-scroll-stability.js?v=0.6.1") > html.indexOf("admin-zone-map.js?v=0.6.0"), "scroll stability must observe the rendered zone-map lifecycle");
+assert.ok(html.indexOf("admin-scroll-stability.js?v=0.6.1") > html.indexOf("admin-live-render.js?v=0.6.3"), "scroll stability must observe the stable live-render lifecycle");
+assert.doesNotThrow(() => new Function(liveRender), "admin live renderer must parse as JavaScript");
+assert.match(liveRender, /Object\.defineProperty\(panel, "innerHTML"/, "polling panel writes must be intercepted instead of replacing the whole DOM");
+assert.match(liveRender, /syncChildren\(panel, fragment\)/, "ordinary admin tabs must update their existing DOM incrementally");
+assert.match(liveRender, /baekji-admin-zone-live-source/, "enhanced zone maps must receive live state without being torn down");
+assert.match(liveRender, /syncZoneMap\(records\)/, "zone occupancy and routes must update in place");
+assert.match(liveRender, /shouldPreserveControl/, "log filters and focused controls must survive live synchronization");
 assert.doesNotThrow(() => new Function(scrollSource), "admin scroll stability runtime must parse as JavaScript");
 assert.match(scrollSource, /document\.addEventListener\("scroll"/, "scroll positions must be captured while the operator scrolls");
 assert.match(scrollSource, /new MutationObserver\(scheduleRestore\)/, "snapshot rerenders must trigger scroll restoration");
@@ -43,4 +52,4 @@ assert.match(mobileTopbar, /data-admin-mobile-proxy="mvp5"/, "mobile operations 
 assert.match(mobileTopbar, /data-admin-mobile-proxy="audit"/, "mobile operations menu must retain audit log access");
 assert.match(mobileTopbar, /data-admin-mobile-proxy="reset"/, "mobile operations menu must retain reset access");
 
-console.log("PASS: admin zone map, scroll stability, compact mobile header, and mobile bottom spacing are wired");
+console.log("PASS: admin live sync updates in place without flicker while map, scroll, and mobile shell contracts remain wired");
