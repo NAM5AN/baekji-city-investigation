@@ -5,36 +5,18 @@
     "deploymentEnabled": false
   },
   "functions": {
-    "api/index.mjs": {
-      "maxDuration": 30
-    },
-    "api/narrate-observation.mjs": {
-      "maxDuration": 30
-    },
-    "api/interpret-transfer.mjs": {
-      "maxDuration": 30
-    },
-    "api/resolve-hazard-flex.mjs": {
-      "maxDuration": 30
-    },
-    "api/admin-login.mjs": {
-      "maxDuration": 15
-    },
-    "api/admin-snapshot.mjs": {
-      "maxDuration": 15
-    },
-    "api/admin-communications.mjs": {
-      "maxDuration": 15
-    },
-    "api/admin-control.mjs": {
-      "maxDuration": 15
-    },
-    "api/admin-audit.mjs": {
-      "maxDuration": 15
-    },
-    "api/player-admin-system.mjs": {
-      "maxDuration": 15
-    }
+    "api/index.mjs": { "maxDuration": 30 },
+    "api/narrate-observation.mjs": { "maxDuration": 30 },
+    "api/interpret-transfer.mjs": { "maxDuration": 30 },
+    "api/resolve-hazard-flex.mjs": { "maxDuration": 30 },
+    "api/admin-login.mjs": { "maxDuration": 15 },
+    "api/admin-snapshot.mjs": { "maxDuration": 15 },
+    "api/admin-communications.mjs": { "maxDuration": 15 },
+    "api/admin-control.mjs": { "maxDuration": 15 },
+    "api/admin-audit.mjs": { "maxDuration": 15 },
+    "api/admin-session-ops.mjs": { "maxDuration": 15 },
+    "api/player-presence.mjs": { "maxDuration": 15 },
+    "api/player-admin-system.mjs": { "maxDuration": 15 }
   },
   "rewrites": [
     { "source": "/api/narrate-observation", "destination": "/api/narrate-observation.mjs" },
@@ -45,6 +27,8 @@
     { "source": "/api/admin-communications", "destination": "/api/admin-communications.mjs" },
     { "source": "/api/admin-control", "destination": "/api/admin-control.mjs" },
     { "source": "/api/admin-audit", "destination": "/api/admin-audit.mjs" },
+    { "source": "/api/admin-session-ops", "destination": "/api/admin-session-ops.mjs" },
+    { "source": "/api/player-presence", "destination": "/api/player-presence.mjs" },
     { "source": "/api/player-admin-system", "destination": "/api/player-admin-system.mjs" },
     { "source": "/api/:path*", "destination": "/api/index.mjs" }
   ],
