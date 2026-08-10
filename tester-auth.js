@@ -421,7 +421,9 @@
     nextUsers.forEach(install);
     const changed = nextSignature !== directorySignature;
     directorySignature = nextSignature;
-    repairTesterCharacters({ touchCurrent: true });
+    // Online/AFK state is handled by the isolated player-presence heartbeat.
+    // Directory polling must never create shared world revisions just to refresh presence.
+    repairTesterCharacters();
     scheduleRefresh();
     if (changed || forceRender) {
       window.dispatchEvent(new CustomEvent("baekji-tester-directory-ready", {
