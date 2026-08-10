@@ -100,7 +100,7 @@ const vercelRaw = await readFile(new URL("../vercel.json", import.meta.url), "ut
 const vercel = JSON.parse(vercelRaw);
 const cloud = await readFile(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
 
-assert.match(html, /CONTROL · MVP 4/);
+assert.match(html, /OBSERVE · COMMUNICATION · CONTROL/);
 assert.match(html, /admin-control-mvp4\.css\?v=0\.4\.0/);
 assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.0/);
 assert.match(html, /admin-control-status-mvp4\.js\?v=0\.4\.0/);
