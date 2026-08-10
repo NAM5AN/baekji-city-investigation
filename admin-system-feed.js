@@ -3,6 +3,7 @@
 
   const API_URL = "/api/player-admin-system";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
+  const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const POLL_MS = 1200;
   const MAX_EVENTS = 80;
   const events = new Map();
@@ -26,19 +27,42 @@
     catch { return ""; }
   }
 
+  function readState() {
+    try {
+      const state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      return state?.version === 3 ? state : null;
+    } catch {
+      return null;
+    }
+  }
+
   function mountedSessionId() {
     return String(document.querySelector(".retro-investigation[data-session-id]")?.dataset.sessionId || "");
+  }
+
+  function mountedSession() {
+    const sessionId = mountedSessionId();
+    return sessionId ? readState()?.sessions?.[sessionId] || null : null;
   }
 
   function eventSessionIds(event) {
     return Array.isArray(event?.recipient_session_ids) ? event.recipient_session_ids.map(String) : [];
   }
 
+  function eventTime(event) {
+    const value = Date.parse(String(event?.created_at || ""));
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function senderLabel(event) {
+    return String(event?.sender_label || "SYSTEM").replace(/\s+/g, " ").trim().slice(0, 40) || "SYSTEM";
+  }
+
   function relevantEvents(sessionId) {
     if (!sessionId) return [];
     return [...events.values()]
       .filter((event) => eventSessionIds(event).includes(sessionId))
-      .sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
+      .sort((a, b) => eventTime(a) - eventTime(b) || Number(a.id || 0) - Number(b.id || 0));
   }
 
   function timeText(value) {
@@ -48,12 +72,57 @@
 
   function systemMarkup(event) {
     const fresh = newEventIds.has(Number(event.id || 0)) ? " is-new" : "";
-    return `<div class="retro-system-line retro-admin-system-line${fresh}" data-admin-system-event="${Number(event.id || 0)}"><span class="retro-admin-system-badge">운영 SYSTEM</span><span class="retro-log-time">[${esc(timeText(event.created_at))}]</span><span class="retro-admin-system-text">${esc(event.message || "")}</span></div>`;
+    const at = eventTime(event);
+    return `<div class="retro-system-line retro-admin-system-line${fresh}" data-admin-system-event="${Number(event.id || 0)}" data-timeline-at="${at}"><span class="retro-admin-system-badge">${esc(senderLabel(event))}</span><span class="retro-log-time">[${esc(timeText(event.created_at))}]</span><span class="retro-admin-system-text">${esc(event.message || "")}</span></div>`;
   }
 
   function chatMarkup(event) {
     const fresh = newEventIds.has(Number(event.id || 0)) ? " is-new" : "";
-    return `<article class="retro-admin-system-chat${fresh}" data-admin-system-chat-event="${Number(event.id || 0)}"><header><strong>운영 SYSTEM</strong><span>${esc(timeText(event.created_at))}</span></header><p>${esc(event.message || "")}</p><small>${esc(event.target_label || "운영진 공지")}</small></article>`;
+    const at = eventTime(event);
+    return `<article class="retro-admin-system-chat${fresh}" data-admin-system-chat-event="${Number(event.id || 0)}" data-timeline-at="${at}"><header><strong>${esc(senderLabel(event))}</strong><span>${esc(timeText(event.created_at))}</span></header><p>${esc(event.message || "")}</p><small>${esc(event.target_label || "운영진 공지")}</small></article>`;
+  }
+
+  function nativeSystemEntries(session) {
+    return (session?.logs || []).filter((entry) =>
+      entry?.type === "action-input" ||
+      (!entry?.actorId && entry?.type !== "interaction" && entry?.type !== "chat-divider")
+    );
+  }
+
+  function nativeChatEntries(session) {
+    return (session?.logs || []).filter((entry) => entry?.type === "interaction" || entry?.type === "chat-divider");
+  }
+
+  function annotateNativeTimelines(session, system, chat) {
+    if (system) {
+      const entries = nativeSystemEntries(session);
+      const nodes = [...system.children].filter((node) => node.matches?.(".retro-system-line:not(.retro-admin-system-line)"));
+      nodes.forEach((node, index) => {
+        const at = Number(entries[index]?.at || 0);
+        if (at > 0) node.dataset.timelineAt = String(at);
+        else delete node.dataset.timelineAt;
+      });
+    }
+    if (chat) {
+      const entries = nativeChatEntries(session);
+      const nodes = [...chat.children].filter((node) => node.matches?.(".retro-chat-message,.retro-chat-divider"));
+      nodes.forEach((node, index) => {
+        const at = Number(entries[index]?.at || 0);
+        if (at > 0) node.dataset.timelineAt = String(at);
+        else delete node.dataset.timelineAt;
+      });
+    }
+  }
+
+  function sortTimeline(container) {
+    if (!container) return false;
+    const nodes = [...container.children].filter((node) => Number(node.dataset?.timelineAt || 0) > 0);
+    if (nodes.length < 2) return false;
+    const indexed = nodes.map((node, index) => ({ node, index, at: Number(node.dataset.timelineAt || 0) }));
+    const sorted = [...indexed].sort((a, b) => a.at - b.at || a.index - b.index);
+    if (sorted.every((entry, index) => entry.node === nodes[index])) return false;
+    sorted.forEach((entry) => container.append(entry.node));
+    return true;
   }
 
   function nearBottom(element, threshold = 70) {
@@ -67,10 +136,12 @@
     try {
       const sessionId = mountedSessionId();
       if (!sessionId) return;
+      const session = mountedSession();
       const rows = relevantEvents(sessionId);
-      if (!rows.length) return;
       const system = document.querySelector(".retro-system-scroll");
       const chat = document.querySelector("[data-chat-stream]");
+      annotateNativeTimelines(session, system, chat);
+      if (!rows.length) return;
       const systemWasNear = nearBottom(system);
       const chatWasNear = nearBottom(chat);
       let addedFresh = false;
@@ -87,6 +158,9 @@
           addedFresh ||= fresh;
         }
       });
+
+      sortTimeline(system);
+      sortTimeline(chat);
 
       if (system && (systemWasNear || addedFresh)) system.scrollTop = system.scrollHeight;
       if (chat && (chatWasNear || addedFresh)) chat.scrollTop = chat.scrollHeight;
@@ -146,7 +220,7 @@
         inject();
       }
     } catch {
-      // 운영 SYSTEM 피드가 잠시 끊겨도 조사 자체는 계속 진행합니다.
+      // 관리자 SYSTEM 피드가 잠시 끊겨도 조사는 계속 진행합니다.
     } finally {
       loading = false;
       clearTimeout(timer);
@@ -164,9 +238,15 @@
 
   window.__BAEKJI_ADMIN_SYSTEM_FEED_TEST__ = Object.freeze({
     eventSessionIds,
+    eventTime,
+    senderLabel,
     mergeIncoming,
     relevantEvents,
     mountedSessionId,
+    nativeSystemEntries,
+    nativeChatEntries,
+    annotateNativeTimelines,
+    sortTimeline,
   });
 
   poll();
