@@ -112,6 +112,7 @@
       const before = JSON.stringify({
         members: party.memberIds,
         invited: party.invitedIds,
+        declined: party.declinedIds,
         confirmed: party.confirmedBy,
         ready: party.readyBy,
         readyState: party.readyStateBy?.[removal.memberId],
@@ -120,6 +121,7 @@
       });
       party.memberIds = unique(party.memberIds).filter((id) => id !== removal.memberId);
       party.invitedIds = unique(party.invitedIds).filter((id) => id !== removal.memberId);
+      party.declinedIds = unique(party.declinedIds).filter((id) => id !== removal.memberId);
       party.confirmedBy = unique(party.confirmedBy).filter((id) => id !== removal.memberId);
       party.readyBy = unique(party.readyBy).filter((id) => id !== removal.memberId);
       if (party.readyStateBy && typeof party.readyStateBy === "object") delete party.readyStateBy[removal.memberId];
@@ -128,6 +130,7 @@
       const after = JSON.stringify({
         members: party.memberIds,
         invited: party.invitedIds,
+        declined: party.declinedIds,
         confirmed: party.confirmedBy,
         ready: party.readyBy,
         readyState: party.readyStateBy?.[removal.memberId],
@@ -367,14 +370,25 @@
       const memberId = members[index];
       if (!memberId) return;
       row.dataset.partyMembershipRow = memberId;
-      row.querySelectorAll("[data-party-self-leave]").forEach((button) => button.remove());
-      if (memberId !== userId || party.creatorId === userId || !membershipChangeAllowed(party)) return;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "button danger small party-roster-self-leave";
-      button.dataset.partySelfLeave = partyId;
-      button.textContent = "조 탈퇴";
-      row.appendChild(button);
+      const buttons = [...row.querySelectorAll("[data-party-self-leave]")];
+      const shouldShow = memberId === userId && party.creatorId !== userId && membershipChangeAllowed(party);
+      if (!shouldShow) {
+        buttons.forEach((button) => button.remove());
+        return;
+      }
+      let button = buttons[0] || null;
+      buttons.slice(1).forEach((extra) => extra.remove());
+      if (!button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "button danger small party-roster-self-leave";
+        button.dataset.partySelfLeave = partyId;
+        button.textContent = "조 탈퇴";
+        row.appendChild(button);
+      } else {
+        button.dataset.partySelfLeave = partyId;
+        if (button.textContent !== "조 탈퇴") button.textContent = "조 탈퇴";
+      }
     });
   }
 
