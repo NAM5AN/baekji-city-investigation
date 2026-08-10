@@ -1,0 +1,178 @@
+(() => {
+  "use strict";
+
+  const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const ENTRY_NODE = "E_ENTRY";
+  const POLL_MS = 280;
+  const data = window.DAY1_DATA || { places: {} };
+  let writing = false;
+  let timer = 0;
+
+  function readState() {
+    try {
+      const state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      return state?.version === 3 ? state : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function activeSession(session) {
+    return session?.status === "ACTIVE";
+  }
+
+  function scopeKey(session) {
+    if (!session) return "";
+    if (session.movement) return `route:${session.movement.fromNode || session.currentNode}:${session.movement.targetNode || ""}`;
+    if (session.activeEncounter) return `route:${session.activeEncounter.fromNode || session.currentNode}:${session.activeEncounter.targetNode || ""}`;
+    if (session.currentDetailId) return `detail:${session.currentNode}:${session.currentDetailId}`;
+    return `node:${session.currentNode || ""}`;
+  }
+
+  function entrySessions(state) {
+    return Object.values(state?.sessions || {}).filter((session) => activeSession(session) && scopeKey(session) === `node:${ENTRY_NODE}`);
+  }
+
+  function pairKey(a, b) {
+    return [String(a?.id || ""), String(b?.id || "")].sort().join("::");
+  }
+
+  function partyName(state, session) {
+    const party = state?.parties?.[session?.partyId];
+    return String(party?.name || "다른 조사조");
+  }
+
+  function nodeName(nodeId) {
+    if (nodeId === ENTRY_NODE) return "해오름역 구역 입구";
+    return data.places?.[nodeId]?.name || String(nodeId || "다음 구역");
+  }
+
+  function appendPresence(session, eventId, at, text) {
+    session.logs ||= [];
+    if (session.logs.some((entry) => entry?.id === eventId)) return false;
+    session.logs.push({ id: eventId, type: "presence", at, actorId: null, text, entryPresenceFix: true });
+    return true;
+  }
+
+  function hasRecentDepartureLog(session, at) {
+    return (session?.logs || []).slice(-12).some((entry) =>
+      entry?.type === "presence" &&
+      Math.abs(Number(entry.at || 0) - at) <= 3500 &&
+      String(entry.text || "").includes("해오름역 구역 입구") &&
+      String(entry.text || "").includes("떠나")
+    );
+  }
+
+  function currentPairs(state) {
+    const sessions = entrySessions(state);
+    const result = new Set();
+    for (let i = 0; i < sessions.length; i += 1) {
+      for (let j = i + 1; j < sessions.length; j += 1) {
+        if (sessions[i].variant !== sessions[j].variant) continue;
+        result.add(pairKey(sessions[i], sessions[j]));
+      }
+    }
+    return result;
+  }
+
+  const initial = readState();
+  let seenPairs = currentPairs(initial);
+  let previousScopes = new Map(Object.values(initial?.sessions || {}).map((session) => [String(session.id), {
+    scope: scopeKey(session),
+    variant: session.variant,
+    movementToken: String(session.movement?.token || ""),
+  }]));
+
+  function dispatchUpdate(oldRaw, newRaw) {
+    if (oldRaw === newRaw) return;
+    try {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: GLOBAL_KEY,
+        oldValue: oldRaw,
+        newValue: newRaw,
+        storageArea: localStorage,
+        url: location.href,
+      }));
+    } catch {
+      const event = new Event("storage");
+      Object.defineProperty(event, "key", { value: GLOBAL_KEY });
+      window.dispatchEvent(event);
+    }
+  }
+
+  function reconcile() {
+    clearTimeout(timer);
+    if (writing) {
+      timer = setTimeout(reconcile, POLL_MS);
+      return;
+    }
+
+    const oldRaw = localStorage.getItem(GLOBAL_KEY);
+    const state = readState();
+    if (!state) {
+      timer = setTimeout(reconcile, POLL_MS);
+      return;
+    }
+
+    let changed = false;
+    const sessions = entrySessions(state);
+    const byId = new Map(Object.values(state.sessions || {}).map((session) => [String(session.id), session]));
+
+    for (let i = 0; i < sessions.length; i += 1) {
+      for (let j = i + 1; j < sessions.length; j += 1) {
+        const a = sessions[i];
+        const b = sessions[j];
+        if (a.variant !== b.variant) continue;
+        const key = pairKey(a, b);
+        if (seenPairs.has(key)) continue;
+        const at = Date.now();
+        changed = appendPresence(a, `entry_meet_${key}_${a.id}`, at, `${partyName(state, b)}와 해오름역 구역 입구에서 마주쳐 같은 현장에 합류했다.`) || changed;
+        changed = appendPresence(b, `entry_meet_${key}_${b.id}`, at, `${partyName(state, a)}와 해오름역 구역 입구에서 마주쳐 같은 현장에 합류했다.`) || changed;
+        seenPairs.add(key);
+      }
+    }
+
+    byId.forEach((session, sessionId) => {
+      const previous = previousScopes.get(sessionId);
+      const current = scopeKey(session);
+      if (!previous || previous.scope !== `node:${ENTRY_NODE}` || current === `node:${ENTRY_NODE}` || !activeSession(session)) return;
+      const movement = session.movement;
+      const departureAt = Number(movement?.startedAt || Date.now());
+      const token = String(movement?.token || `${sessionId}_${departureAt}`);
+      sessions
+        .filter((witness) => witness.id !== session.id && witness.variant === session.variant)
+        .forEach((witness) => {
+          if (hasRecentDepartureLog(witness, departureAt)) return;
+          const targetNode = movement?.targetNode || session.currentNode;
+          changed = appendPresence(
+            witness,
+            `entry_depart_${token}_${witness.id}`,
+            departureAt,
+            `${partyName(state, session)}가 해오름역 구역 입구를 떠나 ${nodeName(targetNode)} 방향으로 이동을 시작했다.`,
+          ) || changed;
+        });
+    });
+
+    const nextPairs = currentPairs(state);
+    seenPairs = new Set([...seenPairs].filter((key) => nextPairs.has(key)));
+    nextPairs.forEach((key) => seenPairs.add(key));
+    previousScopes = new Map(Object.values(state.sessions || {}).map((session) => [String(session.id), {
+      scope: scopeKey(session),
+      variant: session.variant,
+      movementToken: String(session.movement?.token || ""),
+    }]));
+
+    if (changed) {
+      const newRaw = JSON.stringify(state);
+      writing = true;
+      try { localStorage.setItem(GLOBAL_KEY, newRaw); }
+      finally { writing = false; }
+      dispatchUpdate(oldRaw, newRaw);
+    }
+
+    timer = setTimeout(reconcile, POLL_MS);
+  }
+
+  window.__BAEKJI_ENTRY_PRESENCE_FIX_TEST__ = Object.freeze({ scopeKey, pairKey, currentPairs });
+  reconcile();
+})();
