@@ -177,6 +177,7 @@ export async function adminCommunicationsHandler(request, response, { env = proc
       const targetKind = String(body?.targetKind || "").toUpperCase();
       const targetId = cleanText(body?.targetId, 180);
       const targetLabel = cleanText(body?.targetLabel, 240);
+      const senderLabel = cleanText(body?.senderLabel, 40) || "SYSTEM";
       const message = cleanText(body?.message, 1600);
       if (!["ALL", "ZONE", "PARTY", "CHARACTER"].includes(targetKind)) return sendJson(response, 400, { ok: false, code: "ADMIN_SYSTEM_TARGET_REQUIRED" });
       if (targetKind !== "ALL" && !targetId) return sendJson(response, 400, { ok: false, code: "ADMIN_SYSTEM_TARGET_REQUIRED" });
@@ -197,9 +198,10 @@ export async function adminCommunicationsHandler(request, response, { env = proc
         p_message: message,
         p_recipient_character_ids: recipients.characterIds,
         p_recipient_session_ids: recipients.sessionIds,
-        p_scope_snapshot: { revision: world.revision, scopes: recipients.scopes },
+        p_scope_snapshot: { revision: world.revision, scopes: recipients.scopes, senderLabel },
       }, fetchImpl);
-      const event = Array.isArray(rows) ? rows[0] || null : null;
+      const rawEvent = Array.isArray(rows) ? rows[0] || null : null;
+      const event = rawEvent ? { ...rawEvent, sender_label: senderLabel } : rawEvent;
       return sendJson(response, 200, { ok: true, event });
     }
 
