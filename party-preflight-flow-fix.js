@@ -143,6 +143,10 @@
     return (location.hash.replace(/^#\/?/, "") || "login").split("/").filter(Boolean);
   }
 
+  function setText(node, text) {
+    if (node && node.textContent !== text) node.textContent = text;
+  }
+
   function dispatchStateUpdate(oldRaw, newRaw, reason) {
     try {
       window.dispatchEvent(new StorageEvent("storage", {
@@ -232,6 +236,7 @@
     const controls = document.querySelector(`[data-member-party-controls="${CSS.escape(partyId)}"]`);
     if (!controls) return;
     const ready = effectiveReady(party, userId);
+    const readyText = ready ? "● 준비 완료" : "○ 준비 대기";
 
     if (party.status === "RECRUITING") {
       controls.querySelectorAll("[data-member-ready]").forEach((button) => button.remove());
@@ -245,7 +250,7 @@
       }
       button.classList.toggle("is-ready", ready);
       button.classList.toggle("is-waiting", !ready);
-      button.textContent = ready ? "● 준비 완료" : "○ 준비 대기";
+      setText(button, readyText);
       button.setAttribute("aria-pressed", String(ready));
       return;
     }
@@ -256,7 +261,7 @@
       button.classList.add("party-ready-toggle");
       button.classList.toggle("is-ready", ready);
       button.classList.toggle("is-waiting", !ready);
-      button.textContent = ready ? "● 준비 완료" : "○ 준비 대기";
+      setText(button, readyText);
       button.setAttribute("aria-pressed", String(ready));
     }
   }
@@ -268,7 +273,7 @@
     if (!party || party.creatorId !== userId) return;
 
     const startButton = document.querySelector("[data-start-session]");
-    if (startButton && startButton.textContent !== "조사 출발") startButton.textContent = "조사 출발";
+    setText(startButton, "조사 출발");
 
     const actionRow = document.querySelector("[data-ready]")?.closest(".button-row")
       || document.querySelector("[data-start-session]")?.closest(".button-row")
