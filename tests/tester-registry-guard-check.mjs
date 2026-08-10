@@ -24,12 +24,25 @@ const localValues = new Map([["baekji_city_mvp_state_v3", JSON.stringify({
 })]]);
 const sessionValues = new Map();
 
+class TestEvent {
+  constructor(type, init = {}) {
+    this.type = type;
+    this.bubbles = !!init.bubbles;
+    this.cancelable = !!init.cancelable;
+    this.detail = init.detail;
+  }
+}
+
 const context = vm.createContext({
   console,
-  Event: class Event { constructor(type, init = {}) { this.type = type; this.bubbles = !!init.bubbles; this.cancelable = !!init.cancelable; } },
+  Event: TestEvent,
+  CustomEvent: TestEvent,
+  HashChangeEvent: TestEvent,
   queueMicrotask,
   setTimeout,
   clearTimeout,
+  setInterval() { return 1; },
+  clearInterval() {},
   localStorage: {
     getItem(key) { return localValues.has(key) ? localValues.get(key) : null; },
     setItem(key, value) { localValues.set(key, String(value)); },
@@ -40,7 +53,7 @@ const context = vm.createContext({
     setItem(key, value) { sessionValues.set(key, String(value)); },
     removeItem(key) { sessionValues.delete(key); },
   },
-  location: { hash: "#/login" },
+  location: { hash: "#/login", href: "https://example.test/" },
   document: {
     documentElement: {},
     querySelector() { return null; },
