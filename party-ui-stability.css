@@ -1,0 +1,13 @@
+.party-name-heading-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.party-name-heading-row>h1{margin-right:auto}
+.party-name-edit-button{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 11px;border:2px solid #111;background:#f6f6f2;color:#111;font:inherit;font-size:12px;font-weight:900;cursor:pointer;box-shadow:3px 3px 0 #111}
+.party-name-edit-button:hover,.party-name-edit-button:focus-visible{background:#111;color:#fff;outline:none}
+.party-name-edit-button .party-name-pencil{font-size:14px;line-height:1}
+.party-name-edit-backdrop{position:fixed;inset:0;z-index:560;display:grid;place-items:center;padding:18px;background:rgba(12,12,12,.72)}
+.party-name-edit-modal{width:min(520px,100%);padding:22px;background:#f6f6f2;color:#111;border:4px double #111;box-shadow:8px 8px 0 #111}
+.party-name-edit-modal h2{margin:0;font-size:26px;line-height:1.15}.party-name-edit-modal p{margin:10px 0 16px;line-height:1.5}
+.party-name-edit-input{width:100%;min-height:46px;padding:9px 11px;border:3px solid #111;background:#fff;color:#111;font:inherit;font-size:18px;font-weight:800;box-sizing:border-box}
+.party-name-edit-input:focus{outline:3px solid #777;outline-offset:2px}
+.party-name-edit-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.party-name-edit-error{min-height:20px;margin-top:8px;color:#8b1f1f;font-size:12px;font-weight:800}
+@media(max-width:640px){.party-name-heading-row{align-items:flex-start}.party-name-heading-row>h1{width:100%;font-size:38px!important}.party-name-edit-button{min-height:34px;font-size:11px}.party-name-edit-modal{padding:18px}.party-name-edit-actions{display:grid;grid-template-columns:1fr 1fr}.party-name-edit-actions .button{width:100%}}
