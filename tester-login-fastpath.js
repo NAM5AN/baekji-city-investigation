@@ -11,7 +11,6 @@
     [normalize("캐릭터C"), "테스트 캐릭터 C"],
   ]);
   const busyForms = new WeakSet();
-  const passThroughForms = new WeakSet();
 
   function normalize(value) {
     return String(value || "").replace(/\s+/g, "").toLowerCase();
@@ -112,30 +111,32 @@
     }
   }
 
-  function replayIntoAppLogin(form, user) {
-    const nameInput = form.querySelector("[data-login-id]");
-    const originalName = String(nameInput?.value || "");
-    const userId = String(user?.id || "");
-
-    if (nameInput) nameInput.value = userId;
-    passThroughForms.add(form);
+  function forceHomeRender() {
+    location.hash = "#/home";
     try {
-      const replay = new Event("submit", { bubbles: true, cancelable: true });
-      form.dispatchEvent(replay);
-    } finally {
-      passThroughForms.delete(form);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    } catch {
+      window.dispatchEvent(new Event("hashchange"));
     }
+  }
 
-    if (sessionStorage.getItem(USER_KEY) !== userId) {
-      if (nameInput?.isConnected !== false) nameInput.value = originalName;
-      throw new Error("APP_LOGIN_HANDOFF_FAILED");
-    }
+  function completeVerifiedLogin(user) {
+    const userId = String(user?.id || "");
+    const guard = window.__BAEKJI_TESTER_REGISTRY_GUARD__;
+    if (!userId || !guard?.registerTester?.(user)) throw new Error("TESTER_REGISTRY_UNAVAILABLE");
+
+    ensureCharacter(userId);
+    sessionStorage.setItem(USER_KEY, userId);
+    guard.rememberCurrentTester?.();
+    if (sessionStorage.getItem(USER_KEY) !== userId) throw new Error("LOGIN_SESSION_FAILED");
+
+    forceHomeRender();
+    window.dispatchEvent(new CustomEvent("baekji-tester-fast-login", { detail: { userId } }));
   }
 
   async function handleSubmit(event) {
     const form = event.target;
     if (!form?.matches?.("[data-login-form]")) return;
-    if (passThroughForms.has(form)) return;
 
     const nameInput = form.querySelector("[data-login-id]");
     const passwordInput = form.querySelector("[data-login-password]");
@@ -156,19 +157,12 @@
       const pin = String(passwordInput?.value || "");
       const row = await rpcLogin(loginQueryName(name), pin);
       if (!row?.id) throw new Error("LOGIN_FAILED");
-
-      const user = toUser(row, pin);
-      const guard = window.__BAEKJI_TESTER_REGISTRY_GUARD__;
-      if (!guard?.registerTester?.(user)) throw new Error("TESTER_REGISTRY_UNAVAILABLE");
-
-      ensureCharacter(user.id);
-      replayIntoAppLogin(form, user);
-      window.dispatchEvent(new CustomEvent("baekji-tester-fast-login", { detail: { userId: user.id } }));
+      completeVerifiedLogin(toUser(row, pin));
     } catch (error) {
       if (message?.isConnected !== false) {
         if (error?.name === "AbortError") {
           message.textContent = "로그인 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.";
-        } else if (String(error?.message || "") === "APP_LOGIN_HANDOFF_FAILED") {
+        } else if (String(error?.message || "") === "LOGIN_SESSION_FAILED") {
           message.textContent = "로그인 연결을 완료하지 못했습니다. 다시 시도해 주세요.";
         } else {
           message.textContent = "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
@@ -185,6 +179,7 @@
     loginQueryName,
     shouldHandleLoginName,
     toUser,
+    completeVerifiedLogin,
   });
 
   document.addEventListener("submit", handleSubmit, true);
