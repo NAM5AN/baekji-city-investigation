@@ -54,6 +54,15 @@
     return true;
   }
 
+  function hasRecentMeetingLog(session, at = Date.now()) {
+    return (session?.logs || []).slice(-16).some((entry) => {
+      const text = String(entry?.text || "");
+      return Math.abs(Number(entry?.at || 0) - at) <= 4000 &&
+        text.includes("해오름역 구역 입구") &&
+        (text.includes("합류") || text.includes("마주쳤") || text.includes("마주쳐"));
+    });
+  }
+
   function hasRecentDepartureLog(session, at) {
     return (session?.logs || []).slice(-12).some((entry) =>
       entry?.type === "presence" &&
@@ -126,6 +135,12 @@
         const key = pairKey(a, b);
         if (seenPairs.has(key)) continue;
         const at = Date.now();
+        // Normal movement arrivals already use app.js presence handling. The bridge is
+        // only for the special BRIEFING -> ACTIVE entry activation path or a missed race.
+        if (hasRecentMeetingLog(a, at) || hasRecentMeetingLog(b, at)) {
+          seenPairs.add(key);
+          continue;
+        }
         changed = appendPresence(a, `entry_meet_${key}_${a.id}`, at, `${partyName(state, b)}와 해오름역 구역 입구에서 마주쳐 같은 현장에 합류했다.`) || changed;
         changed = appendPresence(b, `entry_meet_${key}_${b.id}`, at, `${partyName(state, a)}와 해오름역 구역 입구에서 마주쳐 같은 현장에 합류했다.`) || changed;
         seenPairs.add(key);
@@ -173,6 +188,12 @@
     timer = setTimeout(reconcile, POLL_MS);
   }
 
-  window.__BAEKJI_ENTRY_PRESENCE_FIX_TEST__ = Object.freeze({ scopeKey, pairKey, currentPairs });
+  window.__BAEKJI_ENTRY_PRESENCE_FIX_TEST__ = Object.freeze({
+    scopeKey,
+    pairKey,
+    currentPairs,
+    hasRecentMeetingLog,
+    hasRecentDepartureLog,
+  });
   reconcile();
 })();
