@@ -5,7 +5,11 @@
   const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
-  const DEMO_LOGIN_IDS = new Set(["캐릭터A", "캐릭터B", "캐릭터C"].map(normalize));
+  const LEGACY_LOGIN_ALIASES = new Map([
+    [normalize("캐릭터A"), "테스트 캐릭터 A"],
+    [normalize("캐릭터B"), "테스트 캐릭터 B"],
+    [normalize("캐릭터C"), "테스트 캐릭터 C"],
+  ]);
   const busyForms = new WeakSet();
   const passThroughForms = new WeakSet();
 
@@ -13,9 +17,13 @@
     return String(value || "").replace(/\s+/g, "").toLowerCase();
   }
 
+  function loginQueryName(value) {
+    const raw = String(value || "").trim();
+    return LEGACY_LOGIN_ALIASES.get(normalize(raw)) || raw;
+  }
+
   function shouldHandleLoginName(value) {
-    const name = normalize(value);
-    return Boolean(name) && !DEMO_LOGIN_IDS.has(name);
+    return Boolean(normalize(value));
   }
 
   function toUser(row, password = "") {
@@ -109,9 +117,6 @@
     const originalName = String(nameInput?.value || "");
     const userId = String(user?.id || "");
 
-    // tester-auth.js still owns legacy tester-name login interception. The core app,
-    // however, also accepts user.id as a login alias. Use the UUID only for this
-    // synchronous handoff so the legacy name interceptor cannot capture it again.
     if (nameInput) nameInput.value = userId;
     passThroughForms.add(form);
     try {
@@ -130,7 +135,6 @@
   async function handleSubmit(event) {
     const form = event.target;
     if (!form?.matches?.("[data-login-form]")) return;
-
     if (passThroughForms.has(form)) return;
 
     const nameInput = form.querySelector("[data-login-id]");
@@ -150,7 +154,7 @@
 
     try {
       const pin = String(passwordInput?.value || "");
-      const row = await rpcLogin(name, pin);
+      const row = await rpcLogin(loginQueryName(name), pin);
       if (!row?.id) throw new Error("LOGIN_FAILED");
 
       const user = toUser(row, pin);
@@ -162,14 +166,12 @@
       window.dispatchEvent(new CustomEvent("baekji-tester-fast-login", { detail: { userId: user.id } }));
     } catch (error) {
       if (message?.isConnected !== false) {
-        if (message) {
-          if (error?.name === "AbortError") {
-            message.textContent = "로그인 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.";
-          } else if (String(error?.message || "") === "APP_LOGIN_HANDOFF_FAILED") {
-            message.textContent = "로그인 연결을 완료하지 못했습니다. 다시 시도해 주세요.";
-          } else {
-            message.textContent = "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
-          }
+        if (error?.name === "AbortError") {
+          message.textContent = "로그인 서버 응답이 지연되고 있습니다. 다시 시도해 주세요.";
+        } else if (String(error?.message || "") === "APP_LOGIN_HANDOFF_FAILED") {
+          message.textContent = "로그인 연결을 완료하지 못했습니다. 다시 시도해 주세요.";
+        } else {
+          message.textContent = "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
         }
       }
     } finally {
@@ -180,6 +182,7 @@
 
   window.__BAEKJI_TESTER_LOGIN_FASTPATH_TEST__ = Object.freeze({
     normalize,
+    loginQueryName,
     shouldHandleLoginName,
     toUser,
   });
