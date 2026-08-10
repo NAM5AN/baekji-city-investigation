@@ -139,8 +139,10 @@ assert.match(ui, /조사 세션 조작/);
 assert.match(ui, /operation: "CHARACTER_STATUS"/);
 assert.match(ui, /operation: "INVENTORY_SET"/);
 assert.match(ui, /operation: "SESSION_CONTROL"/);
-assert.match(statusUi, /node\.textContent === "READ ONLY"/);
-assert.match(statusUi, /node\.textContent = "CONTROL"/);
+assert.match(statusUi, /동기화 중…/);
+assert.match(statusUi, /document\.body\.append\(node\)/);
+assert.match(statusUi, /data-admin-sync-visible/);
+assert.doesNotMatch(statusUi, /node\.textContent = "CONTROL"/);
 assert.match(statusUi, /new MutationObserver\(sync\)/);
 assert.match(css, /#admin-control-mvp4-root/);
 assert.match(css, /@media\(max-width:760px\)/);
@@ -178,4 +180,4 @@ assert.match(cloud, /reconcileAdminControl/);
 assert.match(cloud, /applyAdminControlPatch/);
 assert.match(cloud, /Number\(patch\.seq \|\| 0\) > localSeq/);
 
-console.log("PASS: MVP4 admin control plus authenticated demo-equivalent world reset through the existing operations API, audit history, and atomic writes");
+console.log("PASS: MVP4 admin control plus authenticated demo-equivalent world reset through the existing operations API, audit history, atomic writes, and non-shifting sync status");
