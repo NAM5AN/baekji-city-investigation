@@ -163,6 +163,7 @@
     const id = String(user?.id || "");
     if (!UUID_RE.test(id) || !user || typeof user !== "object") return false;
     testerUsers.set(id, user);
+    if (!appRegistry) installSessionLookupBridge(user);
     syncRegistry();
     if (safeSessionGet(USER_KEY) === id) rememberCurrentTester();
     return true;
