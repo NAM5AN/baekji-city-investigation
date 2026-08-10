@@ -5,7 +5,7 @@
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const JOIN_INTENT_KEY = "baekji_city_party_join_intent_v1";
   const STYLE_ID = "baekji-party-membership-ux-style";
-  const VERSION = "0.3.83";
+  const VERSION = "0.3.84";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -327,7 +327,7 @@
     } else if (!actionRoot.contains(keep)) {
       actionRoot.prepend(keep);
     }
-    keep.textContent = "조원 보기";
+    if (keep.textContent !== "조원 보기") keep.textContent = "조원 보기";
   }
 
   function decorateLeaderParticipants(snapshot, userId) {
@@ -353,9 +353,10 @@
 
     const section = document.querySelector(".member-grid")?.closest("section.card");
     const help = section?.querySelector(".card-header .muted.small");
-    if (help) help.textContent = canEdit
+    const helpCopy = canEdit
       ? "조원별 준비 상태만 표시합니다. 세션 생성 전에는 조장이 특정 조원을 탈퇴시킬 수 있습니다."
       : "조원별 준비 상태만 표시합니다.";
+    if (help && help.textContent !== helpCopy) help.textContent = helpCopy;
   }
 
   function decorateRosterModal(snapshot, userId) {
@@ -442,7 +443,7 @@
   function scheduleRefresh() {
     if (refreshQueued) return;
     refreshQueued = true;
-    queueMicrotask(refresh);
+    setTimeout(refresh, 16);
   }
 
   window.addEventListener("click", (event) => {
