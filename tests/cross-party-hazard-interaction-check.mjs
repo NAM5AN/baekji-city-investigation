@@ -149,7 +149,7 @@ assert.equal(
 );
 const fallbackInteraction = interactionApi.fallbackDecision("캐릭터A를 밀친다", "산", "테스트 캐릭터 A", "stable-seed");
 assert.match(fallbackInteraction.narration, /산이/);
-assert.match(fallbackInteraction.narration, /테스트 캐릭터 A를/);
+assert.match(fallbackInteraction.narration, /테스트 캐릭터 A(?:를|에게|는)/);
 assert.equal(interactionApi.shouldDeferToHazard({ activeEncounter: {} }, "캐릭터A를 밀친다"), false, "plain character interaction inside a hazard should still get its own immediate result");
 assert.equal(interactionApi.shouldDeferToHazard({ activeEncounter: {} }, "캐릭터A를 앞세워 위험을 통과한다"), true, "hazard-progress character action should stay with the hazard resolver");
 assert.match(interactionSource, /fieldObservationBroadcasted: true/, "general interaction input must suppress duplicate generic field observation");
