@@ -32,7 +32,7 @@
   }
 
   function canonicalTransferText(moverName, sourceParty, targetParty) {
-    return `${moverName}${subjectParticle(moverName)} ${sourceParty}에서 ${targetParty}로 이동했다.`;
+    return `${moverName}${subjectParticle(moverName)} ${sourceParty}에서 ${targetParty} 소속으로 이동했다.`;
   }
 
   function pairTransferRecords(records, lookup = new Map()) {
