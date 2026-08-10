@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "git": {
-    "deploymentEnabled": true
+    "deploymentEnabled": false
   },
   "functions": {
     "api/index.mjs": { "maxDuration": 30 },
@@ -15,7 +15,6 @@
     "api/admin-control.mjs": { "maxDuration": 15 },
     "api/admin-audit.mjs": { "maxDuration": 15 },
     "api/admin-session-ops.mjs": { "maxDuration": 15 },
-    "api/admin-reset.mjs": { "maxDuration": 15 },
     "api/player-presence.mjs": { "maxDuration": 15 },
     "api/player-admin-system.mjs": { "maxDuration": 15 }
   },
@@ -29,7 +28,6 @@
     { "source": "/api/admin-control", "destination": "/api/admin-control.mjs" },
     { "source": "/api/admin-audit", "destination": "/api/admin-audit.mjs" },
     { "source": "/api/admin-session-ops", "destination": "/api/admin-session-ops.mjs" },
-    { "source": "/api/admin-reset", "destination": "/api/admin-reset.mjs" },
     { "source": "/api/player-presence", "destination": "/api/player-presence.mjs" },
     { "source": "/api/player-admin-system", "destination": "/api/player-admin-system.mjs" },
     { "source": "/api/:path*", "destination": "/api/index.mjs" }
