@@ -106,6 +106,11 @@ assert.equal(dashResult.arrived, true, "ALL progress should finish a two-hazard 
 assert.equal(dashState.sessions.s1.activeEncounter, null);
 assert.equal(dashState.sessions.s1.currentNode, "B");
 assert.equal(dashState.characters.test_a.contamination, 0, "clean traversal must not force contact contamination");
+const dashNarration = dashState.sessions.s1.logs.at(-1);
+assert.equal(dashNarration.kind, "FLEX_HAZARD_RESPONSE");
+assert.equal(dashNarration.actorId, null, "hazard result narration must stay visible in the player SYSTEM feed");
+assert.equal(dashNarration.hazardActorId, "test_a", "source actor identity should remain available as metadata");
+assert.equal(dashNarration.systemNarration, true);
 
 const observeState = makeState();
 api.applyDecisionToState(observeState, "s1", "test_a", "주변을 관찰한다", {
@@ -142,5 +147,7 @@ assert.equal(pushState.sessions.s1.activeEncounter.currentIndex, 1, "CURRENT sho
 assert(source.includes("/api/resolve-hazard-flex"), "runtime should use the flexible AI endpoint");
 assert(source.includes("selfExposure"), "exposure must be independent from success/failure");
 assert(source.includes("flexInsights"), "observations should persist for later hazard actions");
+assert(source.includes('appendLog(latestSession, "action-input", cleanAction, uid'), "slash hazard actions must be recorded as SYSTEM action-input, not chat interaction");
+assert(!source.includes('appendLog(latestSession, "interaction", action, uid'), "hazard actions must never be routed into the ordinary chat timeline");
 
-console.log("PASS: flexible hazards support one-action clears, observation memory, teammate impact, and non-forced contamination");
+console.log("PASS: flexible hazards support one-action clears, observation memory, teammate impact, SYSTEM action routing, and non-forced contamination");
