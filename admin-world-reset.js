@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const API_URL = "/api/admin-reset";
+  const API_URL = "/api/admin-session-ops";
   const ROOT_ID = "admin-world-reset-root";
   const STYLE_ID = "admin-world-reset-style";
   let busy = false;
@@ -87,7 +87,7 @@
         credentials: "same-origin",
         cache: "no-store",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ requestId: requestId(), confirmation: "초기화" }),
+        body: JSON.stringify({ operation: "WORLD_RESET", requestId: requestId(), confirmation: "초기화" }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.ok) throw new Error(data?.code || `HTTP_${response.status}`);
