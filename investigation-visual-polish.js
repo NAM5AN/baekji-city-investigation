@@ -112,6 +112,11 @@
   }
 
   function queueSync() {
+    // Party renders replace #app in one shot. Decorate the invite list immediately
+    // in the same event / MutationObserver turn so the raw one-column list is
+    // never painted before the two-column profile-card layout.
+    decorateInviteGrid();
+    markChoiceMotionSuppressed();
     if (syncFrame) return;
     syncFrame = requestAnimationFrame(() => requestAnimationFrame(sync));
   }
