@@ -5,7 +5,7 @@
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
   const SCROLL_SEEN_PREFIX = "baekji_city_party_creation_top_seen_v1:";
-  const VERSION = "0.3.92";
+  const VERSION = "0.3.97";
   const DEMO_USERS = {
     test_a: { name: "테스트 캐릭터 A", initial: "A", profilePhoto: "" },
     test_b: { name: "테스트 캐릭터 B", initial: "B", profilePhoto: "" },
@@ -43,7 +43,7 @@
   if (typeof window !== "undefined") window.__BAEKJI_MEMBER_HOME_ROSTER_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
 
-  let refreshQueued = false;
+  let refreshFrame = 0;
   let observer = null;
 
   function readState(raw = null) {
@@ -166,8 +166,9 @@
       help.textContent = "참가 캐릭터와 준비 상태를 이 화면에서 바로 확인합니다.";
     }
     if (badge) {
-      badge.textContent = `${unique(party.memberIds).length}명`;
-      badge.className = "badge green";
+      const memberCountText = `${unique(party.memberIds).length}명`;
+      if (badge.textContent !== memberCountText) badge.textContent = memberCountText;
+      if (badge.className !== "badge green") badge.className = "badge green";
     }
 
     let roster = card.querySelector("[data-party-member-roster]");
@@ -212,7 +213,6 @@
   }
 
   function refresh(snapshot = readState(), userId = currentUserId()) {
-    refreshQueued = false;
     if (!snapshot || !userId) return;
     scrollFreshPartyToTop(snapshot, userId);
     decorateMemberHome(snapshot, userId);
@@ -220,9 +220,11 @@
   }
 
   function scheduleRefresh() {
-    if (refreshQueued) return;
-    refreshQueued = true;
-    queueMicrotask(() => refresh());
+    if (refreshFrame) return;
+    refreshFrame = requestAnimationFrame(() => {
+      refreshFrame = 0;
+      refresh();
+    });
   }
 
   window.addEventListener("storage", (event) => {
@@ -239,7 +241,10 @@
   const app = document.getElementById("app");
   if (app) {
     observer = new MutationObserver(scheduleRefresh);
-    observer.observe(app, { childList: true, subtree: true });
+    // The base app replaces #app's direct shell on route/state renders. Watching
+    // descendants made this decorator observe its own text/roster mutations and
+    // could create an endless MutationObserver -> microtask feedback loop.
+    observer.observe(app, { childList: true });
   }
 
   window.__BAEKJI_MEMBER_HOME_ROSTER__ = Object.freeze({ version: VERSION, refresh, decorateMemberHome });
