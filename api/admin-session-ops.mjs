@@ -6,6 +6,7 @@ const DEFAULT_SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
 const STATE_KEY = "day1_world";
 const MAX_BODY_BYTES = 12 * 1024;
 const STUCK_MOVEMENT_MS = 10_000;
+const DEMO_USER_IDS = ["test_a", "test_b", "test_c"];
 
 function sendJson(response, status, payload) {
   response.statusCode = status;
@@ -58,6 +59,45 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function blankCharacter(userId) {
+  return {
+    id: userId,
+    contamination: 0,
+    symptom: "안정",
+    inventory: {},
+    currentPartyId: null,
+    currentSessionId: null,
+    onlineAt: null,
+  };
+}
+
+function makeInitialStateForAdminReset() {
+  const characters = {};
+  DEMO_USER_IDS.forEach((userId) => { characters[userId] = blankCharacter(userId); });
+  return {
+    version: 3,
+    storyDay: 1,
+    loopId: "LOOP-001",
+    eventSeq: 0,
+    sessionSeq: 0,
+    characters,
+    parties: {},
+    sessions: {},
+    itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
+  };
+}
+
+function worldSummary(state) {
+  return {
+    storyDay: Number(state?.storyDay || 1),
+    loopId: String(state?.loopId || ""),
+    characterCount: Object.keys(state?.characters || {}).length,
+    partyCount: Object.keys(state?.parties || {}).length,
+    sessionCount: Object.keys(state?.sessions || {}).length,
+    claimedItemCount: Object.values(state?.itemClaimsByVariant || {}).reduce((sum, claims) => sum + Object.keys(claims || {}).length, 0),
+  };
+}
+
 function patchEnvelope(state, requestId, data) {
   return {
     seq: Math.max(0, Number(state.adminControlSeq || 0)) + 1,
@@ -96,6 +136,23 @@ function applySessionOperation(sourceState, body, requestId, now = Date.now()) {
     throw Object.assign(new Error("WORLD_STATE_UNAVAILABLE"), { statusCode: 503 });
   }
   const operation = clean(body.operation, 40).toUpperCase();
+
+  if (operation === "WORLD_RESET") {
+    if (clean(body.confirmation, 20) !== "초기화") throw Object.assign(new Error("RESET_CONFIRMATION_REQUIRED"), { statusCode: 400 });
+    const nextState = makeInitialStateForAdminReset();
+    return {
+      state: nextState,
+      patch: null,
+      action: "WORLD_RESET",
+      targetKind: "WORLD",
+      targetId: STATE_KEY,
+      before: worldSummary(state),
+      after: worldSummary(nextState),
+      summary: "조사 사이트 전체 데모 상태를 초기화했습니다.",
+      metadata: { resetMode: "SAME_AS_PLAYER_DEMO_RESET", preservesAccounts: true },
+    };
+  }
+
   const sessionId = clean(body.sessionId, 180);
   const session = state.sessions?.[sessionId];
   if (!session) throw Object.assign(new Error("ADMIN_TARGET_SESSION_NOT_FOUND"), { statusCode: 404 });
@@ -282,7 +339,7 @@ export async function adminSessionOpsHandler(request, response, { env = process.
     const known = new Set([
       "REQUEST_TOO_LARGE", "INVALID_JSON", "WORLD_STATE_UNAVAILABLE", "ADMIN_TARGET_SESSION_NOT_FOUND",
       "SESSION_NOT_ACTIVE", "SESSION_MOVEMENT_MUST_RECOVER_FIRST", "SESSION_NOT_PAUSED", "SESSION_ALREADY_COMPLETED",
-      "SESSION_NOTHING_TO_RECOVER", "ADMIN_SESSION_OPERATION_INVALID",
+      "SESSION_NOTHING_TO_RECOVER", "ADMIN_SESSION_OPERATION_INVALID", "RESET_CONFIRMATION_REQUIRED",
     ]);
     const status = Number(error?.statusCode || (known.has(message) ? 400 : 502));
     return sendJson(response, status >= 400 && status < 600 ? status : 502, { ok: false, code: known.has(message) ? message : "ADMIN_SESSION_OPS_UNAVAILABLE" });
@@ -293,4 +350,4 @@ export default async function handler(request, response) {
   return adminSessionOpsHandler(request, response);
 }
 
-export { applySessionOperation, diagnosticIssues, buildDiagnostics };
+export { applySessionOperation, diagnosticIssues, buildDiagnostics, makeInitialStateForAdminReset, worldSummary, blankCharacter };
