@@ -312,7 +312,7 @@
 
     appendLog(session, decision.outcome === "FAIL" ? "fail" : decision.outcome === "INFO" ? "scene" : "success", narration, null, {
       kind: "FLEX_HAZARD_RESPONSE",
-      actorId: uid,
+      hazardActorId: uid,
       hazardId: currentHazardId,
       outcome: decision.outcome,
       progress: decision.progress,
@@ -320,6 +320,7 @@
       targetId: targetId || null,
       targetContaminationDelta: targetDelta,
       arrived,
+      systemNarration: true,
     });
 
     return { applied: true, arrived, selfDelta, targetId, targetDelta, ambientChanges };
@@ -375,7 +376,10 @@
       const actualHazard = latestSession.activeEncounter.hazards[latestSession.activeEncounter.currentIndex];
       if (actualHazard !== expectedHazard) return true;
 
-      appendLog(latestSession, "interaction", action, uid, { scopeKey: `route:${latestSession.activeEncounter.fromNode}:${latestSession.activeEncounter.targetNode}` });
+      appendLog(latestSession, "action-input", cleanAction, uid, {
+        scopeKey: `route:${latestSession.activeEncounter.fromNode}:${latestSession.activeEncounter.targetNode}`,
+        flexibleHazardAction: true,
+      });
       applyDecisionToState(latest, sessionId, uid, cleanAction, decision);
       clearComposer();
       localStorage.setItem(GLOBAL_KEY, JSON.stringify(latest));
