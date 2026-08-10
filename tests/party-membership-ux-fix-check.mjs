@@ -122,4 +122,63 @@ assert.doesNotMatch(source, /queueMicrotask\(refresh\)/, "membership observer re
 assert.match(source, /setTimeout\(refresh, 16\)/, "membership observer refresh should be frame-throttled");
 assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.85/, "membership UX fix must be cache-bumped after leave/reinvite repair");
 
-console.log("PASS: polished leave controls, in-site confirmation/notices, readiness layout, reinvite preservation, stale merge repair, and observer-loop guard");
+const reinviteSource = fs.readFileSync(new URL("../party-reinvite-runtime-fix.js", import.meta.url), "utf8");
+const reinviteSandbox = { window: {}, console, structuredClone };
+vm.createContext(reinviteSandbox);
+vm.runInContext(reinviteSource, reinviteSandbox, { filename: "party-reinvite-runtime-fix.js" });
+const reinviteApi = reinviteSandbox.window.__BAEKJI_PARTY_REINVITE_RUNTIME_TEST__;
+assert.ok(reinviteApi, "same-party reinvite runtime test API must exist");
+
+const reinviteBase = structuredClone(selfLeft);
+reinviteBase.parties.p1.status = "RECRUITING";
+const atomicReinvite = reinviteApi.reinviteState(reinviteBase, "p1", "member_b", "leader", 1500);
+assert.equal(atomicReinvite.parties.p1.invitedIds.includes("member_b"), true, "same-party reinvite must add the invitation atomically");
+assert.equal(atomicReinvite.parties.p1.membershipReinvitedAtBy.member_b, 1500, "same-party reinvite must stamp the new invite in the same write");
+
+const atomicAccept = reinviteApi.acceptReinviteState(atomicReinvite, "p1", "member_b", 2000);
+assert.equal(atomicAccept.characters.member_b.currentPartyId, "p1", "accepting a same-party reinvite must restore membership immediately");
+assert.equal(atomicAccept.parties.p1.memberIds.includes("member_b"), true);
+assert.equal(atomicAccept.parties.p1.invitedIds.includes("member_b"), false, "accepted member must disappear from the invite list");
+assert.equal(atomicAccept.partyMembershipRemovals["p1:member_b"].active, false, "accept and tombstone clear must be one atomic state change");
+assert.equal(atomicAccept.parties.p1.membershipJoinedAtBy.member_b, 2000);
+
+const visibleBrokenInvite = structuredClone(reinviteBase);
+visibleBrokenInvite.parties.p1.invitedIds = ["member_b"];
+const acceptedVisibleBrokenInvite = reinviteApi.acceptReinviteState(visibleBrokenInvite, "p1", "member_b", 2100);
+assert.equal(acceptedVisibleBrokenInvite.characters.member_b.currentPartyId, "p1", "a reinvite popup already visible from the old broken build must still be accept-able");
+assert.equal(acceptedVisibleBrokenInvite.partyMembershipRemovals["p1:member_b"].active, false);
+
+const stalePostJoinUnion = structuredClone(atomicAccept);
+stalePostJoinUnion.parties.p1.invitedIds.push("member_b");
+stalePostJoinUnion.parties.p1.declinedIds.push("member_b");
+stalePostJoinUnion.parties.p1.membershipReinvitedAtBy = { member_b: 1500 };
+const postJoinRepair = reinviteApi.repairRejoinedState(stalePostJoinUnion);
+assert.equal(postJoinRepair.changed, true, "cloud array union after a successful rejoin must be normalized");
+assert.equal(postJoinRepair.snapshot.parties.p1.memberIds.includes("member_b"), true, "post-join repair must keep the member joined");
+assert.equal(postJoinRepair.snapshot.characters.member_b.currentPartyId, "p1");
+assert.equal(postJoinRepair.snapshot.parties.p1.invitedIds.includes("member_b"), false, "stale invite must not reappear after acceptance");
+assert.equal(postJoinRepair.snapshot.parties.p1.declinedIds.includes("member_b"), false);
+
+const staleActiveTombstone = structuredClone(atomicAccept);
+staleActiveTombstone.partyMembershipRemovals["p1:member_b"].active = true;
+staleActiveTombstone.parties.p1.invitedIds = ["member_b"];
+const activeRepair = reinviteApi.repairRejoinedState(staleActiveTombstone);
+assert.equal(activeRepair.snapshot.partyMembershipRemovals["p1:member_b"].active, false, "a later joinedAt must beat a stale active tombstone");
+assert.equal(activeRepair.snapshot.parties.p1.memberIds.includes("member_b"), true);
+assert.equal(activeRepair.snapshot.parties.p1.invitedIds.includes("member_b"), false);
+
+const laterSecondLeave = structuredClone(atomicAccept);
+laterSecondLeave.partyMembershipRemovals["p1:member_b"] = { partyId: "p1", memberId: "member_b", active: true, at: 3000 };
+laterSecondLeave.parties.p1.memberIds = laterSecondLeave.parties.p1.memberIds.filter((id) => id !== "member_b");
+laterSecondLeave.characters.member_b.currentPartyId = null;
+const secondLeaveRepair = reinviteApi.repairRejoinedState(laterSecondLeave);
+assert.equal(secondLeaveRepair.snapshot.partyMembershipRemovals["p1:member_b"].active, true, "an older joinedAt must never undo a later leave");
+assert.equal(secondLeaveRepair.snapshot.parties.p1.memberIds.includes("member_b"), false);
+
+assert.match(reinviteSource, /reinvite-atomic/, "same-party invite click must be owned by the atomic runtime path");
+assert.match(reinviteSource, /reinvite-accept-atomic/, "same-party accept click must be owned by the atomic runtime path");
+assert.match(reinviteSource, /rejoin-invariant-repair/, "post-join cloud merge repair must stay wired");
+assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.89/, "reinvite runtime fix must be loaded with a fresh cache key");
+assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.89") < index.indexOf("party-membership-ux-fix.js?v=0.3.85"), "atomic reinvite capture must run before the legacy membership sidecar capture listener");
+
+console.log("PASS: polished leave controls, in-site confirmation/notices, atomic same-party reinvite acceptance, stale merge repair, readiness layout, and observer-loop guard");
