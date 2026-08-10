@@ -47,7 +47,7 @@ const sessionWorld = world();
 sessionWorld.parties.p1.sessionId = "s1";
 assert.equal(api.membershipChangeAllowed(sessionWorld.parties.p1), false, "membership is locked after a session exists");
 
-const selfLeft = api.removeMemberState(world(), "p1", "member_b", "member_b", 1000);
+const selfLeft = api.removeMemberState(world(), "p1", "member_b", "member_b", 1000, "캐릭터 B");
 assert.deepEqual(plain(selfLeft.parties.p1.memberIds), ["leader", "member_c"], "member can leave their own party");
 assert.equal(selfLeft.characters.member_b.currentPartyId, null);
 assert.equal(selfLeft.parties.p1.status, "RECRUITING", "membership changes reopen composition");
@@ -55,11 +55,15 @@ assert.deepEqual(plain(selfLeft.parties.p1.confirmedBy), [], "composition confir
 assert.deepEqual(plain(selfLeft.parties.p1.readyBy), [], "ready state resets after membership changes");
 assert.equal(selfLeft.partyMembershipRemovals["p1:member_b"].kind, "SELF_LEAVE");
 assert.equal(selfLeft.partyMembershipRemovals["p1:member_b"].active, true);
+const selfNotice = Object.values(selfLeft.partyMembershipNotices)[0];
+assert.equal(selfNotice.memberName, "캐릭터 B", "leave notice stores the visible character name");
+assert.equal(selfNotice.leaderId, "leader", "leave notice targets the party leader too");
 
-const kicked = api.removeMemberState(world(), "p1", "member_c", "leader", 1100);
+const kicked = api.removeMemberState(world(), "p1", "member_c", "leader", 1100, "캐릭터 C");
 assert.deepEqual(plain(kicked.parties.p1.memberIds), ["leader", "member_b"], "leader can remove another member");
 assert.equal(kicked.characters.member_c.currentPartyId, null);
 assert.equal(kicked.partyMembershipRemovals["p1:member_c"].kind, "LEADER_KICK");
+assert.equal(Object.values(kicked.partyMembershipNotices)[0].memberName, "캐릭터 C");
 
 const cannotKickLeader = api.removeMemberState(world(), "p1", "leader", "leader", 1200);
 assert.deepEqual(plain(cannotKickLeader.parties.p1.memberIds), ["leader", "member_b", "member_c"], "leader cannot remove themselves with the kick action");
@@ -69,19 +73,31 @@ assert.deepEqual(plain(cannotLeaveAfterSession.parties.p1.memberIds), ["leader",
 
 const staleMerge = structuredClone(selfLeft);
 staleMerge.parties.p1.memberIds.push("member_b");
+staleMerge.parties.p1.invitedIds.push("member_b");
 staleMerge.parties.p1.confirmedBy.push("member_b");
 staleMerge.parties.p1.readyBy.push("member_b");
 staleMerge.characters.member_b.currentPartyId = "p1";
 const repaired = api.repairMembershipRemovals(staleMerge);
 assert.equal(repaired.changed, true, "removal tombstone must repair stale cloud array unions");
 assert.equal(repaired.snapshot.parties.p1.memberIds.includes("member_b"), false);
+assert.equal(repaired.snapshot.parties.p1.invitedIds.includes("member_b"), false, "an old pre-removal invite must not come back through a stale merge");
 assert.equal(repaired.snapshot.characters.member_b.currentPartyId, null);
 
-const explicitRejoin = structuredClone(selfLeft);
+const reinvited = structuredClone(selfLeft);
+reinvited.parties.p1.invitedIds.push("member_b");
+const stamped = api.markReinviteState(reinvited, "p1", "member_b", 1500);
+assert.equal(stamped.parties.p1.membershipReinvitedAtBy.member_b, 1500, "a new invitation after removal gets a fresh timestamp");
+const repairedReinvite = api.repairMembershipRemovals(stamped);
+assert.equal(repairedReinvite.snapshot.parties.p1.invitedIds.includes("member_b"), true, "a genuine later reinvite must survive tombstone repair");
+assert.equal(repairedReinvite.snapshot.parties.p1.memberIds.includes("member_b"), false, "reinvite alone must not silently rejoin the member");
+assert.equal(repairedReinvite.snapshot.partyMembershipRemovals["p1:member_b"].active, true, "tombstone remains active until the invitation is accepted");
+
+const explicitRejoin = structuredClone(repairedReinvite.snapshot);
 explicitRejoin.parties.p1.memberIds.push("member_b");
+explicitRejoin.parties.p1.invitedIds = explicitRejoin.parties.p1.invitedIds.filter((id) => id !== "member_b");
 explicitRejoin.characters.member_b.currentPartyId = "p1";
 const joined = api.markMemberJoinedState(explicitRejoin, "p1", "member_b", 2000);
-assert.equal(joined.partyMembershipRemovals["p1:member_b"].active, false, "a later explicit rejoin clears the old removal tombstone");
+assert.equal(joined.partyMembershipRemovals["p1:member_b"].active, false, "accepting the later reinvite clears the old removal tombstone");
 assert.equal(joined.parties.p1.membershipJoinedAtBy.member_b, 2000);
 const rejoinRepair = api.repairMembershipRemovals(joined);
 assert.equal(rejoinRepair.snapshot.parties.p1.memberIds.includes("member_b"), true, "cleared tombstone must not remove a later rejoin");
@@ -90,6 +106,13 @@ assert.equal(api.readyStateText(world().parties.p1, "member_b"), "● 준비 완
 assert.equal(api.readyStateText(world().parties.p1, "member_c"), "○ 준비 대기");
 assert.match(source, /data-party-member-kick/, "leader participant rows need a remove-member action");
 assert.match(source, /data-party-self-leave/, "roster modal needs a self-leave action");
+assert.match(source, /data-party-membership-confirm/, "leave confirmation must use an in-site modal");
+assert.match(source, /data-party-membership-notice/, "membership changes must surface an in-site notice popup");
+assert.doesNotMatch(source, /window\.confirm/, "party leave must not use the browser confirm dialog");
+assert.match(source, /data-party-member-id=.*>탈퇴<\/button>/, "leader remove-member action should be labeled simply as 탈퇴");
+assert.match(source, /button\.textContent = "탈퇴"/, "roster self-leave action should be labeled simply as 탈퇴");
+assert.match(source, /const markup = `\$\{kick\}\$\{readyMarkup\}`/, "leader row should place 탈퇴 before the readiness indicator");
+assert.match(source, /membershipReinvitedAtBy/, "reinvites need a post-removal timestamp so tombstone repair can distinguish them from stale invites");
 assert.match(source, /card\.hidden = Boolean\(party\)/, "received invitations must hide while the user belongs to a party");
 assert.match(source, /rosterButtons\.forEach/, "member home must deduplicate roster buttons");
 assert.match(source, /party-membership-ready-only/, "leader participant status must be reduced to readiness only");
@@ -97,6 +120,6 @@ assert.match(source, /if \(keep\.textContent !== "조원 보기"\) keep\.textCon
 assert.match(source, /if \(help && help\.textContent !== helpCopy\) help\.textContent = helpCopy;/, "leader decoration must only mutate help text when it actually changes");
 assert.doesNotMatch(source, /queueMicrotask\(refresh\)/, "membership observer refresh must yield to the browser instead of creating an unbounded microtask chain");
 assert.match(source, /setTimeout\(refresh, 16\)/, "membership observer refresh should be frame-throttled");
-assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.84/, "membership UX fix must be cache-bumped after the observer-loop repair");
+assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.85/, "membership UX fix must be cache-bumped after leave/reinvite repair");
 
-console.log("PASS: readiness-only roster, self leave, leader kick, invite hiding, roster dedupe, cloud removal repair, and observer-loop guard");
+console.log("PASS: polished leave controls, in-site confirmation/notices, readiness layout, reinvite preservation, stale merge repair, and observer-loop guard");
