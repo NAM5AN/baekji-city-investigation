@@ -120,16 +120,14 @@ context.__registry = {
 assert.equal(vm.runInContext("window.__BAEKJI_TESTER_REGISTRY_GUARD__.attachRegistry(__registry)", context), true);
 
 vm.runInContext(authSource, context, { filename: "tester-auth.js" });
-await new Promise((resolve) => setTimeout(resolve, 0));
-await new Promise((resolve) => setTimeout(resolve, 0));
-await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 30));
 
 assert.equal(currentText, "0%", "tester contamination display should be repaired to the current value");
 assert.equal(bar.style.width, "0%", "tester contamination bar should be repaired to the current value");
 assert.equal(numberWrites, 1, "MutationObserver re-entry must not write the same contamination text again");
 
 mutationCallback?.();
-await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 30));
 assert.equal(numberWrites, 1, "an unrelated later mutation must also remain a no-op when contamination text is already current");
 
 console.log("PASS: tester contamination decoration settles after one DOM write without a MutationObserver loop");
