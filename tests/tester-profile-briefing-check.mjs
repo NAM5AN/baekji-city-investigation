@@ -30,7 +30,7 @@ for (const spoiler of ["다른 시간", "시간대", "어긋", "사라지고", "
 assert(briefing.includes("‘/지도’"), "briefing tutorial should explain map guidance");
 assert(briefing.includes("한 메시지에는 한 가지 행동만"), "briefing tutorial should explain one-action input");
 assert(index.includes("briefing-tutorial.js?v=0.3.54"), "briefing tutorial cache key must remain current");
-assert(index.includes("tester-auth.js?v=0.3.86"), "tester auth cache key must be refreshed");
+assert(index.includes("tester-auth.js?v=0.3.87"), "tester auth cache key must be refreshed");
 assert(index.includes("tester-login-fastpath.js?v=0.3.86"), "tester login fastpath cache key must be refreshed");
 assert(index.includes("party-invite-search.js?v=0.3.86"), "party invite search must be loaded");
 
