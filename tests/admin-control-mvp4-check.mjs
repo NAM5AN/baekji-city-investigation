@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { applyOperation } from "../api/admin-control.mjs";
-import { makeInitialStateForAdminReset, worldSummary } from "../api/admin-reset.mjs";
+import { makeInitialStateForAdminReset, worldSummary } from "../api/admin-session-ops.mjs";
 
 const base = {
   version: 3,
@@ -121,7 +121,7 @@ const statusUi = await readFile(new URL("../admin-control-status-mvp4.js", impor
 const resetUi = await readFile(new URL("../admin-world-reset.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../admin-control-mvp4.css", import.meta.url), "utf8");
 const api = await readFile(new URL("../api/admin-control.mjs", import.meta.url), "utf8");
-const resetApi = await readFile(new URL("../api/admin-reset.mjs", import.meta.url), "utf8");
+const opsApi = await readFile(new URL("../api/admin-session-ops.mjs", import.meta.url), "utf8");
 const auditApi = await readFile(new URL("../api/admin-audit.mjs", import.meta.url), "utf8");
 const migration = await readFile(new URL("../supabase/migrations/0002_admin_control_mvp4.sql", import.meta.url), "utf8");
 const vercelRaw = await readFile(new URL("../vercel.json", import.meta.url), "utf8");
@@ -146,12 +146,15 @@ assert.match(css, /#admin-control-mvp4-root/);
 assert.match(css, /@media\(max-width:760px\)/);
 
 assert.match(resetUi, /조사 상태 초기화/);
+assert.match(resetUi, /API_URL = "\/api\/admin-session-ops"/);
+assert.match(resetUi, /operation: "WORLD_RESET"/);
 assert.match(resetUi, /confirmation: "초기화"/);
 assert.match(resetUi, /테스터 계정, 관리자 계정, 관리자 채팅과 감사 로그는 삭제하지 않습니다/);
-assert.match(resetApi, /makeInitialStateForAdminReset/);
-assert.match(resetApi, /p_action: "WORLD_RESET"/);
-assert.match(resetApi, /SAME_AS_PLAYER_DEMO_RESET/);
-assert.match(resetApi, /confirmation !== "초기화"/);
+assert.match(opsApi, /makeInitialStateForAdminReset/);
+assert.match(opsApi, /operation === "WORLD_RESET"/);
+assert.match(opsApi, /action: "WORLD_RESET"/);
+assert.match(opsApi, /SAME_AS_PLAYER_DEMO_RESET/);
+assert.match(opsApi, /RESET_CONFIRMATION_REQUIRED/);
 
 assert.match(api, /baekji_admin_state_apply/);
 assert.match(api, /for \(let attempt = 0; attempt < 3; attempt \+= 1\)/);
@@ -165,12 +168,14 @@ assert.match(migration, /world_revision_before/);
 assert.match(migration, /request_id text not null unique/);
 assert.ok(vercel.rewrites.some((rule) => rule.source === "/api/admin-control" && rule.destination === "/api/admin-control.mjs"));
 assert.ok(vercel.rewrites.some((rule) => rule.source === "/api/admin-audit" && rule.destination === "/api/admin-audit.mjs"));
-assert.ok(vercel.rewrites.some((rule) => rule.source === "/api/admin-reset" && rule.destination === "/api/admin-reset.mjs"));
+assert.ok(vercel.rewrites.some((rule) => rule.source === "/api/admin-session-ops" && rule.destination === "/api/admin-session-ops.mjs"));
 assert.ok(vercel.functions["api/admin-control.mjs"]);
 assert.ok(vercel.functions["api/admin-audit.mjs"]);
-assert.ok(vercel.functions["api/admin-reset.mjs"]);
+assert.ok(vercel.functions["api/admin-session-ops.mjs"]);
+assert.equal(vercel.functions["api/admin-reset.mjs"], undefined, "world reset must reuse an existing serverless function on Hobby");
+assert.ok(Object.keys(vercel.functions).length <= 12, "Hobby deployment must stay at or below the 12-function limit");
 assert.match(cloud, /reconcileAdminControl/);
 assert.match(cloud, /applyAdminControlPatch/);
 assert.match(cloud, /Number\(patch\.seq \|\| 0\) > localSeq/);
 
-console.log("PASS: MVP4 admin control plus authenticated demo-equivalent world reset, audit history, and atomic writes");
+console.log("PASS: MVP4 admin control plus authenticated demo-equivalent world reset through the existing operations API, audit history, and atomic writes");
