@@ -9,6 +9,7 @@ const demoAId = "aaaaaaaa-1111-4111-8111-111111111111";
 const demoBId = "bbbbbbbb-2222-4222-8222-222222222222";
 const demoCId = "cccccccc-3333-4333-8333-333333333333";
 const globalKey = "baekji_city_mvp_state_v3";
+const userKey = "baekji_city_mvp_current_user_v034";
 const blankCharacter = (id) => ({
   id,
   contamination: 0,
@@ -35,7 +36,9 @@ const initialWorld = {
 };
 
 const localValues = new Map([[globalKey, JSON.stringify(initialWorld)]]);
-const sessionValues = new Map();
+// This regression covers the authenticated path. Logged-out read-only behavior is
+// covered separately by cross-tab-guest-world-write-check.mjs.
+const sessionValues = new Map([[userKey, testerId]]);
 class TestEvent {
   constructor(type, init = {}) { this.type = type; Object.assign(this, init); }
 }
@@ -65,7 +68,7 @@ const context = vm.createContext({
     setItem(key, value) { sessionValues.set(key, String(value)); },
     removeItem(key) { sessionValues.delete(key); },
   },
-  location: { hash: "#/login", href: "https://example.test/" },
+  location: { hash: "#/home", href: "https://example.test/" },
   document: {
     documentElement: {},
     querySelector() { return null; },
@@ -132,4 +135,4 @@ assert.equal(result.testerCharacterId, testerId);
 assert.equal(result.demoACharacterId, demoAId);
 
 assert.doesNotMatch(source, /requiredIds = new Set\(\[\.\.\.DEMO_USER_IDS/, "tester auth must not force legacy demo IDs into every world state");
-console.log("PASS: A/B/C and newly signed-up users share one Supabase tester directory and one UUID character path");
+console.log("PASS: authenticated A/B/C and newly signed-up users share one Supabase tester directory and one UUID character path");
