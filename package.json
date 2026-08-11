@@ -1,6 +1,6 @@
 {
   "name": "baekji-city-investigation-mvp",
-  "version": "0.3.18",
+  "version": "0.4.0",
   "private": true,
   "description": "백지도시 해오름역 1일차 조사 홈페이지 MVP · AI 자유문장 행동 판정·안전한 로컬 서버",
   "scripts": {
