@@ -67,8 +67,6 @@
     const originalUrl = URL.createObjectURL(file);
     let original = null;
     try {
-      // iOS WebKit stays off createImageBitmap. Native <img> decoding respects
-      // camera orientation and avoids the former full-resolution bitmap spike.
       original = await loadImage(originalUrl);
       const width = Number(original.naturalWidth || original.width);
       const height = Number(original.naturalHeight || original.height);
@@ -123,7 +121,7 @@
             <button type="button" class="button ghost" data-photo-editor-reset>원위치</button>
           </div>
         </div>
-        <p class="tester-photo-editor__hint">격자 안을 드래그해 이동 · 모서리를 드래그해 크기 조절 · 두 손가락으로 확대/축소 · 최종 256×256 저장</p>
+        <p class="tester-photo-editor__hint">격자 안을 드래그해 이동 · 흰 모서리 사각형을 드래그해 크기 조절 · 두 손가락으로 확대/축소 · 최종 256×256 저장</p>
         <div class="tester-photo-editor__actions">
           <button type="button" class="button ghost" data-photo-editor-cancel>취소</button>
           <button type="button" class="button primary" data-photo-editor-apply>이대로 사용</button>
@@ -165,6 +163,9 @@
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointercancel", onPointerUp);
+    canvas.addEventListener("pointerleave", () => {
+      if (!pointers.size && canvas) canvas.style.cursor = "default";
+    });
   }
 
   function fitImageRect() {
@@ -343,6 +344,28 @@
     return Object.entries(handles).find(([, handle]) => Math.hypot(point.x - handle.x, point.y - handle.y) <= HANDLE_RADIUS)?.[0] || null;
   }
 
+  function cursorForPoint(point) {
+    const handle = hitHandle(point);
+    if (handle === "tl" || handle === "br") return "nwse-resize";
+    if (handle === "tr" || handle === "bl") return "nesw-resize";
+    if (pointInCrop(point)) return "move";
+    return "default";
+  }
+
+  function updatePointerCursor(point) {
+    if (!canvas) return;
+    if (active?.gesture?.type === "resize") {
+      const handle = active.gesture.handle;
+      canvas.style.cursor = (handle === "tl" || handle === "br") ? "nwse-resize" : "nesw-resize";
+      return;
+    }
+    if (active?.gesture?.type === "move" && pointers.size) {
+      canvas.style.cursor = "move";
+      return;
+    }
+    canvas.style.cursor = cursorForPoint(point);
+  }
+
   function pointInImage(point) {
     const rect = active?.imageRect;
     return Boolean(rect && point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);
@@ -414,7 +437,10 @@
   function onPointerDown(event) {
     if (!active) return;
     const point = canvasPoint(event);
-    if (!pointInImage(point)) return;
+    const handle = hitHandle(point);
+    const insideCrop = pointInCrop(point);
+    if (!handle && !insideCrop) return;
+
     event.preventDefault();
     canvas.setPointerCapture?.(event.pointerId);
     pointers.set(event.pointerId, point);
@@ -424,25 +450,26 @@
       return;
     }
 
-    const handle = hitHandle(point);
     if (handle) {
       active.gesture = { type: "resize", handle };
+      updatePointerCursor(point);
       return;
     }
 
-    if (!pointInCrop(point)) {
-      active.crop.x = point.x - active.crop.size / 2;
-      active.crop.y = point.y - active.crop.size / 2;
-      clampCropPosition();
-      drawEditor();
-    }
     active.gesture = { type: "move", last: point };
+    updatePointerCursor(point);
   }
 
   function onPointerMove(event) {
-    if (!active || !pointers.has(event.pointerId)) return;
-    event.preventDefault();
+    if (!active) return;
     const next = canvasPoint(event);
+
+    if (!pointers.has(event.pointerId)) {
+      updatePointerCursor(next);
+      return;
+    }
+
+    event.preventDefault();
     pointers.set(event.pointerId, next);
 
     if (pointers.size >= 2) {
@@ -463,6 +490,7 @@
     if (active.gesture?.type === "resize") {
       resizeFromHandle(active.gesture.handle, next);
       drawEditor();
+      updatePointerCursor(next);
       return;
     }
 
@@ -473,21 +501,25 @@
       active.gesture.last = next;
       clampCropPosition();
       drawEditor();
+      updatePointerCursor(next);
     }
   }
 
   function onPointerUp(event) {
     if (!active) return;
+    const point = canvasPoint(event);
     pointers.delete(event.pointerId);
     if (pointers.size >= 2) beginPinch();
     else if (pointers.size === 1) active.gesture = { type: "move", last: Array.from(pointers.values())[0] };
     else active.gesture = null;
+    updatePointerCursor(point);
   }
 
   function resetEditor() {
     if (!active) return;
     resetCrop();
     drawEditor();
+    if (canvas) canvas.style.cursor = "default";
   }
 
   async function rotateEditor() {
@@ -518,6 +550,7 @@
       URL.revokeObjectURL(oldUrl);
       resetCrop();
       drawEditor();
+      if (canvas) canvas.style.cursor = "default";
     } catch (error) {
       console.warn("[profile-photo-editor] rotate failed", error);
     } finally {
@@ -544,6 +577,7 @@
       modal.hidden = false;
       resetCrop();
       drawEditor();
+      if (canvas) canvas.style.cursor = "default";
     });
   }
 
@@ -553,6 +587,7 @@
     active = null;
     pointers.clear();
     if (modal) modal.hidden = true;
+    if (canvas) canvas.style.cursor = "default";
     document.body.style.overflow = bodyOverflow;
     document.body.classList.remove("tester-photo-editor-open");
     try { current.image.src = ""; } catch {}
