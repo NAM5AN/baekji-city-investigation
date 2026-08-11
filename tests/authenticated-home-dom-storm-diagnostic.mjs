@@ -83,7 +83,7 @@ window.localStorage.setItem(GLOBAL_KEY, JSON.stringify(world));
 const index = fs.readFileSync("index.html", "utf8");
 const scripts = [...index.matchAll(/<script\s+src="([^"]+\.js)(?:\?[^\"]*)?"/g)].map((m) => m[1]);
 const skip = new Set([
-  "cloud-state-sync.js", // the external update is injected explicitly below
+  "cloud-state-sync.js",
   "retro-sound.js",
   "retro-sound-boost.js",
 ]);
@@ -108,7 +108,6 @@ const counter = new window.MutationObserver((records) => {
 });
 counter.observe(window.document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
 
-// Simulate the one real cross-tab world update that B login/bootstrap sends to A.
 const before = window.localStorage.getItem(GLOBAL_KEY);
 const next = JSON.parse(before);
 next.characters[B].onlineAt = Date.now();
@@ -129,9 +128,13 @@ console.log("final route:", window.location.hash);
 console.log("final topbar avatar:", Boolean(window.document.querySelector(".topbar-meta .tester-profile-avatar")));
 
 const tailGrowth = checkpoints.at(-1).mutations - checkpoints.at(-4).mutations;
-assert.equal(runtimeErrors.length, 0, `runtime should load without errors: ${runtimeErrors.join("\n")}`);
-assert.ok(tailGrowth < 20, `DOM mutations failed to settle; +${tailGrowth} mutations in final 300ms`);
-assert.ok(checkpoints.at(-1).appReplacements <= 3, `app root was repeatedly rebuilt ${checkpoints.at(-1).appReplacements} times`);
-assert.equal(checkpoints.at(-1).avatar, true, "profile avatar must be restored after the external render");
+try {
+  assert.equal(runtimeErrors.length, 0, `runtime should load without errors: ${runtimeErrors.join("\n")}`);
+  assert.ok(tailGrowth < 20, `DOM mutations failed to settle; +${tailGrowth} mutations in final 300ms`);
+  assert.ok(checkpoints.at(-1).appReplacements <= 3, `app root was repeatedly rebuilt ${checkpoints.at(-1).appReplacements} times`);
+  assert.equal(checkpoints.at(-1).avatar, true, "profile avatar must be restored after the external render");
+} finally {
+  window.close();
+}
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
