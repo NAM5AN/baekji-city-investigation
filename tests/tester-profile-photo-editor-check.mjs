@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 const source = fs.readFileSync("profile-photo-editor.js", "utf8");
 const css = fs.readFileSync("profile-photo-editor.css", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
+const vercel = fs.readFileSync("vercel.json", "utf8");
 
 assert(source.includes('const STAGE_MAX = 1280'), "editing decode should be downscaled to a bounded working image");
 assert(source.includes('const OUTPUT_SIZE = 256'), "final profile photo must be exactly 256px square");
@@ -21,5 +22,6 @@ assert(source.includes('clampOffsets()'), "crop movement must be clamped so the 
 assert(css.includes("aspect-ratio:1"), "crop viewport must be visually locked to 1:1");
 assert(index.includes('profile-photo-editor.css?v=0.3.102'), "profile editor CSS must load in production");
 assert(index.includes('profile-photo-editor.js?v=0.3.102'), "profile editor runtime must load in production");
+assert(vercel.includes("img-src 'self' data: blob:"), "CSP must allow blob URLs used to decode locally selected profile photos");
 
-console.log("PASS: iPhone-safe profile photo staging, orientation-preserving 1:1 crop, drag/pinch/rotate editing, and 256px output are wired");
+console.log("PASS: iPhone-safe profile photo staging, blob-safe CSP, orientation-preserving 1:1 crop, drag/pinch/rotate editing, and 256px output are wired");
