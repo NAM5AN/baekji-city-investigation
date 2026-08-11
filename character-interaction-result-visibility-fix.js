@@ -33,13 +33,46 @@
     return "가";
   }
 
-  function repairObservedActorText(entry) {
-    if (entry?.type !== "field-action" || !entry.observedActorId) return false;
-    const name = testerName(entry.observedActorId);
-    if (!name || !/다른 조사자(?:가|이)/.test(String(entry.text || ""))) return false;
-    entry.text = String(entry.text).replace(/다른 조사자(?:가|이)/, `${name}${subjectParticle(name)}`);
-    entry.observedActorName = name;
+  function topicParticle(name) {
+    const chars = Array.from(String(name || "").trim()).reverse();
+    for (const char of chars) {
+      const code = char.charCodeAt(0);
+      if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 ? "은" : "는";
+      if (/\d/.test(char)) return new Set(["0", "1", "3", "6", "7", "8"]).has(char) ? "은" : "는";
+      if (/[A-Za-z]/.test(char)) return new Set(["F", "L", "M", "N", "R", "S", "X"]).has(char.toUpperCase()) ? "은" : "는";
+    }
+    return "는";
+  }
+
+  function replaceGenericActorLabel(text, actorId) {
+    const name = testerName(actorId);
+    if (!name) return String(text || "");
+    return String(text || "")
+      .replace(/다른 조사자(?:가|이)/g, `${name}${subjectParticle(name)}`)
+      .replace(/다른 조사자(?:는|은)/g, `${name}${topicParticle(name)}`)
+      .replace(/다른 조사자/g, name);
+  }
+
+  function repairObservedSourceText(entry) {
+    if (entry?.type !== "action-input" || !entry.actorId || !entry.fieldObservationAiText) return false;
+    const next = replaceGenericActorLabel(entry.fieldObservationAiText, entry.actorId);
+    if (next === entry.fieldObservationAiText) return false;
+    entry.fieldObservationAiText = next;
+    entry.fieldObservationActorName = testerName(entry.actorId) || entry.fieldObservationActorName || "";
     return true;
+  }
+
+  function repairObservedActorText(entry, source = null) {
+    if (entry?.type !== "field-action" || !entry.observedActorId) return false;
+    const actorId = source?.actorId || entry.observedActorId;
+    const sourceFinal = source?.fieldObservationAiStatus === "final" ? String(source?.fieldObservationAiText || "") : "";
+    const base = sourceFinal || String(entry.text || "");
+    const next = replaceGenericActorLabel(base, actorId);
+    const name = testerName(actorId);
+    let changed = false;
+    if (next && next !== entry.text) { entry.text = next; changed = true; }
+    if (name && entry.observedActorName !== name) { entry.observedActorName = name; changed = true; }
+    return changed;
   }
 
   function repairMisroutedSlashAction(entry) {
@@ -90,11 +123,18 @@
     if (!state || state.version !== 3 || !state.sessions) return { raw, changed: false };
 
     let changed = false;
+    const actions = new Map();
+    Object.values(state.sessions).forEach((session) => {
+      (session?.logs || []).forEach((entry) => {
+        if (entry?.id && entry.type === "action-input") actions.set(entry.id, entry);
+        if (repairObservedSourceText(entry)) changed = true;
+      });
+    });
     Object.values(state.sessions).forEach((session) => {
       (session?.logs || []).forEach((entry) => {
         if (repairMisroutedSlashAction(entry)) changed = true;
         if (normalizeSystemNarration(entry)) changed = true;
-        if (repairObservedActorText(entry)) changed = true;
+        if (repairObservedActorText(entry, actions.get(entry?.sourceActionLogId))) changed = true;
       });
     });
 
@@ -123,6 +163,9 @@
     normalizeWorld,
     repairLiveWorld,
     testerName,
+    replaceGenericActorLabel,
+    repairObservedSourceText,
+    repairObservedActorText,
     repairMisroutedSlashAction,
     normalizeSystemNarration,
   });

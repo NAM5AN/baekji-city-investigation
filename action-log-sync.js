@@ -46,8 +46,21 @@
       .replace(/\s+/g, " ");
   }
 
+  function actorNameForId(actorId) {
+    const key = String(actorId || "");
+    const registered = window.__BAEKJI_TESTER_REGISTRY_GUARD__?.values?.().find((entry) => String(entry?.id || "") === key);
+    if (registered?.name || registered?.loginId) return String(registered.name || registered.loginId).trim();
+    if (typeof sessionStorage !== "undefined") {
+      try {
+        const profile = JSON.parse(sessionStorage.getItem("baekji_city_tester_session_profile_v1") || "null");
+        if (String(profile?.id || "") === key && (profile?.name || profile?.loginId)) return String(profile.name || profile.loginId).trim();
+      } catch { /* ignore */ }
+    }
+    return USER_LABELS[key] || "다른 조사자";
+  }
+
   function observationalActionText(actorId, rawText) {
-    const actorName = USER_LABELS[actorId] || "다른 조사자";
+    const actorName = actorNameForId(actorId);
     const text = normalizedActionText(rawText);
 
     if (/(소리\s*(?:를\s*)?(?:지르|지른|질러)|소리치|고함|외치|고래고래|비명|목청|큰\s*소리|크게\s*(?:말|부르)|부르짖|호통|고성|함성)/.test(text)) {
@@ -192,6 +205,7 @@
     spatialScopeKey,
     normalizedActionText,
     observationalActionText,
+    actorNameForId,
     repairObservedActionTexts,
     enrichObservedActions,
     stripCompletedNarrationMarkers,

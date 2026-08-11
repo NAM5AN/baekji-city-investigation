@@ -2641,7 +2641,7 @@
   }
 
   function isMultiAction(text) {
-    return /(그리고|동시에|한 뒤|후에|,|;|\+| 및 )/.test(text.trim());
+    return /(그리고|동시에|한\s*뒤|한\s*후|후에|그\s*다음|뒤이어|\+|\s및\s)/.test(text.trim());
   }
 
   function deterministicDelta(ruleId, seed) {

@@ -6,6 +6,19 @@
   const STALE = 25000;
   const NAMES = { test_a: "테스트 캐릭터 A", test_b: "테스트 캐릭터 B", test_c: "테스트 캐릭터 C" };
 
+  function actorNameForId(actorId) {
+    const key = String(actorId || "");
+    const registered = window.__BAEKJI_TESTER_REGISTRY_GUARD__?.values?.().find((entry) => String(entry?.id || "") === key);
+    if (registered?.name || registered?.loginId) return String(registered.name || registered.loginId).trim();
+    if (typeof sessionStorage !== "undefined") {
+      try {
+        const profile = JSON.parse(sessionStorage.getItem("baekji_city_tester_session_profile_v1") || "null");
+        if (String(profile?.id || "") === key && (profile?.name || profile?.loginId)) return String(profile.name || profile.loginId).trim();
+      } catch { /* ignore */ }
+    }
+    return NAMES[key] || "다른 조사자";
+  }
+
   function parse(value) {
     try {
       const state = typeof value === "string" ? JSON.parse(value) : value;
@@ -79,12 +92,12 @@
         entry.observationAiPending = true;
         entry.observationAiFinal = false;
       });
-      jobs.push({ actionId, actorName: NAMES[source.actorId] || "다른 조사자", actionText: clean(source.text), fallback, speechMode: speech.mode, quotedSpeech: speech.quote });
+      jobs.push({ actionId, actorName: actorNameForId(source.actorId), actionText: clean(source.text), fallback, speechMode: speech.mode, quotedSpeech: speech.quote });
     });
     return jobs;
   }
 
-  const API = Object.freeze({ extractQuote, speechVisibility, collectJobs });
+  const API = Object.freeze({ extractQuote, speechVisibility, actorNameForId, collectJobs });
   if (typeof window !== "undefined") window.__BAEKJI_OBSERVATION_AI_TEST__ = API;
   if (typeof window === "undefined" || typeof document === "undefined" || typeof Storage === "undefined" || typeof localStorage === "undefined") return;
 

@@ -113,7 +113,7 @@ assert.equal(fallback.sessions.witness.logs[0].observationAiFinal, false);
 assert.equal(fallback.sessions.witness.logs[0].observationTextVersion, 2);
 
 const canonicalIndex = index.indexOf("final-observation-write-canonicalizer.js?v=0.4.2");
-const actionLogIndex = index.indexOf("action-log-sync.js?v=0.3.33");
+const actionLogIndex = index.indexOf("action-log-sync.js?v=0.4.1");
 assert.ok(canonicalIndex >= 0, "canonicalizer must be loaded");
 assert.ok(canonicalIndex < actionLogIndex, "canonicalizer must sit below action-log-sync in the Storage wrapper chain");
 
