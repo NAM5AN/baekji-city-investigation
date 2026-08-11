@@ -32,7 +32,6 @@ source = source.replace('  await page.evaluateOnNewDocument(({ GLOBAL_KEY, USER_
 source = source.replace('    if (profileRow) {', '    if (seedWorld) localStorage.setItem(GLOBAL_KEY, JSON.stringify(seedWorld));\n\n    if (profileRow) {');
 source = source.replace('  }, { GLOBAL_KEY, USER_KEY, PROFILE_KEY, label, profileRow });', '  }, { GLOBAL_KEY, USER_KEY, PROFILE_KEY, label, profileRow, seedWorld });');
 
-// Keep caller attribution past the global Storage wrapper and record compact semantic diffs.
 source = source.replace(
   'const useful = lines.find((line) => /\\.js(?:\\?|:)/.test(line) && !/authenticated-two-tab-browser-diagnostic/.test(line));',
   'const useful = lines.find((line) => /\\.js(?:\\?|:)/.test(line) && !/authenticated-two-tab-browser-diagnostic|guest-world-isolation\\.js/.test(line));',
@@ -46,11 +45,10 @@ const nativeSetReplacement = `    const nativeSet = Storage.prototype.setItem;\n
 if (!source.includes(nativeSetNeedle)) throw new Error("native set instrumentation not found");
 source = source.replace(nativeSetNeedle, nativeSetReplacement);
 
-// Avoid interaction after the storm; dump evidence as soon as A/B snapshots are obtained.
 const clickStart = source.indexOf('  const clickA = await clickAndObserve');
 const assertStart = source.indexOf('  assert.equal(a.avatar', clickStart);
 if (clickStart < 0 || assertStart < 0) throw new Error("click/assert block not found");
-source = source.slice(0, clickStart) + `  console.log("A_WRITE_HISTORY", JSON.stringify(a.diag.writeHistory));\n  console.log("B_WRITE_HISTORY", JSON.stringify(b.diag.writeHistory));\n  assert.equal(a.avatar, true, "A avatar must remain after B login");\n  assert.equal(b.avatar, true, "B avatar must remain after login");\n  assert.ok(a.diag.worldWrites < 30, \`A world writes ran away: ${'${a.diag.worldWrites}'}\`);\n  assert.ok(b.diag.worldWrites < 30, \`B world writes ran away: ${'${b.diag.worldWrites}'}\`);\n` + source.slice(source.indexOf('  await context.close();', assertStart));
+source = source.slice(0, clickStart) + `  const __artifact = {\n    remote: { revision: remote.revision, puts: remote.puts, conflicts: remote.conflicts, putLog: remote.putLog.slice(-100) },\n    A: { avatar: a.avatar, hash: a.hash, diag: a.diag },\n    B: { avatar: b.avatar, hash: b.hash, diag: b.diag },\n  };\n  fs.writeFileSync("authenticated-two-tab-diag.json", JSON.stringify(__artifact, null, 2));\n  console.log("DIAG_ARTIFACT_WRITTEN", JSON.stringify({ A: a.diag.worldWrites, B: b.diag.worldWrites, ASource: a.diag.writeSources, BSource: b.diag.writeSources }));\n  assert.equal(a.avatar, true, "A avatar must remain after B login");\n  assert.equal(b.avatar, true, "B avatar must remain after login");\n  assert.ok(a.diag.worldWrites < 30, \`A world writes ran away: ${'${a.diag.worldWrites}'}\`);\n  assert.ok(b.diag.worldWrites < 30, \`B world writes ran away: ${'${b.diag.worldWrites}'}\`);\n` + source.slice(source.indexOf('  await context.close();', assertStart));
 
 fs.writeFileSync(tempUrl, source);
 try {
