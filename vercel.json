@@ -17,7 +17,7 @@
     "api/admin-session-ops.mjs": { "maxDuration": 15 },
     "api/player-presence.mjs": { "maxDuration": 15 },
     "api/player-admin-system.mjs": { "maxDuration": 15 }
-  ],
+  },
   "rewrites": [
     { "source": "/api/narrate-observation", "destination": "/api/narrate-observation.mjs" },
     { "source": "/api/interpret-transfer", "destination": "/api/interpret-transfer.mjs" },
