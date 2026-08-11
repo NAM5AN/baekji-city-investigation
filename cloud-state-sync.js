@@ -269,6 +269,35 @@
     return true;
   }
 
+  function preserveCurrentCharacterOnBootstrap(row) {
+    const remote = row?.state;
+    if (!remote || remote.version !== 3) return null;
+    const userId = activeUserId();
+    if (!userId || remote.characters?.[userId]) return null;
+    const localState = safeParse(pendingRaw || nativeGetItem.call(localStorage, GLOBAL_KEY));
+    const localCharacter = localState?.characters?.[userId];
+    if (!localCharacter) return null;
+
+    const merged = {
+      ...remote,
+      characters: {
+        ...(remote.characters || {}),
+        [userId]: localCharacter,
+      },
+    };
+    const mergedRaw = JSON.stringify(merged);
+    const oldRaw = nativeGetItem.call(localStorage, GLOBAL_KEY);
+    revision = Number(row.revision || 0);
+    if (oldRaw !== mergedRaw) {
+      applyingRemote = true;
+      try { nativeSetItem.call(localStorage, GLOBAL_KEY, mergedRaw); }
+      finally { applyingRemote = false; }
+      dispatchExternalUpdate(oldRaw, mergedRaw);
+    }
+    pendingRaw = mergedRaw;
+    return merged;
+  }
+
   function schedulePush(raw) {
     if (!syncEnabled()) return;
     if (!safeParse(raw)) return;
@@ -382,8 +411,11 @@
         return;
       }
       if (row?.state?.version === 3) {
-        pendingRaw = null;
-        applyRemoteState(row);
+        const preserved = preserveCurrentCharacterOnBootstrap(row);
+        if (!preserved) {
+          pendingRaw = null;
+          applyRemoteState(row);
+        }
       } else {
         const localRaw = pendingRaw || nativeGetItem.call(localStorage, GLOBAL_KEY);
         const localState = safeParse(localRaw);
@@ -468,6 +500,7 @@
     reconcileAdminControl,
     activeUserId,
     syncEnabled,
+    preserveCurrentCharacterOnBootstrap,
   });
 
   ensureBootstrap();
