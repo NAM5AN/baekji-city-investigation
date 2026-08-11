@@ -6,6 +6,7 @@ const source = fs.readFileSync(new URL("../admin-zone-map.js", import.meta.url),
 const css = fs.readFileSync(new URL("../admin-zone-map.css", import.meta.url), "utf8");
 const liveRender = fs.readFileSync(new URL("../admin-live-render.js", import.meta.url), "utf8");
 const scrollSource = fs.readFileSync(new URL("../admin-scroll-stability.js", import.meta.url), "utf8");
+const logChronology = fs.readFileSync(new URL("../admin-log-bottom-chronology.js", import.meta.url), "utf8");
 const mobileCss = fs.readFileSync(new URL("../admin-mobile-shell-polish.css", import.meta.url), "utf8");
 const mobileTopbar = fs.readFileSync(new URL("../admin-mobile-topbar.js", import.meta.url), "utf8");
 const playerMap = fs.readFileSync(new URL("../assets/maps/haeoreum-day1-map.svg", import.meta.url), "utf8");
@@ -16,6 +17,9 @@ assert.match(html, /admin-live-render\.js\?v=0\.6\.3/, "admin dashboard must loa
 assert.ok(html.indexOf("admin-live-render.js?v=0.6.3") > html.indexOf("admin-zone-map.js?v=0.6.0"), "live renderer must load after the zone-map runtime");
 assert.match(html, /admin-scroll-stability\.js\?v=0\.6\.1/, "admin dashboard must load scroll-stability runtime after the zone map");
 assert.ok(html.indexOf("admin-scroll-stability.js?v=0.6.1") > html.indexOf("admin-live-render.js?v=0.6.3"), "scroll stability must observe the stable live-render lifecycle");
+assert.match(html, /admin-log-bottom-chronology\.js\?v=0\.6\.5/, "admin dashboard must load chronological log runtime with a fresh cache key");
+assert.ok(html.indexOf("admin-log-bottom-chronology.js?v=0.6.5") > html.indexOf("admin-scroll-stability.js?v=0.6.1"), "chronological log runtime must load after scroll restoration");
+assert.ok(html.indexOf("admin-log-bottom-chronology.js?v=0.6.5") > html.indexOf("admin-log-recipient-grouping.js?v=0.6.4"), "chronological log runtime must run after recipient grouping is available");
 assert.doesNotThrow(() => new Function(liveRender), "admin live renderer must parse as JavaScript");
 assert.match(liveRender, /Object\.defineProperty\(panel, "innerHTML"/, "polling panel writes must be intercepted instead of replacing the whole DOM");
 assert.match(liveRender, /syncChildren\(panel, fragment\)/, "ordinary admin tabs must update their existing DOM incrementally");
@@ -29,6 +33,11 @@ assert.match(scrollSource, /admin-panel-scroll/, "main tab scroll position must 
 assert.match(scrollSource, /data-admin-zone-map-viewport/, "zone-map horizontal and vertical scroll must be preserved");
 assert.match(scrollSource, /data-admin-log-list/, "log list scroll must be preserved");
 assert.match(scrollSource, /admin-mini-list/, "overview list scroll must be preserved");
+assert.doesNotThrow(() => new Function(logChronology), "admin chronological log runtime must parse as JavaScript");
+assert.match(logChronology, /recipientGroupingVersion/, "chronology must wait until grouped SYSTEM rows are finalized");
+assert.match(logChronology, /rows\.reverse\(\)\.forEach/, "admin logs must be reordered from oldest to newest");
+assert.match(logChronology, /scrollTop = Math\.max\(0, list\.scrollHeight - list\.clientHeight\)/, "log view must open at the newest row on the bottom");
+assert.match(logChronology, /pinBottom = isNearBottom\(target\)/, "manual upward scrolling must disable forced bottom pinning");
 assert.match(source, /assets\/maps\/haeoreum-day1-map\.svg\?v=0\.6\.0/, "admin map must reuse the player investigation map topology asset");
 assert.match(source, /data-admin-zone-map/, "zone tab must be replaced by an interactive topology map shell");
 assert.match(source, /data-admin-detail/, "map nodes must keep the existing admin detail popup contract");
@@ -54,4 +63,4 @@ assert.match(mobileTopbar, /data-admin-mobile-proxy="mvp5"/, "mobile operations 
 assert.match(mobileTopbar, /data-admin-mobile-proxy="audit"/, "mobile operations menu must retain audit log access");
 assert.match(mobileTopbar, /data-admin-mobile-proxy="reset"/, "mobile operations menu must retain reset access");
 
-console.log("PASS: admin live sync updates in place without flicker while compact map, scroll, and mobile shell contracts remain wired");
+console.log("PASS: admin live sync keeps compact map, scroll stability, and oldest-to-newest bottom-pinned logs wired");
