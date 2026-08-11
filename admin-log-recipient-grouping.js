@@ -2,13 +2,14 @@
   "use strict";
 
   const API_URL = "/api/admin-snapshot";
-  const GROUP_VERSION = "1";
+  const GROUP_VERSION = "2";
   const SNAPSHOT_CACHE_MS = 5_000;
   const RECIPIENT_SPECIFIC_TYPES = new Set(["field-action", "field-sound", "interaction"]);
 
   const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
   const unique = (values) => [...new Set((Array.isArray(values) ? values : []).filter(Boolean))];
   const values = (object) => Object.values(object && typeof object === "object" ? object : {});
+  const splitStored = (value) => clean(value).split("|").map(clean).filter(Boolean);
 
   function isGroupableDescriptor(item) {
     return Boolean(
@@ -125,6 +126,28 @@
     return unique((Array.isArray(descriptors) ? descriptors : []).map((item) => clean(item?.scopeTitle)).filter(Boolean));
   }
 
+  function groupedDescriptorsFromRow(row) {
+    const ids = splitStored(row?.dataset?.logPartyIds || row?.dataset?.logPartyId || "");
+    const names = splitStored(row?.dataset?.logPartyNames || "");
+    const count = Math.max(ids.length, names.length);
+    return Array.from({ length: count }, (_, index) => ({
+      partyId: ids[index] || "",
+      partyName: names[index] || "",
+    }));
+  }
+
+  function writeRecipientLine(keeper, recipients, partyNames) {
+    keeper.querySelector(".admin-log-recipients")?.remove();
+    const recipientLine = document.createElement("div");
+    recipientLine.className = "admin-log-recipients";
+    const label = document.createElement("span");
+    label.textContent = "표시 대상";
+    const names = document.createElement("strong");
+    names.textContent = recipients.length ? recipients.join(" · ") : (partyNames.join(" · ") || "수신자 확인 불가");
+    recipientLine.append(label, names);
+    keeper.append(recipientLine);
+  }
+
   function applyGroupToDom(group, snapshot) {
     const descriptors = group.items || [];
     const keeper = descriptors[0]?.row;
@@ -135,12 +158,16 @@
     const scopes = scopeTitlesForGroup(descriptors);
     const recipients = recipientNames(snapshot, descriptors);
     const headerSpans = [...keeper.querySelectorAll("header > span")];
+    const baseSearchText = clean(keeper.dataset.logBaseSearchText || keeper.dataset.logSearchText || "").toLowerCase();
 
     keeper.classList.add("is-grouped-system");
     keeper.dataset.logPartyIds = ids.join("|");
+    keeper.dataset.logPartyNames = partyNames.join("|");
+    keeper.dataset.logScopeTitles = scopes.join("|");
     keeper.dataset.logPartyId = ids[0] || keeper.dataset.logPartyId || "";
+    keeper.dataset.logBaseSearchText = baseSearchText;
     keeper.dataset.logSearchText = clean([
-      keeper.dataset.logSearchText || "",
+      baseSearchText,
       recipients.join(" "),
       partyNames.join(" "),
       scopes.join(" "),
@@ -155,17 +182,26 @@
       headerSpans[3].title = scopes.join(" · ");
     }
 
-    keeper.querySelector(".admin-log-recipients")?.remove();
-    const recipientLine = document.createElement("div");
-    recipientLine.className = "admin-log-recipients";
-    const label = document.createElement("span");
-    label.textContent = "표시 대상";
-    const names = document.createElement("strong");
-    names.textContent = recipients.length ? recipients.join(" · ") : (partyNames.join(" · ") || "수신자 확인 불가");
-    recipientLine.append(label, names);
-    keeper.append(recipientLine);
-
+    writeRecipientLine(keeper, recipients, partyNames);
     descriptors.slice(1).forEach((item) => item.row?.remove());
+  }
+
+  function refreshGroupedRecipientLabels(snapshot, list = document.querySelector("[data-admin-log-list]")) {
+    if (!snapshot || !list?.isConnected) return;
+    list.querySelectorAll(".admin-log-row.is-grouped-system").forEach((row) => {
+      const descriptors = groupedDescriptorsFromRow(row);
+      const partyNames = splitStored(row.dataset.logPartyNames || "");
+      const scopes = splitStored(row.dataset.logScopeTitles || "");
+      const recipients = recipientNames(snapshot, descriptors);
+      const baseSearchText = clean(row.dataset.logBaseSearchText || row.dataset.logSearchText || "").toLowerCase();
+      row.dataset.logSearchText = clean([
+        baseSearchText,
+        recipients.join(" "),
+        partyNames.join(" "),
+        scopes.join(" "),
+      ].join(" ")).toLowerCase();
+      writeRecipientLine(row, recipients, partyNames);
+    });
   }
 
   function applyGroupedFilters() {
@@ -202,7 +238,15 @@
     return snapshotPromise;
   }
 
-  async function processCurrentLogList() {
+  function refreshRecipientsSoon(list) {
+    getSnapshot().then((snapshot) => {
+      if (!snapshot || !list?.isConnected) return;
+      refreshGroupedRecipientLabels(snapshot, list);
+      applyGroupedFilters();
+    });
+  }
+
+  function processCurrentLogList() {
     const list = document.querySelector("[data-admin-log-list]");
     if (!list || list.dataset.recipientGroupingVersion === GROUP_VERSION || list.dataset.recipientGroupingBusy === "1") return;
     list.dataset.recipientGroupingBusy = "1";
@@ -212,17 +256,19 @@
       const descriptors = rows.map(descriptorFromRow);
       const groups = groupDescriptors(descriptors);
       const grouped = groups.filter((group) => group.grouped);
-      if (!grouped.length) {
-        rows.forEach((row) => { row.dataset.logPartyIds ||= row.dataset.logPartyId || ""; });
-        return;
-      }
 
-      const snapshot = await getSnapshot();
-      grouped.forEach((group) => applyGroupToDom(group, snapshot));
+      // Structural grouping must happen synchronously. The live renderer briefly
+      // reconstructs the raw per-party rows on every poll; waiting for the
+      // recipient snapshot here made those duplicates visible until the fetch
+      // completed. Use the latest cached snapshot (if any) for labels, remove
+      // duplicate rows immediately, then refresh recipient names asynchronously.
+      grouped.forEach((group) => applyGroupToDom(group, snapshotCache));
       [...list.querySelectorAll(".admin-log-row")].forEach((row) => { row.dataset.logPartyIds ||= row.dataset.logPartyId || ""; });
       applyGroupedFilters();
-    } finally {
       list.dataset.recipientGroupingVersion = GROUP_VERSION;
+
+      if (grouped.length) refreshRecipientsSoon(list);
+    } finally {
       delete list.dataset.recipientGroupingBusy;
     }
   }
@@ -239,10 +285,14 @@
 
   if (typeof document === "undefined" || typeof MutationObserver === "undefined") return;
 
-  let processTimer = 0;
+  let processQueued = false;
   function scheduleProcess() {
-    clearTimeout(processTimer);
-    processTimer = setTimeout(processCurrentLogList, 0);
+    if (processQueued) return;
+    processQueued = true;
+    queueMicrotask(() => {
+      processQueued = false;
+      processCurrentLogList();
+    });
   }
 
   const observer = new MutationObserver(scheduleProcess);
@@ -250,9 +300,9 @@
   scheduleProcess();
 
   document.addEventListener("input", (event) => {
-    if (event.target?.matches?.("[data-log-search]")) setTimeout(applyGroupedFilters, 0);
+    if (event.target?.matches?.("[data-log-search]")) queueMicrotask(applyGroupedFilters);
   });
   document.addEventListener("change", (event) => {
-    if (event.target?.matches?.("[data-log-party], [data-log-type]")) setTimeout(applyGroupedFilters, 0);
+    if (event.target?.matches?.("[data-log-party], [data-log-type]")) queueMicrotask(applyGroupedFilters);
   });
 })();
