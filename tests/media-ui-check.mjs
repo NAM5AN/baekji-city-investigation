@@ -25,7 +25,7 @@ const cssSource = fs.readFileSync(new URL("../styles.css", import.meta.url), "ut
 const indexSource = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const packageJson = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.equal(packageJson.version, "0.3.18");
+assert.equal(packageJson.version, "0.4.0");
 assert.ok(indexSource.includes('id="modal-root"'));
 assert.ok(indexSource.indexOf("data/day1-data.js") < indexSource.indexOf("data/image-map.js"));
 assert.ok(indexSource.indexOf("data/image-map.js") < indexSource.indexOf("app.js"));
@@ -51,4 +51,4 @@ assert.ok(cssSource.includes("cursor: row-resize"));
 assert.ok(cssSource.includes("cursor: col-resize"));
 assert.ok(cssSource.includes("--layout-left"));
 
-console.log("PASS: v0.3.18 이미지 매핑·흑백 대체 화면·로그인/홈 게임보이 UI·최신 스크롤 계약");
+console.log("PASS: v0.4.0 release · v0.3.18 이미지 매핑·흑백 대체 화면·로그인/홈 게임보이 UI·최신 스크롤 계약");
