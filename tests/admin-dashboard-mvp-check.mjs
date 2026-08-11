@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { readFile } from "node:fs/promises";
 import { adminSessionTokenFromRequest, adminSessionCookie } from "../api/_admin-auth.mjs";
 import { adminLoginHandler } from "../api/admin-login.mjs";
@@ -98,6 +99,8 @@ assert.deepEqual(payload.directory, [{ id: "a", name: "캐릭터 A", profilePhot
 const html = await readFile(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../admin-dashboard.css", import.meta.url), "utf8");
 const js = await readFile(new URL("../admin-dashboard.js", import.meta.url), "utf8");
+const logGroupingCss = await readFile(new URL("../admin-log-recipient-grouping.css", import.meta.url), "utf8");
+const logGroupingJs = await readFile(new URL("../admin-log-recipient-grouping.js", import.meta.url), "utf8");
 const loginBridge = await readFile(new URL("../admin-login-bridge.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../index.html", import.meta.url), "utf8");
 
@@ -106,8 +109,12 @@ for (const tab of ["overview", "zones", "parties", "characters", "logs"]) {
 }
 assert.match(html, /admin-chat-rail/);
 assert.match(html, /SYSTEM 전송/);
+assert.match(html, /admin-log-recipient-grouping\.css/);
+assert.match(html, /admin-log-recipient-grouping\.js/);
+assert.ok(html.indexOf("admin-dashboard.js") < html.indexOf("admin-log-recipient-grouping.js"), "admin log grouping must run after the base dashboard renderer");
 assert.match(css, /grid-template-columns:minmax\(0,1fr\) 330px/);
 assert.match(css, /\.admin-modal-backdrop/);
+assert.match(logGroupingCss, /\.admin-log-recipients/);
 assert.match(js, /\/api\/admin-snapshot/);
 assert.match(js, /data-admin-detail/);
 assert.match(js, /data-log-party/);
@@ -119,4 +126,54 @@ assert.match(loginBridge, /\/api\/admin-login/);
 assert.match(loginBridge, /stopImmediatePropagation/);
 assert.ok(index.indexOf("admin-login-bridge.js") < index.indexOf("tester-auth.js"), "admin handler must register before tester handlers");
 
-console.log("PASS: AD admin login uses an HttpOnly DB session and opens the secure tabbed read-only dashboard");
+const groupingSandbox = { console, Date, Map, Set, Object, String, Number, JSON, Array };
+vm.createContext(groupingSandbox);
+vm.runInContext(logGroupingJs, groupingSandbox, { filename: "admin-log-recipient-grouping.js" });
+const grouping = groupingSandbox.__BAEKJI_ADMIN_LOG_GROUPING_TEST__;
+assert.ok(grouping, "admin log grouping test API must be exposed before DOM bootstrapping");
+
+const systemBase = {
+  actor: "SYSTEM",
+  type: "success",
+  timeText: "2026. 8. 11. 16:36:12",
+  text: "동일한 SYSTEM 판정 로그",
+};
+const mergedSystem = grouping.groupDescriptors([
+  { ...systemBase, partyId: "party_a", partyName: "조사조 A" },
+  { ...systemBase, partyId: "party_b", partyName: "조사조 B" },
+]);
+assert.equal(mergedSystem.length, 1, "same SYSTEM log broadcast to different parties must render as one admin row");
+assert.equal(mergedSystem[0].grouped, true);
+assert.equal(mergedSystem[0].items.length, 2);
+
+const separateObservations = grouping.groupDescriptors([
+  { ...systemBase, type: "field-action", partyId: "party_a", partyName: "조사조 A" },
+  { ...systemBase, type: "field-action", partyId: "party_b", partyName: "조사조 B" },
+]);
+assert.equal(separateObservations.length, 2, "per-character field observations must never be collapsed");
+assert.ok(separateObservations.every((entry) => entry.grouped === false));
+
+const samePartyDuplicates = grouping.groupDescriptors([
+  { ...systemBase, partyId: "party_a", partyName: "조사조 A" },
+  { ...systemBase, partyId: "party_a", partyName: "조사조 A" },
+]);
+assert.equal(samePartyDuplicates.length, 2, "duplicates inside one party must remain visible as a real duplicate-writing bug");
+
+const recipients = grouping.recipientNames({
+  state: {
+    parties: {
+      party_a: { id: "party_a", memberIds: ["a"] },
+      party_b: { id: "party_b", memberIds: ["b", "a"] },
+    },
+  },
+  directory: [
+    { id: "a", name: "테스트A" },
+    { id: "b", name: "테스트B" },
+  ],
+}, [
+  { partyId: "party_a", partyName: "조사조 A" },
+  { partyId: "party_b", partyName: "조사조 B" },
+]);
+assert.deepEqual(Array.from(recipients), ["테스트A", "테스트B"], "grouped rows must show unique recipient character names");
+
+console.log("PASS: AD admin login uses an HttpOnly DB session and dashboard groups cross-party SYSTEM broadcasts without collapsing observer-specific logs");
