@@ -25,6 +25,15 @@
     isTestOnly: true,
   });
 
+  function currentUserId() {
+    try { return String(sessionStorage.getItem(USER_KEY) || ""); }
+    catch { return ""; }
+  }
+
+  function canRepairSharedWorld() {
+    return Boolean(currentUserId());
+  }
+
   function install(user) {
     if (!user?.id) return user;
     users.set(user.id, user);
@@ -124,7 +133,7 @@
   }
 
   function repairTesterCharacters({ touchCurrent = false } = {}) {
-    if (repairingState) return false;
+    if (repairingState || !canRepairSharedWorld()) return false;
     const oldRaw = localStorage.getItem(GLOBAL_KEY);
     let state;
     try { state = JSON.parse(oldRaw || "null"); } catch { state = null; }
@@ -148,7 +157,7 @@
       changed = true;
     });
 
-    const currentId = sessionStorage.getItem(USER_KEY);
+    const currentId = currentUserId();
     if (touchCurrent && currentId && users.has(currentId)) {
       const character = state.characters[currentId];
       const now = Date.now();
@@ -185,8 +194,8 @@
 
   function finishLogin(user) {
     install(user);
-    ensureCharacter(user.id);
     sessionStorage.setItem(USER_KEY, user.id);
+    ensureCharacter(user.id);
     window.__BAEKJI_TESTER_REGISTRY_GUARD__?.rememberCurrentTester?.();
     location.hash = "#/home";
   }
@@ -375,7 +384,7 @@
   }
 
   function decorateContamination() {
-    const userId = sessionStorage.getItem(USER_KEY);
+    const userId = currentUserId();
     if (!userId || !users.has(userId)) return;
     let state;
     try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
@@ -392,7 +401,7 @@
   }
 
   function decorate() {
-    const user = users.get(sessionStorage.getItem(USER_KEY));
+    const user = users.get(currentUserId());
     if (user?.profilePhoto) decorateTopbar(user);
     decorateMembers();
     decorateContamination();
@@ -421,8 +430,7 @@
     nextUsers.forEach(install);
     const changed = nextSignature !== directorySignature;
     directorySignature = nextSignature;
-    // Online/AFK state is handled by the isolated player-presence heartbeat.
-    // Directory polling must never create shared world revisions just to refresh presence.
+    // Account discovery is allowed before login, but shared game-world repair is not.
     repairTesterCharacters();
     scheduleRefresh();
     if (changed || forceRender) {
@@ -439,6 +447,8 @@
     toUser,
     repairCharacter,
     legacyIdReferenced,
+    currentUserId,
+    canRepairSharedWorld,
     directoryUsers: () => Array.from(users.values()),
   });
 

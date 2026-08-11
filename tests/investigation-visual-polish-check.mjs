@@ -27,7 +27,8 @@ assert.match(css, /retro-choice-no-enter/);
 assert.match(css, /body\[data-choice-motion-suppressed\] \.retro-choice-launch/);
 
 assert.doesNotMatch(testerAuth, /repairTesterCharacters\(\{ touchCurrent: true \}\)/, "directory polling must not write onlineAt into shared world state");
-assert.match(testerAuth, /Online\/AFK state is handled by the isolated player-presence heartbeat/);
+assert.match(testerAuth, /function canRepairSharedWorld\(\) \{[\s\S]*?Boolean\(currentUserId\(\)\)/, "shared-world tester repair must require an authenticated tab");
+assert.match(testerAuth, /if \(repairingState \|\| !canRepairSharedWorld\(\)\) return false;/, "logged-out tester directory polling must stay read-only against the shared world");
 assert.match(testerAuth, /setInterval\(\(\) => loadDirectory\(false\)/);
 
 assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.51/);
@@ -35,4 +36,4 @@ assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.52/);
 assert.match(index, /tester-auth\.js\?v=0\.3\.87/);
 assert.ok(index.indexOf("retro-sound-boost.js?v=0.3.50") < index.indexOf("investigation-visual-polish.js?v=0.3.52"));
 
-console.log("investigation visual polish checks passed with stable invite rendering and isolated presence polling");
+console.log("investigation visual polish checks passed with stable invite rendering and guest-safe directory polling");
