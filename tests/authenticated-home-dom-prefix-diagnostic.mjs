@@ -1,12 +1,18 @@
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const sourcePath = new URL("./authenticated-home-dom-storm-diagnostic.mjs", import.meta.url);
 const tempPath = new URL("./.tmp-authenticated-home-dom-prefix.mjs", import.meta.url);
+const repoDir = fileURLToPath(new URL("../", import.meta.url));
 let source = fs.readFileSync(sourcePath, "utf8");
 source = source.replace(
-  "for (const file of scripts) {",
-  "let __loaded = 0;\nfor (const file of scripts) {\n  if (__loaded >= Number(process.env.MAX_SCRIPT || 9999)) break;\n  __loaded += 1;\n  console.log(`PREFIX_LOAD ${__loaded} ${file}`);",
+  "if (skip.has(file) || !fs.existsSync(file)) continue;",
+  "if (skip.has(file) || !fs.existsSync(file)) continue;\n  __loaded += 1;\n  if (__loaded > Number(process.env.MAX_SCRIPT || 9999)) break;\n  console.log(`PREFIX_LOAD ${__loaded} ${file}`);",
+);
+source = source.replace(
+  "const runtimeErrors = [];",
+  "let __loaded = 0;\nconst runtimeErrors = [];",
 );
 source = source.replace(
   "await sleep(120);",
@@ -15,15 +21,19 @@ source = source.replace(
 fs.writeFileSync(tempPath, source);
 
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-const all = [...index.matchAll(/<script\\s+src=\"([^\"]+\\.js)(?:\\?[^\\\"]*)?\"/g)].map((m) => m[1]);
+const all = [...index.matchAll(/<script\s+src="([^"]+\.js)(?:\?[^\"]*)?"/g)].map((m) => m[1]);
 const skip = new Set(["cloud-state-sync.js", "retro-sound.js", "retro-sound-boost.js"]);
 const scripts = all.filter((file) => !skip.has(file) && fs.existsSync(new URL(`../${file}`, import.meta.url)));
+
+console.log(`SCRIPT_ENUM total=${all.length} runnable=${scripts.length}`);
+console.log(scripts.map((file, index) => `${index + 1}:${file}`).join("\n"));
+if (!scripts.length) throw new Error("index.html script enumeration returned no runnable scripts");
 
 let firstTimeout = null;
 try {
   for (let i = 1; i <= scripts.length; i += 1) {
-    const result = spawnSync(process.execPath, [tempPath.pathname], {
-      cwd: new URL("..", import.meta.url),
+    const result = spawnSync(process.execPath, [fileURLToPath(tempPath)], {
+      cwd: repoDir,
       env: { ...process.env, PREFIX_ONLY: "1", MAX_SCRIPT: String(i) },
       encoding: "utf8",
       timeout: 1800,
