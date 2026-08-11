@@ -33,11 +33,11 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           replacements = {
-              r'app\\.js\\?v=0\\.3\\.18': r'app\\.js\\?v=0\\.4\\.1',
-              r'observation-ai-sync\\.js\\?v=0\\.3\\.34': r'observation-ai-sync\\.js\\?v=0\\.4\\.1',
-              r'action-log-sync\\.js\\?v=0\\.3\\.33': r'action-log-sync\\.js\\?v=0\\.4\\.1',
-              r'character-interaction-ai\\.js\\?v=0\\.3\\.98': r'character-interaction-ai\\.js\\?v=0\\.4\\.1',
-              r'character-interaction-result-visibility-fix\\.js\\?v=0\\.3\\.101': r'character-interaction-result-visibility-fix\\.js\\?v=0\\.4\\.1',
+              r'app\.js\?v=0\.3\.18': r'app\.js\?v=0\.4\.1',
+              r'observation-ai-sync\.js\?v=0\.3\.34': r'observation-ai-sync\.js\?v=0\.4\.1',
+              r'action-log-sync\.js\?v=0\.3\.33': r'action-log-sync\.js\?v=0\.4\.1',
+              r'character-interaction-ai\.js\?v=0\.3\.98': r'character-interaction-ai\.js\?v=0\.4\.1',
+              r'character-interaction-result-visibility-fix\.js\?v=0\.3\.101': r'character-interaction-result-visibility-fix\.js\?v=0\.4\.1',
           }
           for path in Path('tests').glob('*.mjs'):
               s = path.read_text(encoding='utf-8')
