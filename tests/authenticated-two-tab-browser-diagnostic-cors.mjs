@@ -19,40 +19,42 @@ source = source.replace(
   'return json(request, user ? { ok: true, user: { id: user.id, characterName: user.character_name, profilePhoto: user.profile_photo || "" } } : { ok: false, code: "INVALID_LOGIN" }, user ? 200 : 401);',
 );
 
-// Replace the handcrafted world with a read-only snapshot of the real Production world.
 const worldStart = source.indexOf('const initialWorld = {');
 const remoteStart = source.indexOf('\n\nconst remote = {', worldStart);
 if (worldStart < 0 || remoteStart < 0) throw new Error("initialWorld block not found");
-const liveBootstrap = `const __recoverySource = fs.readFileSync("supabase-endpoint-recovery.js", "utf8");\nconst __supabaseUrl = __recoverySource.match(/const SUPABASE_URL = \"([^\"]+)\"/)?.[1];\nconst __supabaseKey = __recoverySource.match(/const SUPABASE_KEY = \"([^\"]+)\"/)?.[1];\nif (!__supabaseUrl || !__supabaseKey) throw new Error("Supabase config missing");\nconst __liveResponse = await fetch(\`${'${__supabaseUrl}'}/rest/v1/rpc/baekji_mvp_get_state\`, {\n  method: "POST",\n  headers: { apikey: __supabaseKey, "Content-Type": "application/json", Accept: "application/json" },\n  body: JSON.stringify({ p_state_key: "day1_world" }),\n});\nif (!__liveResponse.ok) throw new Error(\`live world read failed ${'${__liveResponse.status}'}\`);\nconst __liveRows = await __liveResponse.json();\nif (!__liveRows?.[0]?.state) throw new Error("live world state missing");\nconst initialWorld = structuredClone(__liveRows[0].state);\nconst __liveRevision = Number(__liveRows[0].revision || 0);\nconsole.log("LIVE_WORLD_SEED", JSON.stringify({ revision: __liveRevision, characters: Object.keys(initialWorld.characters || {}).length, parties: Object.keys(initialWorld.parties || {}).length, sessions: Object.keys(initialWorld.sessions || {}).length }));`;
+const liveBootstrap = `const __recoverySource = fs.readFileSync("supabase-endpoint-recovery.js", "utf8");\nconst __supabaseUrl = __recoverySource.match(/const SUPABASE_URL = \"([^\"]+)\"/)?.[1];\nconst __supabaseKey = __recoverySource.match(/const SUPABASE_KEY = \"([^\"]+)\"/)?.[1];\nif (!__supabaseUrl || !__supabaseKey) throw new Error("Supabase config missing");\nconst __liveResponse = await fetch(\`${'${__supabaseUrl}'}/rest/v1/rpc/baekji_mvp_get_state\`, { method: "POST", headers: { apikey: __supabaseKey, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ p_state_key: "day1_world" }) });\nif (!__liveResponse.ok) throw new Error(\`live world read failed ${'${__liveResponse.status}'}\`);\nconst __liveRows = await __liveResponse.json();\nif (!__liveRows?.[0]?.state) throw new Error("live world state missing");\nconst initialWorld = structuredClone(__liveRows[0].state);\nconst __liveRevision = Number(__liveRows[0].revision || 0);\nconsole.log("LIVE_WORLD_SEED", JSON.stringify({ revision: __liveRevision, characters: Object.keys(initialWorld.characters || {}).length, parties: Object.keys(initialWorld.parties || {}).length, sessions: Object.keys(initialWorld.sessions || {}).length }));`;
 source = source.slice(0, worldStart) + liveBootstrap + source.slice(remoteStart);
 source = source.replace('  revision: 1,', '  revision: __liveRevision,');
 
-// Seed A's localStorage before any application script executes, matching the real already-logged-in tab.
 source = source.replace('  await instrument(pageA, "A", directory[0]);', '  await instrument(pageA, "A", directory[0], initialWorld);');
 source = source.replace('async function instrument(page, label, profileRow) {', 'async function instrument(page, label, profileRow, seedWorld = null) {');
 source = source.replace('  await page.evaluateOnNewDocument(({ GLOBAL_KEY, USER_KEY, PROFILE_KEY, label, profileRow }) => {', '  await page.evaluateOnNewDocument(({ GLOBAL_KEY, USER_KEY, PROFILE_KEY, label, profileRow, seedWorld }) => {');
 source = source.replace('    if (profileRow) {', '    if (seedWorld) localStorage.setItem(GLOBAL_KEY, JSON.stringify(seedWorld));\n\n    if (profileRow) {');
 source = source.replace('  }, { GLOBAL_KEY, USER_KEY, PROFILE_KEY, label, profileRow });', '  }, { GLOBAL_KEY, USER_KEY, PROFILE_KEY, label, profileRow, seedWorld });');
 
-// Correct initial fake remote get responses to the live revision.
-source = source.replace('if (url.includes("baekji_mvp_get_revision")) return json(request, remote.revision);', 'if (url.includes("baekji_mvp_get_revision")) return json(request, remote.revision);');
+// Keep caller attribution past the global Storage wrapper and record compact semantic diffs.
+source = source.replace(
+  'const useful = lines.find((line) => /\\.js(?:\\?|:)/.test(line) && !/authenticated-two-tab-browser-diagnostic/.test(line));',
+  'const useful = lines.find((line) => /\\.js(?:\\?|:)/.test(line) && !/authenticated-two-tab-browser-diagnostic|guest-world-isolation\\.js/.test(line));',
+);
+source = source.replace(
+  '      maxLongTask: 0,',
+  '      maxLongTask: 0,\n      writeHistory: [],',
+);
+const nativeSetNeedle = `    const nativeSet = Storage.prototype.setItem;\n    Storage.prototype.setItem = function diagnosticSetItem(key, value) {\n      if (this === localStorage && String(key) === GLOBAL_KEY) {\n        diag.worldWrites += 1;\n        const source = sourceKey(new Error().stack);\n        diag.writeSources[source] = (diag.writeSources[source] || 0) + 1;\n      }\n      return nativeSet.call(this, key, value);\n    };`;
+const nativeSetReplacement = `    const nativeSet = Storage.prototype.setItem;\n    const nativeGet = Storage.prototype.getItem;\n    function compactWorldDiff(beforeRaw, afterRaw) {\n      try {\n        const before = JSON.parse(beforeRaw || "null") || {};\n        const after = JSON.parse(String(afterRaw || "null")) || {};\n        const top = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));\n        const detail = {};\n        for (const root of ["characters", "parties", "sessions"]) {\n          if (!top.includes(root)) continue;\n          const a = before[root] || {}, b = after[root] || {};\n          detail[root] = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((id) => JSON.stringify(a[id]) !== JSON.stringify(b[id])).slice(0, 8);\n        }\n        for (const key of top.filter((key) => !["characters","parties","sessions"].includes(key)).slice(0, 8)) {\n          const av = before[key], bv = after[key];\n          detail[key] = { before: typeof av === "object" ? JSON.stringify(av).slice(0, 180) : av, after: typeof bv === "object" ? JSON.stringify(bv).slice(0, 180) : bv };\n        }\n        return { top: top.slice(0, 12), detail };\n      } catch (error) { return { error: String(error) }; }\n    }\n    Storage.prototype.setItem = function diagnosticSetItem(key, value) {\n      if (this === localStorage && String(key) === GLOBAL_KEY) {\n        diag.worldWrites += 1;\n        const stack = new Error().stack;\n        const source = sourceKey(stack);\n        diag.writeSources[source] = (diag.writeSources[source] || 0) + 1;\n        if (diag.writeHistory.length < 40) {\n          const beforeRaw = nativeGet.call(this, key);\n          diag.writeHistory.push({ n: diag.worldWrites, source, diff: compactWorldDiff(beforeRaw, value), stack: String(stack || "").split("\\n").slice(1, 7) });\n        }\n      }\n      return nativeSet.call(this, key, value);\n    };`;
+if (!source.includes(nativeSetNeedle)) throw new Error("native set instrumentation not found");
+source = source.replace(nativeSetNeedle, nativeSetReplacement);
 
-// Add event-listener ownership tracing.
-const listenerNeedle = '    const nativeSet = Storage.prototype.setItem;';
-const listenerPatch = `    const nativeAddEventListener = EventTarget.prototype.addEventListener;\n    EventTarget.prototype.addEventListener = function diagnosticAddEventListener(type, listener, options) {\n      if (type === "click" && this instanceof Element) {\n        const source = sourceKey(new Error().stack);\n        if (!Array.isArray(this.__diagClickSources)) Object.defineProperty(this, "__diagClickSources", { configurable: true, value: [] });\n        this.__diagClickSources.push(source);\n      }\n      return nativeAddEventListener.call(this, type, listener, options);\n    };\n\n${listenerNeedle}`;
-source = source.replace(listenerNeedle, listenerPatch);
-
-// Use direct element.click(), avoiding Puppeteer's scroll-to-target mechanics.
-const clickBlock = `  const clickA = await clickAndObserve(pageA, "[data-create-party]", 800);\n  const clickB = await clickAndObserve(pageB, "[data-resume-session]", 800);`;
-const clickReplacement = `  const directClick = async (page, selector, label) => {\n    const before = await page.evaluate(() => location.hash);\n    const info = await page.evaluate(({ selector, globalKey, userKey }) => {\n      const el = document.querySelector(selector);\n      if (!el) return { exists: false };\n      const snapshot = JSON.parse(localStorage.getItem(globalKey) || "null");\n      const uid = sessionStorage.getItem(userKey) || "";\n      const clickSources = Array.isArray(el.__diagClickSources) ? [...el.__diagClickSources] : [];\n      const result = { exists: true, connected: el.isConnected, disabled: Boolean(el.disabled), clickSources, uid, currentPartyId: snapshot?.characters?.[uid]?.currentPartyId || null, currentSessionId: snapshot?.characters?.[uid]?.currentSessionId || null };\n      el.click();\n      return result;\n    }, { selector, globalKey: GLOBAL_KEY, userKey: USER_KEY });\n    await sleep(600);\n    const after = await page.evaluate(() => location.hash);\n    return { label, clicked: Boolean(info.exists), before, after, changed: before !== after, info };\n  };\n  const clickA = await directClick(pageA, "[data-create-party]", "A-direct");\n  const clickB = await directClick(pageB, "[data-resume-session]", "B-direct");`;
-if (!source.includes(clickBlock)) throw new Error("click block not found");
-source = source.replace(clickBlock, clickReplacement);
-source = source.replace('  assert.equal(clickA.changed || clickA.clicked === false, true, "A click should navigate when its control exists");', '  if (clickA.clicked) assert.equal(clickA.changed, true, "A create-party click must execute when available");');
-source = source.replace('  assert.equal(clickB.changed, true, "B resume click should navigate");', '  assert.equal(clickB.changed, true, "B resume click must execute");');
+// Avoid interaction after the storm; dump evidence as soon as A/B snapshots are obtained.
+const clickStart = source.indexOf('  const clickA = await clickAndObserve');
+const assertStart = source.indexOf('  assert.equal(a.avatar', clickStart);
+if (clickStart < 0 || assertStart < 0) throw new Error("click/assert block not found");
+source = source.slice(0, clickStart) + `  console.log("A_WRITE_HISTORY", JSON.stringify(a.diag.writeHistory));\n  console.log("B_WRITE_HISTORY", JSON.stringify(b.diag.writeHistory));\n  assert.equal(a.avatar, true, "A avatar must remain after B login");\n  assert.equal(b.avatar, true, "B avatar must remain after login");\n  assert.ok(a.diag.worldWrites < 30, \`A world writes ran away: ${'${a.diag.worldWrites}'}\`);\n  assert.ok(b.diag.worldWrites < 30, \`B world writes ran away: ${'${b.diag.worldWrites}'}\`);\n` + source.slice(source.indexOf('  await context.close();', assertStart));
 
 fs.writeFileSync(tempUrl, source);
 try {
-  const result = spawnSync(process.execPath, [fileURLToPath(tempUrl)], { cwd: fileURLToPath(new URL("../", import.meta.url)), env: process.env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
+  const result = spawnSync(process.execPath, [fileURLToPath(tempUrl)], { cwd: fileURLToPath(new URL("../", import.meta.url)), env: process.env, encoding: "utf8", timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   process.stdout.write(result.stdout || "");
   process.stderr.write(result.stderr || "");
   if (result.error) throw result.error;
