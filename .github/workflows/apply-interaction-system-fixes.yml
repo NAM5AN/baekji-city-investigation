@@ -54,7 +54,7 @@ jobs:
         run: |
           git config user.name "NAM5AN"
           git config user.email "133747621+NAM5AN@users.noreply.github.com"
-          git rm scripts/apply-interaction-system-fixes.py .github/workflows/apply-interaction-system-fixes.yml
+          git rm -f scripts/apply-interaction-system-fixes.py .github/workflows/apply-interaction-system-fixes.yml
           git add -A
           git commit -m "fix: stabilize same-field interaction narration and sending"
           git push origin HEAD:agent/fix-interaction-system-v040
