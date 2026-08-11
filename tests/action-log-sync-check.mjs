@@ -81,4 +81,6 @@ assert.match(source, /NARRATION_ABORT_MS = 15_000/);
 assert.match(source, /Storage\.prototype\.setItem = function patchedSetItem/);
 assert.match(source, /repairObservedActionTexts\(parsedNext\)/);
 
+await import("./final-observation-write-stability-check.mjs");
+
 console.log("PASS: AI 결과 단일 노출 · 행동 의미 일치형 타 조사조 관찰문 동기화");
