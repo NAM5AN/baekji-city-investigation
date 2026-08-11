@@ -19,6 +19,8 @@ jobs:
         run: node --check tester-registry-guard.js && node tests/tester-registry-guard-check.mjs
       - name: Tester MutationObserver loop check
         run: node tests/tester-mutation-loop-check.mjs
+      - name: Cross-tab guest world-write check
+        run: node tests/cross-tab-guest-world-write-check.mjs
       - name: Supabase recovery wiring check
         run: node tests/supabase-recovery-wiring-check.mjs
       - name: Probe live tester login RPC
