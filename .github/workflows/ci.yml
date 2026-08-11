@@ -21,6 +21,8 @@ jobs:
         run: node tests/tester-mutation-loop-check.mjs
       - name: Cross-tab guest world-write check
         run: node tests/cross-tab-guest-world-write-check.mjs
+      - name: Full cross-tab login churn diagnostic
+        run: node tests/full-cross-tab-login-churn-diagnostic.mjs
       - name: Auth bootstrap preserve check
         run: node tests/cloud-auth-bootstrap-preserve-check.mjs
       - name: Auth reload bootstrap check
