@@ -14,9 +14,10 @@ source = source.replace(
   "const runtimeErrors = [];",
   "let __loaded = 0;\nconst runtimeErrors = [];",
 );
+const dispatchNeedle = 'window.dispatchEvent(new window.StorageEvent("storage", { key: GLOBAL_KEY, oldValue: before, newValue: after, storageArea: window.localStorage, url: window.location.href }));';
 source = source.replace(
-  "await sleep(120);",
-  "if (process.env.PREFIX_ONLY === '1') { await sleep(80); console.log(`PREFIX_SETTLED ${__loaded}`); window.close(); process.exit(0); }\n\nawait sleep(120);",
+  dispatchNeedle,
+  `if (process.env.PREFIX_ONLY === "1") {\n  setTimeout(() => {\n    console.log(\`PREFIX_SETTLED_AFTER_STORAGE ${'${__loaded}'}\`);\n    window.close();\n    process.exit(0);\n  }, 250);\n}\n${dispatchNeedle}`,
 );
 fs.writeFileSync(tempPath, source);
 
@@ -46,11 +47,11 @@ try {
     if (timedOut) {
       firstTimeout = { index: i, file: scripts[i - 1], previous: scripts[i - 2] || null, stdout: result.stdout || "" };
       console.log("FIRST_TIMEOUT", JSON.stringify(firstTimeout));
-      console.log(String(result.stdout || "").slice(-4000));
+      console.log(String(result.stdout || "").slice(-6000));
       break;
     }
     if (result.status !== 0) {
-      console.log(String(result.stdout || "").slice(-4000));
+      console.log(String(result.stdout || "").slice(-6000));
       throw new Error(`prefix ${i} failed before timeout at ${scripts[i - 1]}`);
     }
   }
@@ -58,5 +59,5 @@ try {
   try { fs.unlinkSync(tempPath); } catch {}
 }
 
-if (!firstTimeout) throw new Error("No authenticated DOM starvation prefix found");
+if (!firstTimeout) throw new Error("No authenticated DOM starvation prefix found after storage update");
 process.exitCode = 1;
