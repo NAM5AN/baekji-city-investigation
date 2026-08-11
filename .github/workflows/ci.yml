@@ -17,8 +17,8 @@ jobs:
       - run: npm run check
       - name: Install DOM diagnostic dependency
         run: npm install --no-save --no-package-lock jsdom@26
-      - name: Authenticated home DOM storm diagnostic
-        run: node tests/authenticated-home-dom-storm-diagnostic.mjs
+      - name: Authenticated home DOM prefix diagnostic
+        run: node tests/authenticated-home-dom-prefix-diagnostic.mjs
       - name: Authenticated runtime source diagnostic
         run: node tests/authenticated-tab-runtime-source-diagnostic.mjs
       - name: Tester registry guard check
