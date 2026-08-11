@@ -86,7 +86,7 @@
           </div>
         </div>
         <p class="tester-signup-complete__notice">가입만으로 조사 화면에 접속되지 않습니다.<br>등록한 캐릭터 이름과 비밀번호로 로그인해 주세요.</p>
-        <button type="button" class="button primary block" data-signup-complete-login>로그인 화면으로</button>
+        <button type="button" class="button primary block" data-signup-complete-login>확인</button>
       </section>`;
     (document.querySelector("#modal-root") || document.body).append(modal);
     modal.querySelector("[data-signup-complete-login]")?.addEventListener("click", finishCompletion);
