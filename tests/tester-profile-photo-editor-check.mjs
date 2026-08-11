@@ -46,11 +46,14 @@ assert(!signupSource.includes('sessionStorage.setItem(USER_KEY'), "signup comple
 assert(signupSource.includes('showCompletion({ name: finalName, photo: finalPhoto })'), "successful signup must show the created profile before login");
 assert(signupSource.includes('data-signup-complete-photo'), "completion modal must display the chosen profile photo");
 assert(signupSource.includes('data-signup-complete-name'), "completion modal must display the character name");
+assert(signupSource.includes('<h2 id="tester-signup-complete-title">가입 완료</h2>'), "completion title should be simply 가입 완료");
+assert(!signupSource.includes('가입만으로 조사 화면에 접속되지 않습니다.'), "redundant signup-only access explanation should be removed");
+assert(signupSource.includes('등록한 캐릭터 이름과 비밀번호로 로그인해 주세요.'), "login instruction should remain");
 assert(signupSource.includes('data-signup-complete-login>확인</button>'), "completion modal CTA should be a simple confirmation button");
 assert(signupSource.includes('loginPassword?.focus?.()'), "completion modal should return the user to explicit login");
 assert(signupSource.includes('button.textContent = "가입하기"'), "signup CTA must no longer promise immediate access");
 assert(signupCss.includes('.tester-signup-complete__profile'), "signup completion profile card must be styled");
 assert(index.includes('tester-signup-complete.css?v=0.3.105'), "signup completion modal CSS must load in production");
-assert(index.includes('tester-signup-complete.js?v=0.3.106'), "simplified signup confirmation runtime must load in production");
+assert(index.includes('tester-signup-complete.js?v=0.3.107'), "simplified signup completion copy runtime must load in production");
 
 console.log("PASS: full-photo crop editor plus explicit signup-complete-to-login gate are wired without automatic home entry");
