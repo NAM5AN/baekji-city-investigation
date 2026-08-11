@@ -10,7 +10,7 @@
 .admin-zone-map-legend i.route{width:16px;height:0;border:0;border-top:2px solid #c8d1ce;border-radius:0;background:transparent}
 .admin-zone-map-viewport{min-height:260px;overflow:auto;background:#0c1113;padding:8px;overscroll-behavior:contain}
 .admin-zone-map-viewport::-webkit-scrollbar{height:8px;width:8px}.admin-zone-map-viewport::-webkit-scrollbar-thumb{background:#354246;border-radius:99px}
-.admin-zone-map-viewport svg{display:block;width:100%;height:auto;min-width:780px;border-radius:8px;background:#f6f6f2}
+.admin-zone-map-viewport svg{display:block;width:min(100%,980px);height:auto;min-width:0;margin:0 auto;border-radius:8px;background:#f6f6f2}
 .admin-zone-map-loading,.admin-zone-map-error{min-height:260px;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:10px}
 .admin-zone-map-error strong,.admin-zone-map-error span{display:block}.admin-zone-map-error span{margin-top:4px;color:var(--faint)}
 .admin-zone-map-viewport svg [data-node].admin-zone-node{cursor:pointer;outline:none}
@@ -33,5 +33,5 @@
 .admin-zone-list-fallback summary{cursor:pointer;padding:9px 10px;color:var(--muted);font-size:10px;font-weight:700;user-select:none}
 .admin-zone-list-fallback[open] summary{border-bottom:1px solid var(--line);color:var(--text)}
 .admin-zone-list-grid{padding:8px}
-@media(max-width:900px){.admin-zone-map-head{display:block}.admin-zone-map-legend{justify-content:flex-start;margin-top:8px}.admin-zone-map-viewport svg{min-width:720px}}
+@media(max-width:900px){.admin-zone-map-head{display:block}.admin-zone-map-legend{justify-content:flex-start;margin-top:8px}.admin-zone-map-viewport svg{width:100%;min-width:720px;margin:0}}
 @media(max-width:560px){.admin-zone-map-viewport{padding:5px}.admin-zone-map-viewport svg{min-width:680px}.admin-zone-live-scopes>header{align-items:flex-start}.admin-zone-special-grid{grid-template-columns:1fr}}
