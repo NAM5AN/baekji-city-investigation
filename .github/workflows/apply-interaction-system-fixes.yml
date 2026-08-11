@@ -26,6 +26,7 @@ jobs:
           s = s.replace('  assert.doesNotMatch(server, /이어어서 상대의 반응/);\n  assert.doesNotMatch(server, /이어져서 상대의 반응/);', '  assert.doesNotMatch(server, /이어서 상대의 반응/);')
           s = s.replace(r'(?:\\s*캐릭터)?', r'(?:\s*캐릭터)?')
           s = s.replace(r'.replace(/\\s+/g', r'.replace(/\s+/g')
+          s = s.replace('문을 연 뒤 안으로 들어간다', '문을 연 후에 안으로 들어간다')
           p.write_text(s, encoding='utf-8')
           PY
       - name: Apply fixes
