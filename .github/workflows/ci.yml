@@ -23,6 +23,8 @@ jobs:
         run: node tests/cross-tab-guest-world-write-check.mjs
       - name: Auth bootstrap preserve check
         run: node tests/cloud-auth-bootstrap-preserve-check.mjs
+      - name: Auth reload bootstrap check
+        run: node tests/cloud-auth-reload-bootstrap-check.mjs
       - name: Cross-tab authenticated world check
         run: node tests/cross-tab-authenticated-world-check.mjs
       - name: Supabase recovery wiring check
