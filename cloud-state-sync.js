@@ -2,6 +2,7 @@
   "use strict";
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const USER_KEY = "baekji_city_mvp_current_user_v034";
   const STATE_KEY = "day1_world";
   const WRITER_KEY = "baekji_city_cloud_writer_v1";
   const SUPABASE_URL = "https://zstgpnwnwmeifgmyeqtz.supabase.co";
@@ -16,12 +17,22 @@
   const nativeGetItem = storageProto?.getItem;
 
   let initialized = false;
+  let bootstrapInFlight = false;
   let applyingRemote = false;
   let revision = 0;
   let pendingRaw = null;
   let pushTimer = 0;
   let pushInFlight = false;
   let pollTimer = 0;
+
+  function activeUserId() {
+    try { return String(sessionStorage.getItem(USER_KEY) || ""); }
+    catch { return ""; }
+  }
+
+  function syncEnabled() {
+    return Boolean(activeUserId());
+  }
 
   function safeParse(raw) {
     try {
@@ -163,8 +174,7 @@
       value = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       nativeSetItem?.call(localStorage, WRITER_KEY, value);
     }
-    const userId = sessionStorage.getItem("baekji_city_mvp_current_user_v034") || "guest";
-    return `${userId}:${value}`;
+    return `${activeUserId() || "inactive"}:${value}`;
   }
 
   async function rpc(name, body) {
@@ -215,6 +225,16 @@
     window.dispatchEvent(new CustomEvent("baekji-cloud-sync", { detail: { status, revision, ...detail } }));
   }
 
+  function suspendSync() {
+    clearTimeout(pushTimer);
+    clearTimeout(pollTimer);
+    pushTimer = 0;
+    pollTimer = 0;
+    pendingRaw = null;
+    initialized = false;
+    if (document.documentElement.dataset.cloudSyncStatus !== "idle") notifyStatus("idle");
+  }
+
   function dispatchExternalUpdate(oldValue, newValue) {
     try {
       window.dispatchEvent(new StorageEvent("storage", {
@@ -232,6 +252,7 @@
   }
 
   function applyRemoteState(row) {
+    if (!syncEnabled()) return false;
     const remote = row?.state;
     if (!remote || remote.version !== 3) return false;
     const nextRaw = JSON.stringify(remote);
@@ -249,6 +270,7 @@
   }
 
   function schedulePush(raw) {
+    if (!syncEnabled()) return;
     if (!safeParse(raw)) return;
     pendingRaw = raw;
     if (!initialized || applyingRemote) return;
@@ -257,6 +279,10 @@
   }
 
   async function flushPush() {
+    if (!syncEnabled()) {
+      pendingRaw = null;
+      return;
+    }
     if (!initialized || pushInFlight || !pendingRaw) return;
     const raw = pendingRaw;
     pendingRaw = null;
@@ -266,9 +292,11 @@
     notifyStatus("saving");
     try {
       let result = await putRemoteState(localState, revision);
+      if (!syncEnabled()) return;
       if (result?.accepted === false && result.state?.version === 3) {
         const merged = reconcileAdminControl(result.state, localState, mergeValues(result.state, localState));
         result = await putRemoteState(merged, Number(result.revision || 0));
+        if (!syncEnabled()) return;
         if (result?.accepted) {
           applyingRemote = true;
           try { nativeSetItem.call(localStorage, GLOBAL_KEY, JSON.stringify(merged)); }
@@ -283,11 +311,13 @@
         notifyStatus("conflict");
       }
     } catch (error) {
-      pendingRaw = pendingRaw || raw;
-      notifyStatus("offline", { message: String(error?.message || error) });
+      if (syncEnabled()) {
+        pendingRaw = pendingRaw || raw;
+        notifyStatus("offline", { message: String(error?.message || error) });
+      }
     } finally {
       pushInFlight = false;
-      if (pendingRaw) {
+      if (syncEnabled() && pendingRaw) {
         clearTimeout(pushTimer);
         pushTimer = setTimeout(flushPush, 350);
       }
@@ -295,24 +325,44 @@
   }
 
   async function pollOnce(forceFull = false) {
+    if (!syncEnabled()) {
+      suspendSync();
+      return;
+    }
     if (!initialized || pushInFlight || pendingRaw) return;
     try {
       const remoteRevision = forceFull ? revision + 1 : await readRemoteRevision();
+      if (!syncEnabled()) {
+        suspendSync();
+        return;
+      }
       if (!forceFull && (!remoteRevision || remoteRevision <= revision)) {
         notifyStatus("synced");
         return;
       }
       const row = await readRemoteState();
+      if (!syncEnabled()) {
+        suspendSync();
+        return;
+      }
       if (!row) return;
       if (Number(row.revision || 0) > revision || forceFull) applyRemoteState(row);
       notifyStatus("synced");
     } catch (error) {
+      if (!syncEnabled()) {
+        suspendSync();
+        return;
+      }
       notifyStatus("offline", { message: String(error?.message || error) });
     }
   }
 
   function schedulePoll(delay = document.hidden ? HIDDEN_POLL_MS : ACTIVE_POLL_MS) {
     clearTimeout(pollTimer);
+    if (!syncEnabled()) {
+      pollTimer = 0;
+      return;
+    }
     pollTimer = setTimeout(async () => {
       await pollOnce(false);
       schedulePoll();
@@ -320,9 +370,17 @@
   }
 
   async function bootstrap() {
+    if (!syncEnabled()) {
+      suspendSync();
+      return;
+    }
     notifyStatus("connecting");
     try {
       const row = await readRemoteState();
+      if (!syncEnabled()) {
+        suspendSync();
+        return;
+      }
       if (row?.state?.version === 3) {
         pendingRaw = null;
         applyRemoteState(row);
@@ -331,6 +389,10 @@
         const localState = safeParse(localRaw);
         if (localState) {
           const created = await putRemoteState(localState, null);
+          if (!syncEnabled()) {
+            suspendSync();
+            return;
+          }
           if (created?.state?.version === 3) {
             revision = Number(created.revision || 0);
             if (created.accepted === false) applyRemoteState(created);
@@ -341,16 +403,44 @@
       notifyStatus("synced");
       if (pendingRaw) flushPush();
     } catch (error) {
+      if (!syncEnabled()) {
+        suspendSync();
+        return;
+      }
       initialized = true;
       notifyStatus("offline", { message: String(error?.message || error) });
     }
     schedulePoll(600);
   }
 
+  async function ensureBootstrap() {
+    if (!syncEnabled()) {
+      suspendSync();
+      return;
+    }
+    if (initialized || bootstrapInFlight) return;
+    bootstrapInFlight = true;
+    try { await bootstrap(); }
+    finally { bootstrapInFlight = false; }
+  }
+
+  function refreshSync(forceFull = false) {
+    if (!syncEnabled()) {
+      suspendSync();
+      return;
+    }
+    if (!initialized) {
+      ensureBootstrap();
+      return;
+    }
+    pollOnce(forceFull);
+    schedulePoll(250);
+  }
+
   if (storageProto && nativeSetItem && nativeRemoveItem && nativeGetItem) {
     storageProto.setItem = function patchedSetItem(key, value) {
       nativeSetItem.call(this, key, value);
-      if (this === localStorage && key === GLOBAL_KEY && !applyingRemote) schedulePush(String(value));
+      if (this === localStorage && key === GLOBAL_KEY && !applyingRemote && syncEnabled()) schedulePush(String(value));
     };
     storageProto.removeItem = function patchedRemoveItem(key) {
       nativeRemoveItem.call(this, key);
@@ -358,10 +448,14 @@
     };
   }
 
-  window.addEventListener("online", () => { pollOnce(true); schedulePoll(250); });
-  window.addEventListener("focus", () => { pollOnce(false); schedulePoll(250); });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollOnce(false); schedulePoll(250); });
-  window.addEventListener("beforeunload", () => { if (pendingRaw) flushPush(); });
+  window.addEventListener("online", () => refreshSync(true));
+  window.addEventListener("focus", () => refreshSync(false));
+  window.addEventListener("hashchange", () => refreshSync(false));
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshSync(false);
+    else schedulePoll();
+  });
+  window.addEventListener("beforeunload", () => { if (syncEnabled() && pendingRaw) flushPush(); });
 
   window.__BAEKJI_CLOUD_SYNC_TEST__ = Object.freeze({
     mergeValues,
@@ -372,7 +466,9 @@
     adminControlHistory,
     applyAdminControlPatch,
     reconcileAdminControl,
+    activeUserId,
+    syncEnabled,
   });
 
-  bootstrap();
+  ensureBootstrap();
 })();
