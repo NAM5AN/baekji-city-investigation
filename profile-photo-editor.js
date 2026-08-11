@@ -7,13 +7,17 @@
   const EDIT_SIZE = 512;
   const OUTPUT_SIZE = 256;
   const STAGE_MAX = 1280;
+  const STAGE_PADDING = 24;
   const MAX_FILE_BYTES = 25 * 1024 * 1024;
+  const HANDLE_RADIUS = 24;
   const safeFiles = new WeakMap();
   const pointers = new Map();
   let active = null;
   let modal = null;
   let canvas = null;
-  let zoomInput = null;
+  let previewCanvas = null;
+  let cropSizeInput = null;
+  let cropZoomLabel = null;
   let bodyOverflow = "";
 
   function photoError(code) {
@@ -63,9 +67,8 @@
     const originalUrl = URL.createObjectURL(file);
     let original = null;
     try {
-      // iOS WebKit is intentionally kept off createImageBitmap here. Native <img>
-      // decoding preserves camera orientation more reliably and avoids the prior
-      // full-resolution ImageBitmap allocation spike before the editor opens.
+      // iOS WebKit stays off createImageBitmap. Native <img> decoding respects
+      // camera orientation and avoids the former full-resolution bitmap spike.
       original = await loadImage(originalUrl);
       const width = Number(original.naturalWidth || original.width);
       const height = Number(original.naturalHeight || original.height);
@@ -103,21 +106,24 @@
       <div class="tester-photo-editor__backdrop" data-photo-editor-cancel></div>
       <section class="tester-photo-editor__dialog" role="dialog" aria-modal="true" aria-labelledby="tester-photo-editor-title">
         <div class="tester-photo-editor__head">
-          <div><strong id="tester-photo-editor-title">프로필 사진 편집</strong><small>정사각형 영역에 맞춰 위치와 크기를 조절하세요.</small></div>
+          <div><strong id="tester-photo-editor-title">프로필 사진 편집</strong><small>전체 사진 위에서 정사각형 선택 영역을 이동하거나 크기를 바꾸세요.</small></div>
           <button type="button" class="button ghost" data-photo-editor-cancel aria-label="닫기">닫기</button>
         </div>
         <div class="tester-photo-editor__stage">
-          <canvas width="${EDIT_SIZE}" height="${EDIT_SIZE}" data-photo-editor-canvas aria-label="프로필 사진 자르기 영역"></canvas>
-          <div class="tester-photo-editor__frame" aria-hidden="true"></div>
+          <canvas width="${EDIT_SIZE}" height="${EDIT_SIZE}" data-photo-editor-canvas aria-label="전체 사진과 정사각형 자르기 영역"></canvas>
+        </div>
+        <div class="tester-photo-editor__preview-row">
+          <div class="tester-photo-editor__preview-copy"><strong>최종 1:1 미리보기</strong><small>선택 영역을 줄일수록 결과가 확대됩니다.</small></div>
+          <div class="tester-photo-editor__preview-box"><canvas width="128" height="128" data-photo-editor-preview aria-label="최종 프로필 사진 미리보기"></canvas><output data-photo-editor-zoom-label>1.0×</output></div>
         </div>
         <div class="tester-photo-editor__controls">
-          <label>크기 조절 <input type="range" min="1" max="4" step="0.01" value="1" data-photo-editor-zoom></label>
+          <label>선택 영역 크기 <input type="range" min="20" max="100" step="1" value="82" data-photo-editor-crop-size></label>
           <div class="tester-photo-editor__tools">
             <button type="button" class="button ghost" data-photo-editor-rotate>↻ 90° 회전</button>
             <button type="button" class="button ghost" data-photo-editor-reset>원위치</button>
           </div>
         </div>
-        <p class="tester-photo-editor__hint">사진을 드래그해 이동 · 두 손가락으로 확대/축소 · 최종 256×256 저장</p>
+        <p class="tester-photo-editor__hint">격자 안을 드래그해 이동 · 모서리를 드래그해 크기 조절 · 두 손가락으로 확대/축소 · 최종 256×256 저장</p>
         <div class="tester-photo-editor__actions">
           <button type="button" class="button ghost" data-photo-editor-cancel>취소</button>
           <button type="button" class="button primary" data-photo-editor-apply>이대로 사용</button>
@@ -125,26 +131,33 @@
       </section>`;
     (document.querySelector("#modal-root") || document.body).append(modal);
     canvas = modal.querySelector("[data-photo-editor-canvas]");
-    zoomInput = modal.querySelector("[data-photo-editor-zoom]");
+    previewCanvas = modal.querySelector("[data-photo-editor-preview]");
+    cropSizeInput = modal.querySelector("[data-photo-editor-crop-size]");
+    cropZoomLabel = modal.querySelector("[data-photo-editor-zoom-label]");
 
     modal.addEventListener("click", (event) => {
       if (event.target.closest("[data-photo-editor-cancel]")) closeEditor(null);
-      else if (event.target.closest("[data-photo-editor-rotate]")) rotateEditor();
+      else if (event.target.closest("[data-photo-editor-rotate]")) void rotateEditor();
       else if (event.target.closest("[data-photo-editor-reset]")) resetEditor();
       else if (event.target.closest("[data-photo-editor-apply]")) void applyEditor();
     });
-    zoomInput.addEventListener("input", () => {
+
+    cropSizeInput.addEventListener("input", () => {
       if (!active) return;
-      active.zoom = Number(zoomInput.value) || 1;
-      clampOffsets();
+      const max = maxCropSize();
+      const min = minimumCropSize();
+      const ratio = Math.max(0, Math.min(1, (Number(cropSizeInput.value) - 20) / 80));
+      setCropSize(min + (max - min) * ratio, cropCenter());
       drawEditor();
     });
+
     canvas.addEventListener("wheel", (event) => {
       if (!active) return;
+      const point = canvasPoint(event);
+      if (!pointInCrop(point)) return;
       event.preventDefault();
-      active.zoom = Math.min(4, Math.max(1, active.zoom * (event.deltaY < 0 ? 1.08 : 0.92)));
-      zoomInput.value = String(active.zoom);
-      clampOffsets();
+      setCropSize(active.crop.size * (event.deltaY < 0 ? 0.9 : 1.1), point);
+      syncCropControl();
       drawEditor();
     }, { passive: false });
 
@@ -154,70 +167,185 @@
     canvas.addEventListener("pointercancel", onPointerUp);
   }
 
-  function rotatedSize() {
-    if (!active) return { width: 1, height: 1 };
-    const quarter = (active.rotation / 90) % 2;
-    return quarter
-      ? { width: active.image.naturalHeight, height: active.image.naturalWidth }
-      : { width: active.image.naturalWidth, height: active.image.naturalHeight };
+  function fitImageRect() {
+    if (!active?.image) return { x: STAGE_PADDING, y: STAGE_PADDING, width: 1, height: 1, scale: 1 };
+    const width = active.image.naturalWidth || 1;
+    const height = active.image.naturalHeight || 1;
+    const usable = EDIT_SIZE - STAGE_PADDING * 2;
+    const scale = Math.min(usable / width, usable / height);
+    const drawWidth = width * scale;
+    const drawHeight = height * scale;
+    return {
+      x: (EDIT_SIZE - drawWidth) / 2,
+      y: (EDIT_SIZE - drawHeight) / 2,
+      width: drawWidth,
+      height: drawHeight,
+      scale,
+    };
   }
 
-  function baseScale() {
-    const size = rotatedSize();
-    return Math.max(EDIT_SIZE / size.width, EDIT_SIZE / size.height);
+  function maxCropSize() {
+    const rect = active?.imageRect || fitImageRect();
+    return Math.max(1, Math.min(rect.width, rect.height));
   }
 
-  function currentScale() {
-    return baseScale() * (active?.zoom || 1);
+  function minimumCropSize() {
+    const max = maxCropSize();
+    return Math.min(max, Math.max(24, max * 0.2));
   }
 
-  function clampOffsets() {
+  function cropCenter() {
+    if (!active?.crop) return { x: EDIT_SIZE / 2, y: EDIT_SIZE / 2 };
+    return { x: active.crop.x + active.crop.size / 2, y: active.crop.y + active.crop.size / 2 };
+  }
+
+  function clampCropPosition() {
+    if (!active?.crop) return;
+    const rect = active.imageRect;
+    const crop = active.crop;
+    crop.x = Math.max(rect.x, Math.min(rect.x + rect.width - crop.size, crop.x));
+    crop.y = Math.max(rect.y, Math.min(rect.y + rect.height - crop.size, crop.y));
+  }
+
+  function setCropSize(nextSize, center = cropCenter()) {
+    if (!active?.crop) return;
+    const min = minimumCropSize();
+    const max = maxCropSize();
+    const size = Math.max(min, Math.min(max, Number(nextSize) || max));
+    active.crop.size = size;
+    active.crop.x = center.x - size / 2;
+    active.crop.y = center.y - size / 2;
+    clampCropPosition();
+  }
+
+  function resetCrop() {
     if (!active) return;
-    const size = rotatedSize();
-    const scale = currentScale();
-    const maxX = Math.max(0, (size.width * scale - EDIT_SIZE) / 2);
-    const maxY = Math.max(0, (size.height * scale - EDIT_SIZE) / 2);
-    active.offsetX = Math.max(-maxX, Math.min(maxX, active.offsetX));
-    active.offsetY = Math.max(-maxY, Math.min(maxY, active.offsetY));
+    active.imageRect = fitImageRect();
+    const max = maxCropSize();
+    const size = max * 0.82;
+    active.crop = {
+      size,
+      x: active.imageRect.x + (active.imageRect.width - size) / 2,
+      y: active.imageRect.y + (active.imageRect.height - size) / 2,
+    };
+    syncCropControl();
   }
 
-  function paint(target, targetSize) {
-    if (!active) return;
-    const ctx = target.getContext("2d", { alpha: false });
-    const ratio = targetSize / EDIT_SIZE;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  function sourceCrop() {
+    if (!active?.crop) return { sx: 0, sy: 0, size: 1 };
+    const rect = active.imageRect;
+    const imageScale = rect.scale || 1;
+    return {
+      sx: Math.max(0, (active.crop.x - rect.x) / imageScale),
+      sy: Math.max(0, (active.crop.y - rect.y) / imageScale),
+      size: active.crop.size / imageScale,
+    };
+  }
+
+  function syncCropControl() {
+    if (!active || !cropSizeInput) return;
+    const min = minimumCropSize();
+    const max = maxCropSize();
+    const ratio = max <= min ? 1 : (active.crop.size - min) / (max - min);
+    cropSizeInput.value = String(Math.round(20 + Math.max(0, Math.min(1, ratio)) * 80));
+    if (cropZoomLabel) cropZoomLabel.value = `${(max / active.crop.size).toFixed(1)}×`;
+  }
+
+  function drawGrid(ctx, crop) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(17,17,17,.58)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 2; i += 1) {
+      const offset = crop.size * i / 3;
+      ctx.beginPath();
+      ctx.moveTo(crop.x + offset, crop.y);
+      ctx.lineTo(crop.x + offset, crop.y + crop.size);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(crop.x, crop.y + offset);
+      ctx.lineTo(crop.x + crop.size, crop.y + offset);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function handlePoints() {
+    const crop = active.crop;
+    return {
+      tl: { x: crop.x, y: crop.y },
+      tr: { x: crop.x + crop.size, y: crop.y },
+      bl: { x: crop.x, y: crop.y + crop.size },
+      br: { x: crop.x + crop.size, y: crop.y + crop.size },
+    };
+  }
+
+  function drawHandles(ctx) {
+    ctx.save();
     ctx.fillStyle = "#f6f6f2";
-    ctx.fillRect(0, 0, targetSize, targetSize);
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 3;
+    Object.values(handlePoints()).forEach((point) => {
+      ctx.fillRect(point.x - 7, point.y - 7, 14, 14);
+      ctx.strokeRect(point.x - 7, point.y - 7, 14, 14);
+    });
+    ctx.restore();
+  }
+
+  function drawPreview() {
+    if (!active || !previewCanvas) return;
+    const ctx = previewCanvas.getContext("2d", { alpha: false });
+    if (!ctx) return;
+    const crop = sourceCrop();
+    ctx.fillStyle = "#f6f6f2";
+    ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.save();
-    ctx.translate(targetSize / 2 + active.offsetX * ratio, targetSize / 2 + active.offsetY * ratio);
-    ctx.rotate(active.rotation * Math.PI / 180);
-    const scale = currentScale() * ratio;
-    ctx.scale(scale, scale);
-    ctx.drawImage(active.image, -active.image.naturalWidth / 2, -active.image.naturalHeight / 2);
-    ctx.restore();
+    ctx.drawImage(active.image, crop.sx, crop.sy, crop.size, crop.size, 0, 0, previewCanvas.width, previewCanvas.height);
   }
 
   function drawEditor() {
     if (!active || !canvas) return;
-    paint(canvas, EDIT_SIZE);
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return;
+    const rect = active.imageRect;
+    const crop = active.crop;
+    const source = sourceCrop();
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#d8d8d2";
+    ctx.fillRect(0, 0, EDIT_SIZE, EDIT_SIZE);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(active.image, rect.x, rect.y, rect.width, rect.height);
+
+    ctx.fillStyle = "rgba(0,0,0,.48)";
+    ctx.fillRect(0, 0, EDIT_SIZE, EDIT_SIZE);
+    ctx.drawImage(active.image, source.sx, source.sy, source.size, source.size, crop.x, crop.y, crop.size, crop.size);
+
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(crop.x, crop.y, crop.size, crop.size);
+    drawGrid(ctx, crop);
+    drawHandles(ctx);
+    drawPreview();
+    syncCropControl();
   }
 
-  function resetEditor() {
-    if (!active) return;
-    active.zoom = 1;
-    active.offsetX = 0;
-    active.offsetY = 0;
-    zoomInput.value = "1";
-    clampOffsets();
-    drawEditor();
+  function pointInCrop(point) {
+    if (!active?.crop) return false;
+    const crop = active.crop;
+    return point.x >= crop.x && point.x <= crop.x + crop.size && point.y >= crop.y && point.y <= crop.y + crop.size;
   }
 
-  function rotateEditor() {
-    if (!active) return;
-    active.rotation = (active.rotation + 90) % 360;
-    resetEditor();
+  function hitHandle(point) {
+    if (!active?.crop) return null;
+    const handles = handlePoints();
+    return Object.entries(handles).find(([, handle]) => Math.hypot(point.x - handle.x, point.y - handle.y) <= HANDLE_RADIUS)?.[0] || null;
+  }
+
+  function pointInImage(point) {
+    const rect = active?.imageRect;
+    return Boolean(rect && point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);
   }
 
   function canvasPoint(event) {
@@ -239,53 +367,163 @@
   function beginPinch() {
     if (!active || pointers.size < 2) return;
     const [a, b] = Array.from(pointers.values()).slice(0, 2);
-    active.pinch = {
+    active.gesture = {
+      type: "pinch",
       distance: Math.max(1, pointerDistance(a, b)),
       center: pointerCenter(a, b),
-      zoom: active.zoom,
-      offsetX: active.offsetX,
-      offsetY: active.offsetY,
+      cropSize: active.crop.size,
+      cropCenter: cropCenter(),
     };
+  }
+
+  function resizeFromHandle(handle, point) {
+    const crop = active.crop;
+    const rect = active.imageRect;
+    let anchorX = crop.x;
+    let anchorY = crop.y;
+    let directionX = 1;
+    let directionY = 1;
+
+    if (handle === "tl") {
+      anchorX = crop.x + crop.size;
+      anchorY = crop.y + crop.size;
+      directionX = -1;
+      directionY = -1;
+    } else if (handle === "tr") {
+      anchorX = crop.x;
+      anchorY = crop.y + crop.size;
+      directionX = 1;
+      directionY = -1;
+    } else if (handle === "bl") {
+      anchorX = crop.x + crop.size;
+      anchorY = crop.y;
+      directionX = -1;
+      directionY = 1;
+    }
+
+    const wanted = Math.max(Math.abs(point.x - anchorX), Math.abs(point.y - anchorY));
+    const maxX = directionX > 0 ? rect.x + rect.width - anchorX : anchorX - rect.x;
+    const maxY = directionY > 0 ? rect.y + rect.height - anchorY : anchorY - rect.y;
+    const size = Math.max(minimumCropSize(), Math.min(wanted, maxX, maxY, maxCropSize()));
+    crop.size = size;
+    crop.x = directionX > 0 ? anchorX : anchorX - size;
+    crop.y = directionY > 0 ? anchorY : anchorY - size;
+    clampCropPosition();
   }
 
   function onPointerDown(event) {
     if (!active) return;
+    const point = canvasPoint(event);
+    if (!pointInImage(point)) return;
     event.preventDefault();
     canvas.setPointerCapture?.(event.pointerId);
-    pointers.set(event.pointerId, canvasPoint(event));
-    if (pointers.size === 1) active.dragLast = pointers.get(event.pointerId);
-    if (pointers.size === 2) beginPinch();
+    pointers.set(event.pointerId, point);
+
+    if (pointers.size >= 2) {
+      beginPinch();
+      return;
+    }
+
+    const handle = hitHandle(point);
+    if (handle) {
+      active.gesture = { type: "resize", handle };
+      return;
+    }
+
+    if (!pointInCrop(point)) {
+      active.crop.x = point.x - active.crop.size / 2;
+      active.crop.y = point.y - active.crop.size / 2;
+      clampCropPosition();
+      drawEditor();
+    }
+    active.gesture = { type: "move", last: point };
   }
 
   function onPointerMove(event) {
     if (!active || !pointers.has(event.pointerId)) return;
     event.preventDefault();
     const next = canvasPoint(event);
-    const previous = pointers.get(event.pointerId);
     pointers.set(event.pointerId, next);
 
     if (pointers.size >= 2) {
-      if (!active.pinch) beginPinch();
+      if (active.gesture?.type !== "pinch") beginPinch();
       const [a, b] = Array.from(pointers.values()).slice(0, 2);
-      const center = pointerCenter(a, b);
+      const currentCenter = pointerCenter(a, b);
       const distance = Math.max(1, pointerDistance(a, b));
-      active.zoom = Math.min(4, Math.max(1, active.pinch.zoom * distance / active.pinch.distance));
-      active.offsetX = active.pinch.offsetX + (center.x - active.pinch.center.x);
-      active.offsetY = active.pinch.offsetY + (center.y - active.pinch.center.y);
-      zoomInput.value = String(active.zoom);
-    } else {
-      active.offsetX += next.x - previous.x;
-      active.offsetY += next.y - previous.y;
+      const ratio = distance / active.gesture.distance;
+      const shiftedCenter = {
+        x: active.gesture.cropCenter.x + (currentCenter.x - active.gesture.center.x),
+        y: active.gesture.cropCenter.y + (currentCenter.y - active.gesture.center.y),
+      };
+      setCropSize(active.gesture.cropSize / ratio, shiftedCenter);
+      drawEditor();
+      return;
     }
-    clampOffsets();
-    drawEditor();
+
+    if (active.gesture?.type === "resize") {
+      resizeFromHandle(active.gesture.handle, next);
+      drawEditor();
+      return;
+    }
+
+    if (active.gesture?.type === "move") {
+      const previous = active.gesture.last;
+      active.crop.x += next.x - previous.x;
+      active.crop.y += next.y - previous.y;
+      active.gesture.last = next;
+      clampCropPosition();
+      drawEditor();
+    }
   }
 
   function onPointerUp(event) {
     if (!active) return;
     pointers.delete(event.pointerId);
-    active.pinch = null;
-    if (pointers.size === 1) active.dragLast = Array.from(pointers.values())[0];
+    if (pointers.size >= 2) beginPinch();
+    else if (pointers.size === 1) active.gesture = { type: "move", last: Array.from(pointers.values())[0] };
+    else active.gesture = null;
+  }
+
+  function resetEditor() {
+    if (!active) return;
+    resetCrop();
+    drawEditor();
+  }
+
+  async function rotateEditor() {
+    if (!active || active.rotating) return;
+    active.rotating = true;
+    const button = modal.querySelector("[data-photo-editor-rotate]");
+    if (button) button.disabled = true;
+    try {
+      const source = active.image;
+      const rotated = document.createElement("canvas");
+      rotated.width = source.naturalHeight;
+      rotated.height = source.naturalWidth;
+      const ctx = rotated.getContext("2d", { alpha: false });
+      if (!ctx) throw photoError("PROFILE_PHOTO_EDITOR_UNSUPPORTED");
+      ctx.fillStyle = "#f6f6f2";
+      ctx.fillRect(0, 0, rotated.width, rotated.height);
+      ctx.translate(rotated.width / 2, rotated.height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(source, -source.naturalWidth / 2, -source.naturalHeight / 2);
+      const blob = await canvasToBlob(rotated, "image/jpeg", 0.9);
+      rotated.width = rotated.height = 1;
+      const nextUrl = URL.createObjectURL(blob);
+      const nextImage = await loadImage(nextUrl);
+      const oldUrl = active.url;
+      try { active.image.src = ""; } catch {}
+      active.image = nextImage;
+      active.url = nextUrl;
+      URL.revokeObjectURL(oldUrl);
+      resetCrop();
+      drawEditor();
+    } catch (error) {
+      console.warn("[profile-photo-editor] rotate failed", error);
+    } finally {
+      active.rotating = false;
+      if (button) button.disabled = false;
+    }
   }
 
   function openEditor(staged) {
@@ -294,19 +532,17 @@
       active = {
         ...staged,
         resolve,
-        rotation: 0,
-        zoom: 1,
-        offsetX: 0,
-        offsetY: 0,
-        pinch: null,
+        imageRect: null,
+        crop: null,
+        gesture: null,
+        rotating: false,
       };
       pointers.clear();
-      zoomInput.value = "1";
       bodyOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       document.body.classList.add("tester-photo-editor-open");
       modal.hidden = false;
-      clampOffsets();
+      resetCrop();
       drawEditor();
     });
   }
@@ -331,7 +567,14 @@
     try {
       const output = document.createElement("canvas");
       output.width = output.height = OUTPUT_SIZE;
-      paint(output, OUTPUT_SIZE);
+      const ctx = output.getContext("2d", { alpha: false });
+      if (!ctx) throw photoError("PROFILE_PHOTO_EDITOR_UNSUPPORTED");
+      const crop = sourceCrop();
+      ctx.fillStyle = "#f6f6f2";
+      ctx.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(active.image, crop.sx, crop.sy, crop.size, crop.size, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
       const blob = await canvasToBlob(output, "image/jpeg", 0.84);
       output.width = output.height = 1;
       const base = String(active.fileName || "profile").replace(/\.[^.]+$/, "") || "profile";
