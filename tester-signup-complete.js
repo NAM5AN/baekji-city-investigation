@@ -76,7 +76,7 @@
       <div class="tester-signup-complete__backdrop"></div>
       <section class="tester-signup-complete__dialog" role="dialog" aria-modal="true" aria-labelledby="tester-signup-complete-title">
         <div class="tester-signup-complete__eyebrow">ACCOUNT CREATED</div>
-        <h2 id="tester-signup-complete-title">테스터 계정 가입 완료</h2>
+        <h2 id="tester-signup-complete-title">가입 완료</h2>
         <p class="tester-signup-complete__lead">아래 캐릭터 정보로 계정이 생성되었습니다.</p>
         <div class="tester-signup-complete__profile">
           <img data-signup-complete-photo alt="가입한 캐릭터 프로필 사진">
@@ -85,7 +85,7 @@
             <strong data-signup-complete-name></strong>
           </div>
         </div>
-        <p class="tester-signup-complete__notice">가입만으로 조사 화면에 접속되지 않습니다.<br>등록한 캐릭터 이름과 비밀번호로 로그인해 주세요.</p>
+        <p class="tester-signup-complete__notice">등록한 캐릭터 이름과 비밀번호로 로그인해 주세요.</p>
         <button type="button" class="button primary block" data-signup-complete-login>확인</button>
       </section>`;
     (document.querySelector("#modal-root") || document.body).append(modal);
@@ -160,10 +160,6 @@
   async function handleSignupClick(event) {
     const button = event.target?.closest?.("[data-tester-submit]");
     if (!button) return;
-
-    // tester-auth.js historically auto-called finishLogin() after signup. Capture
-    // the click before that target listener so account creation and login are
-    // deliberately separate steps.
     event.preventDefault();
     event.stopImmediatePropagation();
     if (busy) return;
@@ -185,7 +181,6 @@
       const finalName = String(row?.character_name || name);
       const finalPhoto = String(row?.profile_photo || photoData);
 
-      // A freshly created account is not an authenticated player session.
       sessionStorage.removeItem(USER_KEY);
       if (location.hash === "#/home") location.hash = "#/login";
       if (message) message.textContent = "";
