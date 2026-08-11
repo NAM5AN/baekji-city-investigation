@@ -21,6 +21,8 @@ jobs:
         run: node tests/tester-mutation-loop-check.mjs
       - name: Cross-tab guest world-write check
         run: node tests/cross-tab-guest-world-write-check.mjs
+      - name: Cross-tab authenticated world check
+        run: node tests/cross-tab-authenticated-world-check.mjs
       - name: Supabase recovery wiring check
         run: node tests/supabase-recovery-wiring-check.mjs
       - name: Probe live tester login RPC
