@@ -77,8 +77,8 @@ const eventState = {
 client.ensureEventIds(eventState);
 const grouped = client.groupEventEntries(eventState.sessions.s1.logs);
 assert.equal(grouped.length, 2, "동시에 여러 행동이 들어와도 사건 단위 두 묶음으로 유지되어야 합니다.");
-assert.deepEqual(grouped[0].items.map((item) => item.entry.id), ["a1", "r1"], "늦게 도착한 A 결과도 A 선언 사건으로 돌아가야 합니다.");
-assert.deepEqual(grouped[1].items.map((item) => item.entry.id), ["a2", "r2"], "B 결과는 B 선언 사건 안에 묶여야 합니다.");
+assert.equal(Array.from(grouped[0].items, (item) => item.entry.id).join(","), "a1,r1", "늦게 도착한 A 결과도 A 선언 사건으로 돌아가야 합니다.");
+assert.equal(Array.from(grouped[1].items, (item) => item.entry.id).join(","), "a2,r2", "B 결과는 B 선언 사건 안에 묶여야 합니다.");
 
 const serverLoud = classifySpeechVisibility('/"살려줘"라고 소리를 크게 질러 주변을 확인한다');
 assert.equal(serverLoud.mode, "PUBLIC_QUOTE");
