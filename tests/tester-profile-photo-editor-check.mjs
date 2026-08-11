@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 const source = fs.readFileSync("profile-photo-editor.js", "utf8");
 const css = fs.readFileSync("profile-photo-editor.css", "utf8");
+const signupSource = fs.readFileSync("tester-signup-complete.js", "utf8");
+const signupCss = fs.readFileSync("tester-signup-complete.css", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 const vercel = fs.readFileSync("vercel.json", "utf8");
 
@@ -37,4 +39,17 @@ assert(vercel.includes("img-src 'self' data: blob:"), "local blob photo previews
 assert(index.includes('profile-photo-editor.css?v=0.3.104'), "scoped-cursor crop CSS must load in production");
 assert(index.includes('profile-photo-editor.js?v=0.3.104'), "scoped-cursor crop runtime must load in production");
 
-console.log("PASS: full-photo crop editor, draggable white corner handles, scoped move/resize cursors, iPhone-safe staging, and 256px output are wired");
+assert.doesNotThrow(() => new Function(signupSource), "signup completion runtime must parse as valid JavaScript");
+assert(signupSource.includes('event.stopImmediatePropagation()'), "signup completion gate must intercept the old auto-login click handler");
+assert(signupSource.includes('sessionStorage.removeItem(USER_KEY)'), "successful signup must leave the browser unauthenticated");
+assert(!signupSource.includes('sessionStorage.setItem(USER_KEY'), "signup completion must never create an authenticated session");
+assert(signupSource.includes('showCompletion({ name: finalName, photo: finalPhoto })'), "successful signup must show the created profile before login");
+assert(signupSource.includes('data-signup-complete-photo'), "completion modal must display the chosen profile photo");
+assert(signupSource.includes('data-signup-complete-name'), "completion modal must display the character name");
+assert(signupSource.includes('loginPassword?.focus?.()'), "completion modal should return the user to explicit login");
+assert(signupSource.includes('button.textContent = "가입하기"'), "signup CTA must no longer promise immediate access");
+assert(signupCss.includes('.tester-signup-complete__profile'), "signup completion profile card must be styled");
+assert(index.includes('tester-signup-complete.css?v=0.3.105'), "signup completion modal CSS must load in production");
+assert(index.includes('tester-signup-complete.js?v=0.3.105'), "signup completion gate must load in production");
+
+console.log("PASS: full-photo crop editor plus explicit signup-complete-to-login gate are wired without automatic home entry");
