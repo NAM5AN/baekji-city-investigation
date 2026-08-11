@@ -10,7 +10,7 @@ const mobileCss = fs.readFileSync(new URL("../admin-mobile-shell-polish.css", im
 const mobileTopbar = fs.readFileSync(new URL("../admin-mobile-topbar.js", import.meta.url), "utf8");
 const playerMap = fs.readFileSync(new URL("../assets/maps/haeoreum-day1-map.svg", import.meta.url), "utf8");
 
-assert.match(html, /admin-zone-map\.css\?v=0\.6\.0/, "admin dashboard must load zone-map styles with a fresh cache key");
+assert.match(html, /admin-zone-map\.css\?v=0\.6\.1/, "admin dashboard must load compact zone-map styles with a fresh cache key");
 assert.match(html, /admin-zone-map\.js\?v=0\.6\.0/, "admin dashboard must load zone-map runtime with a fresh cache key");
 assert.match(html, /admin-live-render\.js\?v=0\.6\.3/, "admin dashboard must load no-flicker live renderer");
 assert.ok(html.indexOf("admin-live-render.js?v=0.6.3") > html.indexOf("admin-zone-map.js?v=0.6.0"), "live renderer must load after the zone-map runtime");
@@ -37,6 +37,8 @@ assert.match(source, /현재 세부 현장 · 이동 구간/, "detail and route 
 assert.match(source, /구역 목록으로 보기/, "a compact list fallback must remain available");
 assert.match(css, /admin-zone-map-viewport svg \[data-node\]\.admin-zone-node\.is-occupied/, "occupied nodes must have a distinct visual state");
 assert.match(css, /path\.route\.is-occupied-route/, "occupied routes must have a distinct visual state");
+assert.match(css, /width:min\(100%,980px\)/, "desktop admin map must be capped so the full topology is easier to scan at once");
+assert.match(css, /@media\(max-width:900px\).*min-width:720px/s, "small screens must retain the pannable minimum map width");
 assert.match(playerMap, /data-node="E_ENTRY"/, "player map must expose the canonical entry node");
 assert.match(playerMap, /data-from="E_G_PLAZA" data-to="E_G_EAST"/, "player map must expose route topology through from/to attributes");
 
@@ -52,4 +54,4 @@ assert.match(mobileTopbar, /data-admin-mobile-proxy="mvp5"/, "mobile operations 
 assert.match(mobileTopbar, /data-admin-mobile-proxy="audit"/, "mobile operations menu must retain audit log access");
 assert.match(mobileTopbar, /data-admin-mobile-proxy="reset"/, "mobile operations menu must retain reset access");
 
-console.log("PASS: admin live sync updates in place without flicker while map, scroll, and mobile shell contracts remain wired");
+console.log("PASS: admin live sync updates in place without flicker while compact map, scroll, and mobile shell contracts remain wired");
