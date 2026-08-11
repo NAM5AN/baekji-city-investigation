@@ -1,0 +1,29 @@
+name: Apply Interaction System Fixes
+on:
+  push:
+    branches: [agent/fix-interaction-system-v040]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/fix-interaction-system-v040
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply fixes
+        run: python scripts/apply-interaction-system-fixes.py
+      - name: Run regression suite
+        run: npm run check
+      - name: Commit clean patch
+        run: |
+          git config user.name "NAM5AN"
+          git config user.email "133747621+NAM5AN@users.noreply.github.com"
+          git rm scripts/apply-interaction-system-fixes.py .github/workflows/apply-interaction-system-fixes.yml
+          git add -A
+          git commit -m "fix: stabilize same-field interaction narration and sending"
+          git push origin HEAD:agent/fix-interaction-system-v040
