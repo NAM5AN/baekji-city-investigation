@@ -24,18 +24,19 @@ const CHARACTER_INTERACTION_PROMPT = `너는 한국어 호러 조사 RPG의 인�
 사용자가 같은 현장에 실제로 존재하는 다른 캐릭터에게 선언한 한 가지 행동의 즉각적인 결과를 판단한다.
 
 반드시 다음 원칙을 지켜라.
-1. 밀기, 당기기, 붙잡기, 때리기, 발로 차기, 앞을 막기, 부축하기, 손을 잡기, 안기, 토닥이기, 손짓하기, 물건을 보여주기 등 인물 사이의 다양한 물리적·사회적 상호작용을 모두 상황에 맞게 판단한다.
-2. 행동을 자동 성공이나 자동 실패로 고정하지 않는다. 힘의 방향, 동작의 구체성, 현재 장소와 자세를 고려해 밀쳐졌지만 버티기, 몇 걸음 밀리기, 비틀거리기, 넘어지기처럼 자연스러운 차이를 낸다.
-3. 캐릭터 능력치나 성격 정보가 없으면 평범한 성인 수준의 즉각적인 반응만 가정한다. 임의의 초능력, 특별한 전투 기술, 숨겨진 장비를 만들지 않는다.
-4. 사용자가 명시하지 않은 심각한 부상, 골절, 출혈, 기절, 사망, 새 소지품, 위치 이동, 오염 수치 변화는 창작하지 않는다. 단순한 균형 상실·밀림·넘어짐·접촉·버팀 정도의 즉각적인 물리 반응은 허용한다.
-5. 상대 캐릭터의 대사를 임의로 만들지 않는다. 사용자의 행동에 실제 발화가 포함된 경우에만 그 발화를 그대로 활용할 수 있다.
-6. 부축·도움·손을 내미는 행동은 상황에 맞으면 자연스럽게 도움 효과를 낼 수 있다. 가로막기·붙잡기·밀치기처럼 상대 의사와 충돌하는 행동은 상대가 버티거나 피하는 결과도 가능하다.
-7. activeHazard가 있더라도 이 API는 인물 상호작용 자체만 판정한다. 이동 경로의 위험을 해결하거나 조사조 진행도를 임의로 전진시키지 않는다.
-8. outcome은 EFFECTIVE, PARTIAL, RESISTED, NEUTRAL 중 하나다. targetEffect는 가장 가까운 즉각 결과 하나만 고른다.
-9. narration은 2~4개의 자연스러운 한국어 문장으로 작성한다. 첫 문장부터 actor.name과 target.name을 실제 이름 그대로 써서 사용자가 한 행동을 실행하고, 이어서 상대의 반응과 즉각적인 결과를 장면으로 보여준다.
-10. "판정", "성공", "실패", "시도", "가능", "불가능", "AI", "시스템" 같은 운영 문구를 쓰지 않는다.
-11. 캐릭터 이름 뒤의 한국어 조사는 받침에 맞게 자연스럽게 쓴다. 특히 을/를, 이/가, 은/는, 과/와, 으로/로를 틀리지 않는다.
-12. context에 없는 새 인물이나 장소 반응을 창작하지 않는다.`;
+1. 밀기, 당기기, 붙잡기, 때리기, 발로 차기, 앞을 막기, 부축하기, 손을 잡기, 안기, 토닥이기, 손짓하기, 물건을 보여주기, 비웃기, 조롱하기 등 인물 사이의 다양한 물리적·사회적 상호작용을 상황에 맞게 판단한다.
+2. actor가 실제로 한 행동과 그 행동 때문에 객관적으로 발생한 직접 결과만 서술한다.
+3. target 캐릭터의 성격, 의사, 감정, 생각, 인지 여부를 추정하거나 대신 결정하지 않는다.
+4. target의 표정, 시선, 대사, 놀람, 분노, 웃음, 고개 움직임, 회피, 버팀, 저항, 반격, 협조 등 자발적인 반응은 절대 생성하지 않는다. context에 target의 해당 행동이 이미 명시된 경우에만 인용할 수 있다.
+5. actor의 물리력 때문에 피할 수 없이 생긴 객관적인 결과(접촉, 몸이 밀림, 넘어짐 등)는 서술할 수 있지만, 그 뒤 target이 무엇을 느끼거나 어떻게 대응하는지는 쓰지 않는다.
+6. 사용자가 명시하지 않은 심각한 부상, 골절, 출혈, 기절, 사망, 새 소지품, 위치 이동, 오염 수치 변화는 창작하지 않는다.
+7. target의 대사를 임의로 만들지 않는다. actor의 행동에 실제 발화가 포함된 경우에만 그 발화를 그대로 활용할 수 있다.
+8. activeHazard가 있더라도 이 API는 인물 상호작용 자체만 판정한다. 이동 경로의 위험을 해결하거나 조사조 진행도를 임의로 전진시키지 않는다.
+9. outcome은 EFFECTIVE, PARTIAL, RESISTED, NEUTRAL 중 하나다. targetEffect는 가장 가까운 객관적 즉각 결과 하나만 고른다. 사회적 행동처럼 target의 자발적 반응을 정해야만 효과를 만들 수 있다면 NONE을 사용한다.
+10. narration은 1~3개의 자연스러운 한국어 문장으로 작성한다. 첫 문장부터 actor.name과 target.name을 실제 이름 그대로 써서 actor의 행동을 실행한다. 이후 문장은 직접적인 객관적 결과만 쓴다. 예: "테스트B는 테스트C를 향해 노골적으로 비웃는다. 분명한 조롱이다." target이 그것을 알아차렸는지, 어떤 표정을 지었는지, 무엇을 말하거나 바라봤는지는 쓰지 않는다.
+11. "판정", "성공", "실패", "시도", "가능", "불가능", "AI", "시스템" 같은 운영 문구를 쓰지 않는다.
+12. 캐릭터 이름 뒤의 한국어 조사는 받침에 맞게 자연스럽게 쓴다. 특히 을/를, 이/가, 은/는, 과/와, 으로/로를 틀리지 않는다.
+13. context에 없는 새 인물이나 장소 반응을 창작하지 않는다.`;
 
 function normalize(value) {
   return String(value || "").replace(/\s+/g, "").toLowerCase();
@@ -112,10 +113,22 @@ function cleanCharacterInteraction(body) {
   };
 }
 
-function validateCharacterInteraction(value) {
+function stripTargetAgencyNarration(value, targetName) {
+  const text = compactText(value, 1200);
+  const target = compactText(targetName, 120);
+  if (!text || !target) return text;
+  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const targetSubject = new RegExp(`(?:${escaped}|상대(?:\s*캐릭터)?)(?:은|는|이|가|도)`);
+  const voluntaryReaction = /(알아차리|눈치채|바라보|쳐다보|시선|표정|굳히|미소|웃(?:고|는다|으며)|울|당황|놀라|화내|분노|대답|말하|외치|소리치|고개를|끄덕|젓|움츠리|피하|회피|버티|저항|반격|협조|따라오|따라가|돌아서|다가오|다가가|반응)/;
+  const sentences = text.match(/[^.!?。！？]+[.!?。！？]?/g) || [text];
+  return sentences.filter((sentence) => !(targetSubject.test(sentence) && voluntaryReaction.test(sentence))).join(" ").replace(/\s+/g, " ").trim();
+}
+
+function validateCharacterInteraction(value, actorName = "", targetName = "") {
   const outcomes = new Set(["EFFECTIVE", "PARTIAL", "RESISTED", "NEUTRAL"]);
   const effects = new Set(["NONE", "CONTACT", "MOVED", "STAGGERED", "FELL", "RESISTED", "SUPPORTED", "BLOCKED", "REACTED", "OTHER"]);
-  const narration = compactText(value?.narration, 1200);
+  const rawNarration = compactText(value?.narration, 1200);
+  const narration = stripTargetAgencyNarration(rawNarration, targetName);
   if (!narration) throw Object.assign(new Error("AI_EMPTY_RESULT"), { statusCode: 502 });
   return {
     outcome: outcomes.has(value?.outcome) ? value.outcome : "NEUTRAL",
@@ -231,7 +244,7 @@ async function handleCharacterInteraction(request, response) {
     try { parsed = JSON.parse(extractOutputText(responsePayload) || "null"); }
     catch { parsed = null; }
     if (!parsed) return sendJson(response, 502, { error: "AI_INVALID_RESULT" });
-    return sendJson(response, 200, validateCharacterInteraction(parsed));
+    return sendJson(response, 200, validateCharacterInteraction(parsed, payload.actor.name, payload.target.name));
   } catch (error) {
     if (error?.name === "AbortError") return sendJson(response, 504, { error: "AI_TIMEOUT" });
     console.error("[character-interaction] request failed", error?.message || error);

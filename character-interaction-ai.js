@@ -228,7 +228,6 @@
     const roll = hashNumber(`${seed}:${clean}`) % 100;
     const actorSubject = withParticle(actorName, "이/가");
     const targetObject = withParticle(targetName, "을/를");
-    const targetSubject = withParticle(targetName, "은/는");
     const push = /(밀치|밀어|떠밀|몸으로\s*밀|어깨로\s*밀)/.test(clean);
     const strike = /(때리|치고|가격|주먹|발로\s*차|걷어차)/.test(clean);
     const pull = /(잡아당|끌어당|당기|붙잡아\s*끌)/.test(clean);
@@ -237,26 +236,28 @@
     const block = /(앞을\s*막|길을\s*막|가로막|막아선)/.test(clean);
     const touch = /(만지|쓰다듬|토닥|손을\s*얹|안아|껴안)/.test(clean);
     const gesture = /(손을\s*흔들|손짓|고개를\s*끄덕|인사|가리킨)/.test(clean);
+    const mock = /(비웃|조롱|놀리|비꼬|빈정|야유|도발|모욕)/.test(clean);
 
     if (push) {
-      if (roll < 28) return { outcome: "EFFECTIVE", targetEffect: "FELL", narration: `${actorSubject} ${targetObject} 힘껏 밀어낸다. ${targetSubject} 중심을 잃고 뒤로 밀려나 바닥에 넘어지며 움직임이 멈춘다.` };
-      if (roll < 72) return { outcome: "PARTIAL", targetEffect: "STAGGERED", narration: `${actorSubject} ${targetObject} 밀어낸다. ${targetSubject} 한두 걸음 뒤로 비틀거리며 균형을 잃을 뻔하지만 끝내 넘어지지는 않는다.` };
-      return { outcome: "RESISTED", targetEffect: "RESISTED", narration: `${actorSubject} ${targetObject} 밀어내지만 ${targetSubject} 발을 버티고 중심을 낮춘다. 몸이 잠깐 흔들릴 뿐 자리는 크게 밀리지 않는다.` };
+      if (roll < 28) return { outcome: "EFFECTIVE", targetEffect: "FELL", narration: `${actorSubject} ${targetObject} 힘껏 밀어낸다. 힘이 그대로 전달되어 ${targetName}의 몸이 뒤로 밀리며 바닥에 넘어간다.` };
+      if (roll < 72) return { outcome: "PARTIAL", targetEffect: "MOVED", narration: `${actorSubject} ${targetObject} 밀어낸다. 힘이 닿은 만큼 ${targetName}의 몸이 한두 걸음 뒤로 밀리지만 넘어질 정도의 변화는 생기지 않는다.` };
+      return { outcome: "RESISTED", targetEffect: "RESISTED", narration: `${actorSubject} ${targetObject} 밀어내지만 뚜렷한 위치 변화는 일어나지 않는다.` };
     }
     if (strike) {
-      if (roll < 55) return { outcome: "EFFECTIVE", targetEffect: "REACTED", narration: `${actorSubject} ${targetObject} 향해 빠르게 타격을 가한다. 충격이 닿자 ${targetSubject} 몸을 움츠리며 한 걸음 물러선다.` };
-      return { outcome: "PARTIAL", targetEffect: "BLOCKED", narration: `${actorSubject} ${targetObject} 향해 타격을 가하지만 ${targetSubject} 급히 몸을 틀어 정면의 충격을 피한다. 동작은 스치듯 끝나며 서로의 거리가 잠시 벌어진다.` };
+      if (roll < 55) return { outcome: "EFFECTIVE", targetEffect: "CONTACT", narration: `${actorSubject} ${targetObject} 향해 빠르게 타격을 가한다. 타격이 닿으며 충격이 직접 전달된다.` };
+      return { outcome: "PARTIAL", targetEffect: "CONTACT", narration: `${actorSubject} ${targetObject} 향해 타격을 가한다. 동작은 스치듯 닿고 큰 위치 변화는 생기지 않는다.` };
     }
     if (pull) {
-      if (roll < 65) return { outcome: "EFFECTIVE", targetEffect: "MOVED", narration: `${actorSubject} ${targetObject} 붙잡아 자신의 쪽으로 잡아당긴다. ${targetSubject} 힘에 이끌려 한 걸음 움직이며 둘 사이의 거리가 가까워진다.` };
-      return { outcome: "RESISTED", targetEffect: "RESISTED", narration: `${actorSubject} ${targetObject} 잡아당기지만 ${targetSubject} 몸에 힘을 주고 버틴다. 팔과 어깨만 당겨질 뿐 자리는 거의 움직이지 않는다.` };
+      if (roll < 65) return { outcome: "EFFECTIVE", targetEffect: "MOVED", narration: `${actorSubject} ${targetObject} 붙잡아 자신의 쪽으로 잡아당긴다. 당기는 힘으로 ${targetName}의 몸이 한 걸음 가까워진다.` };
+      return { outcome: "RESISTED", targetEffect: "RESISTED", narration: `${actorSubject} ${targetObject} 잡아당기지만 뚜렷한 위치 변화는 일어나지 않는다.` };
     }
-    if (grab) return { outcome: "EFFECTIVE", targetEffect: "CONTACT", narration: `${actorSubject} ${targetObject} 향해 손을 뻗어 붙잡는다. ${targetSubject} 순간 몸을 굳히며 접촉에 반응하고 두 사람의 움직임이 잠시 맞물린다.` };
-    if (support) return { outcome: "EFFECTIVE", targetEffect: "SUPPORTED", narration: `${actorSubject} ${targetObject} 받쳐 주며 균형을 잡을 수 있게 돕는다. ${targetSubject} 그 힘을 발판 삼아 자세를 추스르고 몸을 안정시킨다.` };
-    if (block) return { outcome: "EFFECTIVE", targetEffect: "BLOCKED", narration: `${actorSubject} ${targetName} 앞을 가로막고 선다. ${targetSubject} 그대로 지나가지 못하고 걸음을 멈추며 두 사람이 정면으로 마주 선다.` };
-    if (touch) return { outcome: "NEUTRAL", targetEffect: "CONTACT", narration: `${actorSubject} ${targetObject} 향해 손을 뻗어 직접 접촉한다. ${targetSubject} 닿는 감각을 알아차리고 몸을 조금 움직여 반응한다.` };
-    if (gesture) return { outcome: "NEUTRAL", targetEffect: "REACTED", narration: `${actorSubject} ${targetName} 쪽을 향해 몸짓으로 신호를 보낸다. ${targetSubject} 그 움직임을 알아차리고 시선을 돌린다.` };
-    return { outcome: "NEUTRAL", targetEffect: "REACTED", narration: `${actorSubject} ${targetName}에게 선언한 행동을 직접 이어간다. ${targetSubject} 가까이에서 그 행동을 알아차리고 즉각 반응한다.` };
+    if (grab) return { outcome: "EFFECTIVE", targetEffect: "CONTACT", narration: `${actorSubject} ${targetObject} 향해 손을 뻗어 붙잡는다. 직접 접촉한 상태가 된다.` };
+    if (support) return { outcome: "EFFECTIVE", targetEffect: "SUPPORTED", narration: `${actorSubject} ${targetObject} 받쳐 주며 몸을 지지한다.` };
+    if (block) return { outcome: "EFFECTIVE", targetEffect: "BLOCKED", narration: `${actorSubject} ${targetName} 앞을 가로막고 선다. ${targetName}의 진행 방향이 물리적으로 가로막힌다.` };
+    if (touch) return { outcome: "NEUTRAL", targetEffect: "CONTACT", narration: `${actorSubject} ${targetObject} 향해 손을 뻗어 직접 접촉한다.` };
+    if (gesture) return { outcome: "NEUTRAL", targetEffect: "NONE", narration: `${actorSubject} ${targetName} 쪽을 향해 몸짓으로 신호를 보낸다.` };
+    if (mock) return { outcome: "NEUTRAL", targetEffect: "NONE", narration: `${actorSubject} ${targetObject} 향해 노골적으로 비웃는다. 분명한 조롱이다.` };
+    return { outcome: "NEUTRAL", targetEffect: "NONE", narration: `${actorSubject} ${targetObject} 향해 선언한 행동을 그대로 이어간다.` };
   }
 
   function locationName(session) {
@@ -322,11 +323,24 @@
     };
   }
 
+  function stripTargetAgencyNarration(value, targetName) {
+    const text = String(value || "").trim();
+    const target = String(targetName || "").trim();
+    if (!text || !target) return text;
+    const escaped = escapeRegExp(target);
+    const targetSubject = new RegExp(`(?:${escaped}|상대(?:\s*캐릭터)?)(?:은|는|이|가|도)`);
+    const voluntaryReaction = /(알아차리|눈치채|바라보|쳐다보|시선|표정|굳히|미소|웃(?:고|는다|으며)|울|당황|놀라|화내|분노|대답|말하|외치|소리치|고개를|끄덕|젓|움츠리|피하|회피|버티|저항|반격|협조|따라오|따라가|돌아서|다가오|다가가|반응)/;
+    const sentences = text.match(/[^.!?。！？]+[.!?。！？]?/g) || [text];
+    const kept = sentences.filter((sentence) => !(targetSubject.test(sentence) && voluntaryReaction.test(sentence)));
+    return kept.join(" ").replace(/\s+/g, " ").trim();
+  }
+
   function normalizeDecision(value, fallback, actorName, targetName) {
     const outcomes = new Set(["EFFECTIVE", "PARTIAL", "RESISTED", "NEUTRAL"]);
     const effects = new Set(["NONE", "CONTACT", "MOVED", "STAGGERED", "FELL", "RESISTED", "SUPPORTED", "BLOCKED", "REACTED", "OTHER"]);
     const decision = value && typeof value === "object" ? value : {};
     let narration = String(decision.narration || fallback.narration || "").trim().slice(0, 1200);
+    narration = stripTargetAgencyNarration(narration, targetName) || stripTargetAgencyNarration(fallback.narration, targetName);
     narration = fixNameParticles(narration, [actorName, targetName]);
     return {
       outcome: outcomes.has(decision.outcome) ? decision.outcome : fallback.outcome,
@@ -514,6 +528,7 @@
     particleFor,
     withParticle,
     fixNameParticles,
+    stripTargetAgencyNarration,
     fallbackDecision,
     shouldDeferToHazard,
     visibilityForAction,

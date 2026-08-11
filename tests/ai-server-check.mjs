@@ -230,7 +230,7 @@ try {
   const indexResponse = await fetch(`${aiBase}/`);
   assert.equal(indexResponse.status, 200);
   assert.match(indexResponse.headers.get("content-type"), /text\/html/);
-  assert.match(await indexResponse.text(), /app\.js\?v=0\.3\.18/);
+  assert.match(await indexResponse.text(), /app\.js\?v=0\.4\.1/);
 } finally {
   await close(aiServer);
   await close(mockOpenAI);
