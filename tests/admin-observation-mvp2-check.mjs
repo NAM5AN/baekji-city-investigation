@@ -4,10 +4,16 @@ import { readFile } from "node:fs/promises";
 const html = await readFile(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../admin-observation-mvp2.css", import.meta.url), "utf8");
 const js = await readFile(new URL("../admin-observation-mvp2.js", import.meta.url), "utf8");
+const peopleCss = await readFile(new URL("../admin-observation-people-polish.css", import.meta.url), "utf8");
+const peopleJs = await readFile(new URL("../admin-observation-people-polish.js", import.meta.url), "utf8");
 
 assert.match(html, /OBSERVE · COMMUNICATION · CONTROL/);
 assert.match(html, /admin-observation-mvp2\.css\?v=0\.2\.0/);
 assert.match(html, /admin-observation-mvp2\.js\?v=0\.2\.0/);
+assert.match(html, /admin-observation-people-polish\.css\?v=0\.2\.1/);
+assert.match(html, /admin-observation-people-polish\.js\?v=0\.2\.1/);
+assert.ok(html.indexOf("admin-observation-people-polish.css?v=0.2.1") > html.indexOf("admin-observation-mvp2.css?v=0.2.0"));
+assert.ok(html.indexOf("admin-observation-people-polish.js?v=0.2.1") > html.indexOf("admin-observation-mvp2.js?v=0.2.0"));
 assert.match(html, /admin-chat-badge">MVP 3/);
 
 assert.match(js, /const POLL_MS = 3000/);
@@ -44,4 +50,13 @@ assert.match(css, /\.admin-observe-alert/);
 assert.match(css, /\.admin-observe-log-list/);
 assert.match(css, /@media\(max-width:760px\)/);
 
-console.log("PASS: admin MVP2 observation remains intact inside the current admin control shell");
+assert.doesNotThrow(() => new Function(peopleJs), "observation people polish must parse as JavaScript");
+assert.match(peopleJs, /partyMembershipFromVisiblePeople/);
+assert.match(peopleJs, /조원 · \$\{names\.join\(" · "\)\}/);
+assert.match(peopleJs, /MutationObserver/);
+assert.doesNotMatch(peopleJs, /fetch\(|localStorage|sessionStorage/, "people polish must derive names from the already-rendered observation modal only");
+assert.match(peopleCss, /\.admin-observe-person > \.admin-observe-avatar\{flex:0 0 36px;width:36px;height:36px;aspect-ratio:1\/1/);
+assert.match(peopleCss, /border-radius:7px/);
+assert.match(peopleCss, /\.admin-observe-party-members/);
+
+console.log("PASS: admin MVP2 observation remains intact with square profile photos and party member names");
