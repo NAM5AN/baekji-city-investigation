@@ -2,11 +2,18 @@
   "use strict";
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const USER_KEY = "baekji_city_mvp_current_user_v034";
   const ENTRY_NODE = "E_ENTRY";
   const POLL_MS = 280;
+  const GUEST_POLL_MS = 1000;
   const data = window.DAY1_DATA || { places: {} };
   let writing = false;
   let timer = 0;
+
+  function currentUserId() {
+    try { return String(sessionStorage.getItem(USER_KEY) || ""); }
+    catch { return ""; }
+  }
 
   function readState() {
     try {
@@ -111,6 +118,10 @@
 
   function reconcile() {
     clearTimeout(timer);
+    if (!currentUserId()) {
+      timer = setTimeout(reconcile, GUEST_POLL_MS);
+      return;
+    }
     if (writing) {
       timer = setTimeout(reconcile, POLL_MS);
       return;
@@ -189,6 +200,7 @@
   }
 
   window.__BAEKJI_ENTRY_PRESENCE_FIX_TEST__ = Object.freeze({
+    currentUserId,
     scopeKey,
     pairKey,
     currentPairs,
