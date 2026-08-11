@@ -19,6 +19,13 @@ jobs:
         run: npm install --no-save --no-package-lock puppeteer-core@24
       - name: Authenticated two-tab Chromium diagnostic
         run: node tests/authenticated-two-tab-browser-diagnostic-cors.mjs
+      - name: Upload two-tab diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-two-tab-diagnostic
+          path: authenticated-two-tab-diag.json
+          if-no-files-found: error
       - name: Tester registry guard check
         run: node --check tester-registry-guard.js && node tests/tester-registry-guard-check.mjs
       - name: Tester MutationObserver loop check
