@@ -15,6 +15,8 @@ jobs:
         with:
           node-version: 24
       - run: npm run check
+      - name: Final observation write stability check
+        run: node tests/final-observation-write-stability-check.mjs
       - name: Install browser diagnostic dependency
         run: npm install --no-save --no-package-lock puppeteer-core@24
       - name: Authenticated two-tab Chromium diagnostic
