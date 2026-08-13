@@ -1,2 +1,2 @@
-.topbar-meta > .badge .tester-profile-avatar{display:none!important}
-.topbar-meta > .badge:nth-last-child(2) .tester-profile-avatar{display:inline-block!important}
+.topbar-meta .tester-profile-avatar{display:none!important}
+.topbar-meta [data-current-user-badge]>.tester-profile-avatar{display:inline-block!important}
