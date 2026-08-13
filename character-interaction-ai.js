@@ -91,7 +91,6 @@
       method: "POST",
       headers: {
         apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },

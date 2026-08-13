@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ const playerDirectRuntimeFiles = [
   "tester-party-profile-sync.js",
   "tester-signup-complete.js",
 ];
+const browserEntryPages = ["index.html", "admin-dashboard.html"];
 const apiRuntimeFiles = [
   "api/admin-audit.mjs",
   "api/admin-communications.mjs",
@@ -62,6 +64,98 @@ function collectLegacyAuditFiles(directory, files = []) {
   return files;
 }
 
+function browserRuntimeFiles() {
+  const scripts = new Set();
+  for (const page of browserEntryPages) {
+    const source = read(page);
+    for (const match of source.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) {
+      const script = match[1].split("?")[0];
+      if (!script || /^(?:[a-z]+:)?\/\//i.test(script) || !/\.js$/i.test(script)) continue;
+      const normalized = path.posix.normalize(script.replace(/^\.\//, ""));
+      if (normalized.startsWith("../")) throw new Error(`${page} loads a script outside the browser runtime root: ${script}`);
+      if (!fs.existsSync(path.join(ROOT, normalized))) throw new Error(`${page} loads a missing browser runtime script: ${script}`);
+      scripts.add(normalized);
+    }
+  }
+
+  for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
+    if (entry.isFile() && path.extname(entry.name) === ".js") scripts.add(entry.name);
+  }
+  return [...scripts].sort();
+}
+
+function withoutComments(source) {
+  let output = "";
+  let quote = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const current = source[index];
+    const next = source[index + 1];
+    if (quote) {
+      output += current;
+      if (current === "\\") output += source[++index] || "";
+      else if (current === quote) quote = "";
+      continue;
+    }
+    if (current === "\"") { quote = current; output += current; continue; }
+    if (current === "'") { quote = current; output += current; continue; }
+    if (current === "`") { quote = current; output += current; continue; }
+    if (current === "/" && next === "/") {
+      while (index < source.length && source[index] !== "\n") index += 1;
+      output += "\n";
+      continue;
+    }
+    if (current === "/" && next === "*") {
+      index += 2;
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) index += 1;
+      index += 1;
+      output += " ";
+      continue;
+    }
+    output += current;
+  }
+  return output;
+}
+
+function isSupabaseDirectBrowserClient(source) {
+  const identifiesCanonicalBackend = source.includes(canonicalUrl) || source.includes(canonicalKey)
+    || /\bSUPABASE_(?:URL|KEY)\b/.test(source);
+  return identifiesCanonicalBackend && /\/rest\/v1\//.test(source) && /\bfetch\b/.test(source);
+}
+
+function hasAuthorizationHeaderToken(source) {
+  return /\bauthorization\b/i.test(withoutComments(source));
+}
+
+function assertBrowserAuthorizationContract(label, source, expected) {
+  assert.equal(isSupabaseDirectBrowserClient(source), true, `${label} must be a direct canonical Supabase browser client fixture`);
+  assert.equal(hasAuthorizationHeaderToken(source), expected, label);
+}
+
+function directBrowserFixture(headerCode) {
+  return [
+    `const SUPABASE_URL = "${canonicalUrl}";`,
+    `const SUPABASE_KEY = "${canonicalKey}";`,
+    "fetch(`${SUPABASE_URL}/rest/v1/rpc/baekji_tester_list_accounts`, { headers: { apikey: SUPABASE_KEY } });",
+    headerCode,
+  ].join("\n");
+}
+
+const removedPublishableBearerHeader = "Authorization: `Bearer ${SUPABASE_KEY}`,";
+for (const file of [
+  "tester-auth.js",
+  "tester-signup-complete.js",
+  "tester-party-profile-sync.js",
+  "party-roster-modal.js",
+  "character-interaction-ai.js",
+]) {
+  assertBrowserAuthorizationContract(`historical ${file} publishable Bearer header`, directBrowserFixture(removedPublishableBearerHeader), true);
+}
+assertBrowserAuthorizationContract("colon property", directBrowserFixture("const headers = { Authorization: token };"), true);
+assertBrowserAuthorizationContract("headers.set", directBrowserFixture("headers.set(\"Authorization\", token);"), true);
+assertBrowserAuthorizationContract("bracket property", directBrowserFixture("headers[\"Authorization\"] = token;"), true);
+assertBrowserAuthorizationContract("alias property", directBrowserFixture("const headerName = \"Authorization\"; headers[headerName] = token;"), true);
+assertBrowserAuthorizationContract("apikey-only request with an Authorization comment", directBrowserFixture("// Authorization examples belong in documentation, not the runtime."), false);
+
 if (index.includes("supabase-endpoint-recovery.js")) {
   throw new Error("index.html still loads the Supabase endpoint recovery adapter");
 }
@@ -87,6 +181,13 @@ for (const file of playerDirectRuntimeFiles) {
   if (!source.includes(canonicalUrl) || !source.includes(canonicalKey)) {
     throw new Error(`${file} does not directly target the canonical Supabase backend`);
   }
+}
+
+const browserAuthorizationViolations = browserRuntimeFiles()
+  .filter((file) => isSupabaseDirectBrowserClient(read(file)))
+  .filter((file) => hasAuthorizationHeaderToken(read(file)));
+if (browserAuthorizationViolations.length) {
+  throw new Error(`direct canonical Supabase browser clients must not contain an Authorization header token (${browserAuthorizationViolations.join(", ")})`);
 }
 
 for (const file of apiRuntimeFiles) {
