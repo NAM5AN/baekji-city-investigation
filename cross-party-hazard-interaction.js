@@ -7,8 +7,8 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
-  const SUPABASE_URL = "https://zstgpnwnwmeifgmyeqtz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_g-cXysHfl260KTtSRLABTw_4wnaaxDY";
+  const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const DEMO_NAMES = new Map([
     ["test_a", "테스트 캐릭터 A"],
     ["test_b", "테스트 캐릭터 B"],

@@ -7,8 +7,8 @@
   const LAST_INVESTIGATE_KEY = "baekji_city_party_transfer_last_investigate_v1";
   const HANDLED_KEY = "baekji_city_party_transfer_continuity_handled_v1";
   const VERSION = "0.3.82";
-  const SUPABASE_URL = "https://zstgpnwnwmeifgmyeqtz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_g-cXysHfl260KTtSRLABTw_4wnaaxDY";
+  const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const names = new Map([
     ["test_a", "테스트 캐릭터 A"],
     ["test_b", "테스트 캐릭터 B"],

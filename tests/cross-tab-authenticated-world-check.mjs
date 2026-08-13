@@ -76,7 +76,7 @@ function remoteServer(initialState) {
   return {
     async fetch(url, options = {}) {
       const target = String(url);
-      if (target.includes("kfgtvifupumjuewwxzmz.supabase.co")) {
+      if (target.includes("baekji_tester_list_accounts")) {
         return { ok: true, status: 200, async json() { return structuredClone(directoryRows); } };
       }
       if (target.includes("baekji_mvp_get_state")) {

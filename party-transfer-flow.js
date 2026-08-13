@@ -6,8 +6,8 @@
   const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
   const SEEN_KEY = "baekji_city_party_transfer_seen_v1";
   const VERSION = "0.3.77";
-  const SUPABASE_URL = "https://zstgpnwnwmeifgmyeqtz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_g-cXysHfl260KTtSRLABTw_4wnaaxDY";
+  const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const accountProfiles = new Map([
     ["test_a", { name: "테스트 캐릭터 A", photo: "" }],
     ["test_b", { name: "테스트 캐릭터 B", photo: "" }],

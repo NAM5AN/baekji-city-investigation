@@ -160,7 +160,7 @@ const indexSource = fs.readFileSync("index.html", "utf8");
 assert.match(apiIndexSource, /\/api\/resolve-character-interaction/);
 assert.match(apiIndexSource, /character_interaction_resolution/);
 assert.match(apiIndexSource, /밀기, 당기기, 붙잡기, 때리기/);
-assert.match(indexSource, /character-interaction-ai\.js\?v=0\.4\.1/);
-assert(indexSource.indexOf("character-interaction-ai.js?v=0.4.1") < indexSource.indexOf("cross-party-hazard-interaction.js?v=0.3.76"), "general interaction interceptor must load before the hazard-specific interceptor");
+assert.match(indexSource, /character-interaction-ai\.js\?v=0\.4\.2/);
+assert(indexSource.indexOf("character-interaction-ai.js?v=0.4.2") < indexSource.indexOf("cross-party-hazard-interaction.js?v=0.3.77"), "general interaction interceptor must load before the hazard-specific interceptor");
 
 console.log("PASS: same-field characters from other investigation parties can be targeted, general character interactions get AI outcomes, and Korean name particles are normalized");

@@ -424,7 +424,7 @@ async function serveStatic(request, response, rootDir) {
       "Content-Length": info.size,
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "same-origin",
-      "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://kfgtvifupumjuewwxzmz.supabase.co; base-uri 'none'; frame-ancestors 'none'",
     };
     if (path.basename(filePath) === "index.html") headers["Cache-Control"] = "no-store";
     response.writeHead(200, headers);

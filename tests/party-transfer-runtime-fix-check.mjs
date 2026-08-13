@@ -39,6 +39,6 @@ assert.equal(api.continuationTarget(state, "test_c", ["home"], "session_2", 5000
 assert.equal(api.replaceAccountIdsInText("test_c의 조사조 소속이 이 조사조로 이동되었다."), "테스트 캐릭터 C의 조사조 소속이 이 조사조로 이동되었다.");
 assert.equal(api.isTransferLogText("test_c의 조사조 소속이 다른 조사조로 이동되었다."), true);
 assert.match(source, /addEventListener\("storage"[\s\S]*true\);/, "storage continuity repair must run in capture phase before app storage rendering");
-assert.match(index, /party-transfer-runtime-fix\.js\?v=0\.3\.82/);
+assert.match(index, /party-transfer-runtime-fix\.js\?v=0\.3\.83/);
 
 console.log("PASS: party transfer keeps the active investigation view and replaces internal IDs in player transfer logs");
