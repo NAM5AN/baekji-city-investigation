@@ -80,6 +80,7 @@ const GROUPS = Object.freeze({
     "ai-server-check.mjs",
     "vercel-deploy-check.mjs",
     "github-pages-test-environment-check.mjs",
+    "recovered-production-migrations-check.mjs",
   ],
 });
 
