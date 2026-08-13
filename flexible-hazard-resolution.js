@@ -103,6 +103,12 @@
       .find((name) => name && action.includes(name)) || "";
   }
 
+  function resolvePartyTargetId(session, uid, targetName) {
+    const needle = normalizeName(targetName);
+    if (!needle) return "";
+    return (session.memberIds || []).find((id) => id !== uid && normalizeName(nameForId(id)) === needle) || "";
+  }
+
   function fallbackDecision(action, remainingCount = 1, session = { memberIds: [] }, uid = "") {
     const clean = String(action || "").replace(/^\/+/, "").trim();
     const observeOnly = /(살펴|관찰|확인|지켜|듣|패턴|주변을\s*본)/.test(clean)
@@ -177,155 +183,6 @@
     }
   }
 
-  function hashNumber(text) {
-    let hash = 2166136261;
-    for (const ch of String(text)) {
-      hash ^= ch.charCodeAt(0);
-      hash = Math.imul(hash, 16777619);
-    }
-    return Math.abs(hash >>> 0);
-  }
-
-  function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, value));
-  }
-
-  function contaminationStage(value) {
-    if (value >= 100) return "완전 용해";
-    if (value >= 80) return "붕락";
-    if (value >= 60) return "용해";
-    if (value >= 40) return "유화";
-    if (value >= 20) return "번짐";
-    return "안정";
-  }
-
-  function ruleForExposure(exposure) {
-    if (exposure === "HIGH") return "EXP_CONTACT_HIGH";
-    if (exposure === "MEDIUM") return "EXP_CONTACT_MEDIUM";
-    if (exposure === "LOW") return "EXP_CONTACT_LOW";
-    return "EXP_CONTACT_NONE";
-  }
-
-  function deterministicDelta(ruleId, seed) {
-    const rule = DATA.contaminationRules?.[ruleId] || DATA.contaminationRules?.EXP_CONTACT_NONE;
-    if (!rule || Number(rule.max) <= 0) return 0;
-    const min = Number(rule.min) || 0;
-    const max = Number(rule.max) || min;
-    return min + (hashNumber(seed) % (max - min + 1));
-  }
-
-  function appendLog(session, type, text, actorId = null, meta = {}) {
-    session.logs ||= [];
-    const entry = { id: `log_flex_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, type, text, actorId, at: Date.now(), ...meta };
-    session.logs.push(entry);
-    return entry;
-  }
-
-  function resolvePartyTargetId(session, uid, targetName) {
-    const needle = normalizeName(targetName);
-    if (!needle) return "";
-    return (session.memberIds || []).find((id) => id !== uid && normalizeName(nameForId(id)) === needle) || "";
-  }
-
-  function applyExposure(character, exposure, seed) {
-    if (!character) return 0;
-    const delta = deterministicDelta(ruleForExposure(exposure), seed);
-    character.contamination = clamp((Number(character.contamination) || 0) + delta, 0, 100);
-    character.symptom = contaminationStage(character.contamination);
-    return delta;
-  }
-
-  function applyAmbientArrival(snapshot, session, encounter) {
-    const changes = [];
-    const ruleId = encounter.ambientRuleId || "EXP_AMBIENT_A";
-    (session.memberIds || []).forEach((memberId) => {
-      const character = snapshot.characters?.[memberId];
-      if (!character) return;
-      const delta = deterministicDelta(ruleId, `${session.id}:${encounter.targetNode}:${memberId}:flex`);
-      if (!delta) return;
-      character.contamination = clamp((Number(character.contamination) || 0) + delta, 0, 100);
-      character.symptom = contaminationStage(character.contamination);
-      changes.push({ memberId, delta });
-    });
-    session.currentNode = encounter.targetNode;
-    session.currentDetailId = null;
-    session.activeEncounter = null;
-    return changes;
-  }
-
-  function applyDecisionToState(snapshot, sessionId, uid, action, decision) {
-    const session = snapshot?.sessions?.[sessionId];
-    const encounter = session?.activeEncounter;
-    if (!session || !encounter) return { applied: false };
-    const currentHazardId = encounter.hazards[encounter.currentIndex];
-    const actor = snapshot.characters?.[uid];
-    if (!actor) return { applied: false };
-
-    session.choiceReveal = null;
-    encounter.flexInsights ||= [];
-    encounter.resolutions ||= [];
-    if (decision.observationNote) {
-      encounter.flexInsights.push(decision.observationNote);
-      if (encounter.flexInsights.length > 6) encounter.flexInsights.splice(0, encounter.flexInsights.length - 6);
-    }
-
-    const selfDelta = applyExposure(actor, decision.selfExposure, `${sessionId}:${currentHazardId}:${action}:self:${encounter.resolutions.length}`);
-    const targetId = resolvePartyTargetId(session, uid, decision.targetName);
-    const targetDelta = targetId
-      ? applyExposure(snapshot.characters?.[targetId], decision.targetExposure, `${sessionId}:${currentHazardId}:${action}:target:${targetId}:${encounter.resolutions.length}`)
-      : 0;
-
-    if (decision.usedItemId && decision.usedItemContaminated && actor.inventory?.[decision.usedItemId]) {
-      actor.inventory[decision.usedItemId].state = "CONTAMINATED";
-    }
-
-    encounter.resolutions.push({
-      hazardId: currentHazardId,
-      actorId: uid,
-      text: action,
-      outcome: decision.outcome,
-      progress: decision.progress,
-      selfExposure: decision.selfExposure,
-      selfDelta,
-      targetId: targetId || null,
-      targetExposure: targetId ? decision.targetExposure : "NONE",
-      targetDelta,
-      flexible: true,
-    });
-
-    let arrived = false;
-    if (decision.progress === "ALL") encounter.currentIndex = encounter.hazards.length;
-    else if (decision.progress === "CURRENT") encounter.currentIndex += 1;
-
-    let narration = decision.narration;
-    let ambientChanges = [];
-    if (decision.progress !== "NONE" && encounter.currentIndex >= encounter.hazards.length) {
-      const targetName = DATA.places?.[encounter.targetNode]?.name || encounter.targetNode;
-      ambientChanges = applyAmbientArrival(snapshot, session, encounter);
-      narration = `${narration} ${nameForId(uid)} 일행은 ${targetName} 쪽으로 이동을 마친다.`;
-      arrived = true;
-    } else if (decision.progress !== "NONE") {
-      const nextHazardId = encounter.hazards[encounter.currentIndex];
-      const nextName = DATA.hazardTemplates?.[nextHazardId]?.name || nextHazardId;
-      narration = `${narration} 그러나 이동 경로에는 아직 ${nextName}이 남아 있다.`;
-    }
-
-    appendLog(session, decision.outcome === "FAIL" ? "fail" : decision.outcome === "INFO" ? "scene" : "success", narration, null, {
-      kind: "FLEX_HAZARD_RESPONSE",
-      hazardActorId: uid,
-      hazardId: currentHazardId,
-      outcome: decision.outcome,
-      progress: decision.progress,
-      contaminationDelta: selfDelta,
-      targetId: targetId || null,
-      targetContaminationDelta: targetDelta,
-      arrived,
-      systemNarration: true,
-    });
-
-    return { applied: true, arrived, selfDelta, targetId, targetDelta, ambientChanges };
-  }
-
   function clearComposer() {
     const input = document.querySelector("[data-chat-input]");
     if (!input) return;
@@ -360,6 +217,15 @@
     const session = sessionForUser(snapshot, uid);
     const sessionId = session?.id;
     if (!sessionId) return false;
+    const encounter = session.activeEncounter;
+    const movementToken = session.lastMovementTransition?.kind === "ENCOUNTER"
+      && session.lastMovementTransition.routeId === encounter.routeId
+      ? String(session.lastMovementTransition.token || "")
+      : "";
+    const hazardIndex = encounter.currentIndex;
+    const hazardId = encounter.hazards[hazardIndex];
+    const runtime = window.__BAEKJI_FLEX_HAZARD_RUNTIME__;
+    if (!movementToken || typeof runtime?.commitDecision !== "function") return false;
 
     resolving = true;
     setPending(true);
@@ -369,21 +235,18 @@
       const context = hazardContext(snapshot, session, uid, cleanAction);
       const decision = await resolveWithAI(context, fallback);
 
-      const latest = readState();
-      const latestSession = latest?.sessions?.[sessionId];
-      if (!latestSession?.activeEncounter) return true;
-      const expectedHazard = context.currentHazard.id;
-      const actualHazard = latestSession.activeEncounter.hazards[latestSession.activeEncounter.currentIndex];
-      if (actualHazard !== expectedHazard) return true;
-
-      appendLog(latestSession, "action-input", cleanAction, uid, {
-        scopeKey: `route:${latestSession.activeEncounter.fromNode}:${latestSession.activeEncounter.targetNode}`,
-        flexibleHazardAction: true,
+      const result = runtime.commitDecision({
+        sessionId,
+        actorId: uid,
+        movementToken,
+        hazardId,
+        hazardIndex,
+        action: cleanAction,
+        decision,
+        targetId: resolvePartyTargetId(session, uid, decision.targetName),
       });
-      applyDecisionToState(latest, sessionId, uid, cleanAction, decision);
+      if (!result?.applied) return true;
       clearComposer();
-      localStorage.setItem(GLOBAL_KEY, JSON.stringify(latest));
-      window.dispatchEvent(new Event("hashchange"));
       window.dispatchEvent(new CustomEvent("baekji-flex-hazard-resolved", { detail: { sessionId, decision } }));
       return true;
     } finally {
@@ -421,8 +284,6 @@
   window.__BAEKJI_FLEX_HAZARD__ = Object.freeze({
     fallbackDecision,
     normalizeDecision,
-    ruleForExposure,
-    applyDecisionToState,
     shouldHandle,
     hazardContext,
   });
