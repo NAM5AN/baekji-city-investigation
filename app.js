@@ -279,7 +279,10 @@
   }
 
   function shell(content, opts = {}) {
-    app.innerHTML = `<div class="shell">${header(opts.headerExtra || "")}${content}</div>`;
+    const headerExtra = opts.investigationSession
+      ? `<span data-investigation-header-extra>${investigationHeaderMarkup(opts.investigationSession)}</span>`
+      : (opts.headerExtra || "");
+    app.innerHTML = `<div class="shell">${header(headerExtra)}${content}</div>`;
     bindCommon();
   }
 
@@ -869,6 +872,11 @@
       movementTimers.delete(session?.id);
       return;
     }
+    if (session.lastMovementTransition?.token === movement.token) {
+      if (existing) clearTimeout(existing.timerId);
+      movementTimers.delete(session.id);
+      return;
+    }
     if (existing?.token === movement.token) return;
     if (existing) clearTimeout(existing.timerId);
     const wait = Math.max(0, movement.resolveAt - Date.now());
@@ -895,9 +903,25 @@
         appendChatDivider(session, `route:${route.from}:${route.to}`, `${nodeDisplayName(route.from)} → ${nodeDisplayName(route.to)} 이동 경로`);
         announceRouteEncounter(draft, session, route);
         appendLog(session, "risk", `${movementNarration} 그 앞에서 ${overview}`);
+        session.lastMovementTransition = {
+          token,
+          kind: "ENCOUNTER",
+          routeId: route.id,
+          fromNode: route.from,
+          targetNode: route.to,
+          completedAt: Date.now(),
+        };
       } else {
         const arrival = applyArrival(draft, session, route.to, profile?.ambientRuleId);
         appendLog(session, "scene", `${movementNarration} ${arrival}`);
+        session.lastMovementTransition = {
+          token,
+          kind: "ARRIVED",
+          routeId: route.id,
+          fromNode: route.from,
+          targetNode: route.to,
+          completedAt: Date.now(),
+        };
       }
     });
     movementTimers.delete(sessionId);
@@ -1223,6 +1247,53 @@
     });
   }
 
+  function investigationHazard(session) {
+    const encounter = session?.activeEncounter;
+    const hazardId = encounter?.hazards?.[encounter.currentIndex] || null;
+    return hazardId ? DATA.hazardTemplates[hazardId] : null;
+  }
+
+  function investigationDisplayNodeName(session) {
+    const encounter = session?.activeEncounter;
+    if (session?.movement) return `${nodeDisplayName(session.movement.fromNode)} → ${nodeDisplayName(session.movement.targetNode)} 이동 중`;
+    if (encounter) return `${nodeDisplayName(encounter.fromNode || session.currentNode)} → ${nodeDisplayName(encounter.targetNode)} 이동 경로`;
+    return nodeDisplayName(session?.currentNode);
+  }
+
+  function investigationHeaderMarkup(session) {
+    return `<span class="badge">DAY 01</span><span class="badge">${escapeHtml(investigationDisplayNodeName(session))}</span><button type="button" class="badge retro-map-button" data-open-map="${escapeHtml(session.id)}">구역 지도</button>`;
+  }
+
+  function investigationSceneMarkup(session, hazard) {
+    const uid = currentUserId();
+    const visiblePeople = fieldCharacterIds(state, session).filter((memberId) => memberId !== uid);
+    return `<section class="retro-scene-frame" data-investigation-scene="true">
+      ${mappedMediaMarkup(sceneMediaFor(session), "scene")}
+      <div class="retro-halftone" aria-hidden="true"></div>
+      <div class="retro-location-card"><span>현재 장소</span><strong>${escapeHtml(investigationDisplayNodeName(session))}</strong><small>${escapeHtml(placeFloor(session.currentNode))}</small></div>
+      <div class="retro-field-card"><span>DAY 01</span><span>${session.memberIds.length}인 조사</span><span>${visiblePeople.length ? `현장 ${visiblePeople.length + session.memberIds.length}명` : "단독 현장"}</span></div>
+      ${session.movement ? `<div class="retro-motion-overlay"><div class="pixel-loader"></div><strong>이동 중...</strong><span>${escapeHtml(nodeDisplayName(session.movement.targetNode))} 방향으로 이어지는 통로를 따라 이동하고 있다.</span></div>` : ""}
+      ${sceneChoiceOverlay(session, hazard)}
+    </section>`;
+  }
+
+  function investigationSystemPanelMarkup(session, hazard) {
+    const place = currentPlace(session);
+    const encounter = session.activeEncounter;
+    return `<div class="retro-window-title">SYSTEM</div><div class="retro-system-scroll">${systemLogEntries(session).map(systemLogLineMarkup).join("") || `<div class="retro-system-line">${escapeHtml(place?.details?.[0]?.environment || "해오름역의 정적만이 이어진다.")}</div>`}</div>${hazard ? `<div class="retro-current-risk"><strong>현재 위험</strong><span>${escapeHtml(encounter.overview)}</span></div>` : ""}`;
+  }
+
+  function syncChoiceRevealUi(session) {
+    const revealKey = session?.choiceReveal ? `${session.id}:${session.choiceReveal.type}:${session.choiceReveal.at}` : "";
+    if (revealKey && ui.choiceRevealKey !== revealKey) {
+      ui.choiceRevealKey = revealKey;
+      ui.choicePanelOpen = true;
+    } else if (!revealKey) {
+      ui.choiceRevealKey = "";
+      ui.choicePanelOpen = false;
+    }
+  }
+
   function renderInvestigation(sessionId) {
     const viewSnapshot = captureInvestigationViewState();
     if (!ensureAuth()) return;
@@ -1238,52 +1309,19 @@
     ui.forceChatLatest = false;
     document.body.classList.add("retro-mode");
     document.body.classList.remove("retro-login-mode", "retro-home-mode", "retro-page-mode");
-    const place = currentPlace(session);
     const encounter = session.activeEncounter;
     const currentHazardId = encounter?.hazards?.[encounter.currentIndex] || null;
     const hazard = currentHazardId ? DATA.hazardTemplates[currentHazardId] : null;
-    const revealKey = session.choiceReveal ? `${session.id}:${session.choiceReveal.type}:${session.choiceReveal.at}` : "";
-    if (revealKey && ui.choiceRevealKey !== revealKey) {
-      ui.choiceRevealKey = revealKey;
-      ui.choicePanelOpen = true;
-    } else if (!revealKey) {
-      ui.choiceRevealKey = "";
-      ui.choicePanelOpen = false;
-    }
+    syncChoiceRevealUi(session);
     const userCharacter = state.characters[uid];
-    const visiblePeople = fieldCharacterIds(state, session).filter((memberId) => memberId !== uid);
-    const sceneMedia = sceneMediaFor(session);
-    const displayNodeName = session.movement
-      ? `${nodeDisplayName(session.movement.fromNode)} → ${nodeDisplayName(session.movement.targetNode)} 이동 중`
-      : encounter
-        ? `${nodeDisplayName(encounter.fromNode || session.currentNode)} → ${nodeDisplayName(encounter.targetNode)} 이동 경로`
-        : nodeDisplayName(session.currentNode);
-
-    const scene = `
-      <section class="retro-scene-frame">
-        ${mappedMediaMarkup(sceneMedia, "scene")}
-        <div class="retro-halftone" aria-hidden="true"></div>
-        <div class="retro-location-card">
-          <span>현재 장소</span>
-          <strong>${escapeHtml(displayNodeName)}</strong>
-          <small>${escapeHtml(placeFloor(session.currentNode))}</small>
-        </div>
-        <div class="retro-field-card">
-          <span>DAY 01</span>
-          <span>${session.memberIds.length}인 조사</span>
-          <span>${visiblePeople.length ? `현장 ${visiblePeople.length + session.memberIds.length}명` : "단독 현장"}</span>
-        </div>
-        ${session.movement ? `<div class="retro-motion-overlay"><div class="pixel-loader"></div><strong>이동 중...</strong><span>${escapeHtml(nodeDisplayName(session.movement.targetNode))} 방향으로 이어지는 통로를 따라 이동하고 있다.</span></div>` : ""}
-        ${sceneChoiceOverlay(session, hazard)}
-      </section>`;
-
-    const systemPanel = `<section class="retro-system-panel"><div class="retro-window-title">SYSTEM</div><div class="retro-system-scroll">${systemLogEntries(session).map(systemLogLineMarkup).join("") || `<div class="retro-system-line">${escapeHtml(place?.details?.[0]?.environment || "해오름역의 정적만이 이어진다.")}</div>`}</div>${hazard ? `<div class="retro-current-risk"><strong>현재 위험</strong><span>${escapeHtml(encounter.overview)}</span></div>` : ""}</section>`;
+    const scene = investigationSceneMarkup(session, hazard);
+    const systemPanel = `<section class="retro-system-panel" data-investigation-system="true">${investigationSystemPanelMarkup(session, hazard)}</section>`;
 
     const rowResizer = `<div class="retro-layout-resizer retro-layout-resizer-row" data-layout-resizer="rows" role="separator" aria-label="일러스트와 시스템 로그 높이 조절" aria-orientation="horizontal" aria-valuemin="32" aria-valuemax="82" tabindex="0" title="드래그하여 높이 조절 · 더블클릭으로 초기화"></div>`;
     const columnResizer = `<div class="retro-layout-resizer retro-layout-resizer-column" data-layout-resizer="columns" role="separator" aria-label="일러스트·로그와 채팅 영역 너비 조절" aria-orientation="vertical" aria-valuemin="38" aria-valuemax="78" tabindex="0" title="드래그하여 너비 조절 · 더블클릭으로 초기화"></div>`;
-    const right = `<aside class="retro-right-panel">${rightPanel(session, userCharacter, hazard)}</aside>`;
+    const right = `<aside class="retro-right-panel" data-investigation-panel="true">${rightPanel(session, userCharacter, hazard)}</aside>`;
     shell(`<div class="retro-investigation" data-layout-root data-session-id="${escapeHtml(session.id)}"><div class="retro-left-column">${scene}${rowResizer}${systemPanel}</div>${columnResizer}${right}</div>`, {
-      headerExtra: `<span class="badge">DAY 01</span><span class="badge">${escapeHtml(displayNodeName)}</span><button type="button" class="badge retro-map-button" data-open-map="${escapeHtml(session.id)}">구역 지도</button>`,
+      investigationSession: session,
     });
     bindInvestigation(session);
     bindInvestigationResizers();
@@ -1368,20 +1406,40 @@
   function chatPanel(session, character, hazard) {
     const messages = chatLogEntries(session);
     const composerDisabled = session.movement || ui.aiPending;
-    const aiStatus = ui.aiPending
+    const aiStatus = chatAiStatusText();
+    return `<section class="retro-chat-panel">
+      <div class="retro-chat-stream" data-chat-stream>${chatStreamMarkup(messages)}</div>
+      <div class="retro-chat-composer">
+        <textarea data-chat-input ${composerDisabled ? "disabled" : ""} placeholder="${chatComposerPlaceholder(session, hazard)}">${escapeHtml(ui.actionText)}</textarea>
+        <div class="retro-composer-row"><span data-ai-status class="${ui.aiAvailable === true ? "is-ai-ready" : ""}">${aiStatus}</span><button class="retro-send" data-send-chat ${composerDisabled ? "disabled" : ""}>${chatSendButtonText()}</button></div>
+      </div>
+    </section>`;
+  }
+
+  function chatAiStatusText() {
+    return ui.aiPending
       ? "AI가 행동 뜻을 판정하는 중..."
       : ui.aiAvailable === true
         ? "AI 자유문장 판정 · /행동"
         : ui.aiAvailable === false
           ? "로컬 판정 대기 · /행동"
           : "AI 연결 확인 중 · /행동";
-    return `<section class="retro-chat-panel">
-      <div class="retro-chat-stream" data-chat-stream>${messages.length ? messages.map(chatBubble).join("") : `<div class="retro-chat-empty">현재 위치에서 오간 대화가 없습니다.<br>일반 대화는 그대로, 시스템 판정이 필요한 행동은 /로 시작해 입력하세요.</div>`}</div>
-      <div class="retro-chat-composer">
-        <textarea data-chat-input ${composerDisabled ? "disabled" : ""} placeholder="${session.movement ? "이동 중입니다..." : ui.aiPending ? "AI가 행동 문장을 읽고 있습니다..." : hazard ? "대화는 그대로, 위험 대응은 /자유문장으로 입력하세요..." : "대화는 그대로, 시스템 행동은 /자유문장으로 입력하세요..."}">${escapeHtml(ui.actionText)}</textarea>
-        <div class="retro-composer-row"><span data-ai-status class="${ui.aiAvailable === true ? "is-ai-ready" : ""}">${aiStatus}</span><button class="retro-send" data-send-chat ${composerDisabled ? "disabled" : ""}>${ui.aiPending ? "판정 중" : "전송 ↵"}</button></div>
-      </div>
-    </section>`;
+  }
+
+  function chatStreamMarkup(messages) {
+    return messages.length
+      ? messages.map(chatBubble).join("")
+      : `<div class="retro-chat-empty">현재 위치에서 오간 대화가 없습니다.<br>일반 대화는 그대로, 시스템 판정이 필요한 행동은 /로 시작해 입력하세요.</div>`;
+  }
+
+  function chatComposerPlaceholder(session, hazard) {
+    if (session.movement) return "이동 중입니다...";
+    if (ui.aiPending) return "AI가 행동 문장을 읽고 있습니다...";
+    return hazard ? "대화는 그대로, 위험 대응은 /자유문장으로 입력하세요..." : "대화는 그대로, 시스템 행동은 /자유문장으로 입력하세요...";
+  }
+
+  function chatSendButtonText() {
+    return ui.aiPending ? "판정 중" : "전송 ↵";
   }
 
   function chatBubble(entry) {
@@ -1391,6 +1449,221 @@
     const actor = entry.actorId ? DEMO_USERS[entry.actorId] : null;
     const initial = actor?.initial || "!";
     return `<article class="retro-chat-message ${entry.actorId === currentUserId() ? "mine" : ""}"><div class="retro-chat-avatar">${escapeHtml(initial)}</div><div class="retro-chat-content"><div class="retro-chat-meta"><strong>${escapeHtml(actor?.name || "시스템")}</strong><span>${new Date(entry.at).toLocaleTimeString("ko-KR", { hour12: false, hour: "2-digit", minute: "2-digit" })}</span></div><div class="retro-chat-bubble">${escapeHtml(entry.text)}</div></div></article>`;
+  }
+
+  function canonicalValue(value) {
+    if (Array.isArray(value)) return value.map(canonicalValue);
+    if (value && typeof value === "object") {
+      return Object.keys(value).sort().reduce((result, key) => {
+        result[key] = canonicalValue(value[key]);
+        return result;
+      }, {});
+    }
+    return value;
+  }
+
+  function semanticStateEqual(left, right) {
+    return JSON.stringify(canonicalValue(left)) === JSON.stringify(canonicalValue(right));
+  }
+
+  function investigationProjection(snapshot, sessionId, userId) {
+    const session = snapshot?.sessions?.[sessionId];
+    if (!session || !session.memberIds?.includes(userId)) return null;
+    const scope = spatialScopeKey(session);
+    const field = Object.values(snapshot.sessions || {})
+      .filter((candidate) => candidate?.id !== session.id && candidate?.status === "ACTIVE" && candidate?.variant === session.variant && spatialScopeKey(candidate) === scope)
+      .map((candidate) => ({ id: candidate.id, memberIds: candidate.memberIds, scope: spatialScopeKey(candidate) }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const hazard = investigationHazard(session);
+    return {
+      navigation: { id: session.id, status: session.status, members: session.memberIds },
+      header: { node: investigationDisplayNodeName(session) },
+      scene: { node: session.currentNode, detail: session.currentDetailId, movement: session.movement, encounter: session.activeEncounter, choice: session.choiceReveal, field },
+      system: { logs: systemLogEntries(session), encounter: session.activeEncounter, hazard: hazard?.id || null },
+      // `chatLogEntries` appends a presentational divider stamped with Date.now().
+      // Remote-change classification must compare only persisted chat data, or an
+      // unrelated storage event becomes a false chat update on every pass.
+      chat: { logs: session.logs.filter((entry) => entry.type === "interaction" || entry.type === "chat-divider"), scope, movement: session.movement, aiPending: ui.aiPending, aiAvailable: ui.aiAvailable },
+      panel: ui.tab === "inventory"
+        ? { tab: ui.tab, character: snapshot.characters?.[userId] || null, field, scope, movement: session.movement }
+        : ui.tab === "status"
+          ? { tab: ui.tab, character: snapshot.characters?.[userId] || null }
+          : ui.tab === "record"
+            ? { tab: ui.tab, inspected: session.inspectedObjectIds }
+            : { tab: ui.tab },
+    };
+  }
+
+  function classifyExternalInvestigationUpdate(previousState, nextState, sessionId, userId) {
+    const previous = investigationProjection(previousState, sessionId, userId);
+    const next = investigationProjection(nextState, sessionId, userId);
+    if (!previous || !next || !semanticStateEqual(previous.navigation, next.navigation) || next.navigation.status !== "ACTIVE") {
+      return { kind: "navigation", surfaces: {} };
+    }
+    const surfaces = ["header", "scene", "system", "chat", "panel"].reduce((result, surface) => {
+      result[surface] = !semanticStateEqual(previous[surface], next[surface]);
+      return result;
+    }, {});
+    // Both a semantic no-op and an unrelated-world update are paint no-ops for
+    // this mounted investigation. Do not canonicalize the entire world merely
+    // to name that distinction: large sibling sessions must stay off this path.
+    if (!Object.values(surfaces).some(Boolean)) return { kind: "unrelated", surfaces };
+    return { kind: "selective", surfaces };
+  }
+
+  function restoreStreamPosition(stream, wasAtBottom, previousTop) {
+    requestAnimationFrame(() => {
+      if (!stream?.isConnected) return;
+      stream.scrollTop = wasAtBottom
+        ? stream.scrollHeight
+        : Math.min(previousTop, Math.max(0, stream.scrollHeight - stream.clientHeight));
+    });
+  }
+
+  function refreshChatStream(session) {
+    const stream = document.querySelector("[data-chat-stream]");
+    if (!stream) return false;
+    const entries = chatLogEntries(session);
+    const signature = JSON.stringify(canonicalValue(entries));
+    if (stream.dataset.syncSignature === signature) return true;
+    const wasAtBottom = isNearBottom(stream);
+    const previousTop = stream.scrollTop;
+    stream.innerHTML = chatStreamMarkup(entries);
+    stream.dataset.syncSignature = signature;
+    restoreStreamPosition(stream, wasAtBottom, previousTop);
+    return true;
+  }
+
+  function refreshChatComposer(session, hazard) {
+    const input = document.querySelector("[data-chat-input]");
+    const button = document.querySelector("[data-send-chat]");
+    const status = document.querySelector("[data-ai-status]");
+    if (!input || !button) return false;
+    const disabled = Boolean(session.movement || ui.aiPending);
+    input.disabled = disabled;
+    input.placeholder = chatComposerPlaceholder(session, hazard);
+    button.disabled = disabled;
+    button.textContent = chatSendButtonText();
+    if (status) updateAIStatusElements();
+    return true;
+  }
+
+  function refreshMountedInvestigation() {
+    const [page, sessionId] = routeParts();
+    if (page !== "investigate" || !sessionId) return false;
+    const userId = currentUserId();
+    const nextState = loadState();
+    const classification = classifyExternalInvestigationUpdate(state, nextState, sessionId, userId);
+    if (classification.kind === "navigation") return false;
+    state = nextState;
+    if (classification.kind !== "selective") return true;
+    const root = [...document.querySelectorAll(".retro-investigation[data-session-id]")]
+      .find((element) => element.dataset.sessionId === sessionId);
+    const session = state.sessions?.[sessionId];
+    if (!root || !session) return false;
+    syncChoiceRevealUi(session);
+    const hazard = investigationHazard(session);
+    if (classification.surfaces.header) {
+      const headerExtra = document.querySelector("[data-investigation-header-extra]");
+      if (headerExtra) {
+        headerExtra.innerHTML = investigationHeaderMarkup(session);
+        headerExtra.querySelector("[data-open-map]")?.addEventListener("click", () => showMapModal(session.id));
+      }
+    }
+    if (classification.surfaces.scene) {
+      const scene = root.querySelector("[data-investigation-scene]");
+      if (!scene) return false;
+      scene.outerHTML = investigationSceneMarkup(session, hazard);
+      bindInvestigationScene(session, root);
+      bindMappedImages(root);
+      scheduleMovement(session);
+    }
+    if (classification.surfaces.system) {
+      const systemPanel = root.querySelector("[data-investigation-system]");
+      if (!systemPanel) return false;
+      const stream = systemPanel.querySelector(".retro-system-scroll");
+      const wasAtBottom = isNearBottom(stream);
+      const previousTop = stream?.scrollTop || 0;
+      systemPanel.innerHTML = investigationSystemPanelMarkup(session, hazard);
+      restoreStreamPosition(systemPanel.querySelector(".retro-system-scroll"), wasAtBottom, previousTop);
+    }
+    const panel = root.querySelector("[data-investigation-panel]");
+    if (!panel) return false;
+    panel.querySelectorAll("[data-tab]").forEach((element) => element.classList.toggle("active", element.dataset.tab === ui.tab));
+    if (ui.tab === "chat") {
+      if (classification.surfaces.chat) refreshChatStream(session);
+      refreshChatComposer(session, hazard);
+    } else if (classification.surfaces.panel) {
+      const body = panel.querySelector(".retro-tab-body");
+      if (!body) return false;
+      body.innerHTML = panelContent(session, state.characters[userId], hazard);
+      bindInvestigationPanelContent(session);
+    }
+    return true;
+  }
+
+  function playerRouteProjection(snapshot, page, param, userId) {
+    const character = snapshot?.characters?.[userId] || null;
+    if (page === "home") {
+      if (!character) return null;
+      const party = character.currentPartyId ? snapshot.parties?.[character.currentPartyId] || null : null;
+      const session = character.currentSessionId ? snapshot.sessions?.[character.currentSessionId] || null : null;
+      const invitations = Object.values(snapshot.parties || {})
+        .filter((candidate) => candidate.invitedIds?.includes(userId) && !candidate.memberIds?.includes(userId) && candidate.status !== "CLOSED")
+        .map((candidate) => ({ id: candidate.id, name: candidate.name, creatorId: candidate.creatorId, status: candidate.status }))
+        .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+      return {
+        character: {
+          id: character.id,
+          contamination: character.contamination,
+          inventory: character.inventory,
+          currentPartyId: character.currentPartyId,
+          currentSessionId: character.currentSessionId,
+        },
+        party,
+        session: session ? { id: session.id, status: session.status, currentNode: session.currentNode } : null,
+        invitations,
+      };
+    }
+    if (page === "party") {
+      const party = snapshot?.parties?.[param] || null;
+      if (!party || (!party.memberIds?.includes(userId) && !party.invitedIds?.includes(userId))) return null;
+      return party;
+    }
+    if (page === "briefing") {
+      const session = snapshot?.sessions?.[param] || null;
+      if (!session || !session.memberIds?.includes(userId)) return null;
+      return { id: session.id, partyId: session.partyId, memberIds: session.memberIds, status: session.status, variant: session.variant };
+    }
+    if (page === "result") {
+      const session = snapshot?.sessions?.[param] || null;
+      if (!session || !session.memberIds?.includes(userId)) return null;
+      return {
+        session: {
+          id: session.id,
+          status: session.status,
+          currentNode: session.currentNode,
+          inspectedObjectIds: session.inspectedObjectIds,
+          takenItemKeys: session.takenItemKeys,
+          memberIds: session.memberIds,
+          partyId: session.partyId,
+        },
+        partyCreatorId: snapshot.parties?.[session.partyId]?.creatorId || null,
+      };
+    }
+    return null;
+  }
+
+  function consumeUnrelatedExternalRouteUpdate() {
+    const [page, param] = routeParts();
+    if (!["home", "party", "briefing", "result"].includes(page)) return false;
+    const userId = currentUserId();
+    const nextState = loadState();
+    const previousProjection = playerRouteProjection(state, page, param, userId);
+    const nextProjection = playerRouteProjection(nextState, page, param, userId);
+    if (!previousProjection || !nextProjection || !semanticStateEqual(previousProjection, nextProjection)) return false;
+    state = nextState;
+    return true;
   }
 
   function choicePanelBody(session, hazard) {
@@ -2562,6 +2835,32 @@
       });
   }
 
+  function bindInvestigationScene(session, root = document.querySelector(".retro-investigation")) {
+    if (!root) return;
+    root.querySelectorAll("[data-open-choice-panel]").forEach((element) => element.addEventListener("click", () => { ui.choicePanelOpen = true; render(); }));
+    root.querySelectorAll("[data-close-choice-panel]").forEach((element) => element.addEventListener("click", () => { ui.choicePanelOpen = false; render(); }));
+    root.querySelectorAll("[data-suggested-action]").forEach((element) => element.addEventListener("click", () => { ui.actionText = `/${String(element.dataset.suggestedAction || "").replace(/^\/+/, "")}`; ui.choicePanelOpen = false; render(); const input = document.querySelector("[data-chat-input]"); if (input) { input.value = ui.actionText; input.focus(); } }));
+    root.querySelectorAll("[data-move-route]").forEach((element) => element.addEventListener("click", () => { ui.choicePanelOpen = false; beginMove(session.id, element.dataset.moveRoute); }));
+    root.querySelectorAll("[data-detail]").forEach((element) => element.addEventListener("click", () => {
+      const detailId = element.dataset.detail;
+      ui.selectedDetailId = detailId;
+      mutate("enter-detail", (draft) => {
+        const current = draft.sessions[session.id];
+        if (!current || current.movement || current.activeEncounter) return;
+        current.currentDetailId = detailId;
+        appendChatDivider(current, `detail:${current.currentNode}:${detailId}`, chatScopeLabel(`detail:${current.currentNode}:${detailId}`));
+      });
+    }));
+    root.querySelectorAll("[data-inspect-object]").forEach((element) => element.addEventListener("click", () => inspectObject(session.id, element.dataset.inspectObject)));
+    root.querySelectorAll("[data-take-item]").forEach((element) => element.addEventListener("click", () => { const [objectId, itemId] = element.dataset.takeItem.split("|"); takeItem(session.id, objectId, itemId); }));
+  }
+
+  function bindInvestigationPanelContent(session) {
+    document.querySelectorAll("[data-item-modal]").forEach((element) => element.addEventListener("click", () => showItemModal(element.dataset.itemModal)));
+    document.querySelector("[data-transfer-item-button]")?.addEventListener("click", () => transferFieldItem(session.id));
+    document.querySelector("[data-end-session]")?.addEventListener("click", () => endSession(session.id));
+  }
+
   function bindInvestigation(session) {
     document.querySelectorAll("[data-tab]").forEach((element) => element.addEventListener("click", () => { ui.tab = element.dataset.tab; render(); }));
     const chatInput = document.querySelector("[data-chat-input]");
@@ -2571,7 +2870,7 @@
       ui.actionText = event.target.value;
       if (ui.pendingExternalRender) {
         ui.pendingExternalRender = false;
-        render();
+        renderExternalUpdate();
       }
     });
     chatInput?.addEventListener("input", (event) => { ui.actionText = event.target.value; });
@@ -2894,6 +3193,8 @@
       ui.pendingExternalRender = true;
       return;
     }
+    if (refreshMountedInvestigation()) return;
+    if (consumeUnrelatedExternalRouteUpdate()) return;
     render();
   }
 
@@ -2920,9 +3221,17 @@
   window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) renderExternalUpdate(); });
   window.addEventListener("pageshow", () => {
     if (routeParts()[0] === "investigate") {
-      requestLatestLogScroll({ system: true, chat: true });
-      render();
+      renderExternalUpdate();
     }
+  });
+  window.__BAEKJI_INVESTIGATION_SYNC_TEST__ = Object.freeze({
+    semanticStateEqual,
+    investigationProjection,
+    classifyExternalInvestigationUpdate,
+    refreshMountedInvestigation,
+    playerRouteProjection,
+    consumeUnrelatedExternalRouteUpdate,
+    renderExternalUpdate,
   });
   setInterval(() => {
     document.querySelectorAll("[data-clock]").forEach((el) => { el.textContent = nowText(); });
