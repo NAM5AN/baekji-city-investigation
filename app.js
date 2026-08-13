@@ -291,7 +291,7 @@
         <div class="topbar-meta">
           ${extra}
           <span class="clock mono" data-clock>${nowText()}</span>
-          ${user ? `<span class="badge"><span class="dot online"></span>${escapeHtml(user.name)}</span><button class="button ghost small" data-action="logout">로그아웃</button>` : ""}
+          ${user ? `<span class="badge" data-current-user-badge><span class="dot online"></span>${escapeHtml(user.name)}</span><button class="button ghost small" data-action="logout">로그아웃</button>` : ""}
         </div>
       </header>`;
   }
@@ -1463,7 +1463,7 @@
   }
 
   function investigationHeaderMarkup(session) {
-    return `<span class="badge">DAY 01</span><span class="badge">${escapeHtml(investigationDisplayNodeName(session))}</span><button type="button" class="badge retro-map-button" data-open-map="${escapeHtml(session.id)}">구역 지도</button>`;
+    return `<span class="badge">DAY 01</span><button type="button" class="badge retro-map-button" data-open-map="${escapeHtml(session.id)}">구역 지도</button>`;
   }
 
   function investigationSceneMarkup(session, hazard) {

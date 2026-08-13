@@ -354,7 +354,10 @@
   }
 
   function decorateTopbar(user) {
-    document.querySelectorAll(".topbar-meta .badge").forEach((badge) => {
+    document.querySelectorAll(".topbar-meta .tester-profile-avatar").forEach((img) => {
+      if (!img.closest("[data-current-user-badge]")) img.remove();
+    });
+    document.querySelectorAll(".topbar-meta [data-current-user-badge]").forEach((badge) => {
       let img = badge.querySelector(".tester-profile-avatar");
       if (!img) {
         img = profileImage(user, "tester-profile-avatar");

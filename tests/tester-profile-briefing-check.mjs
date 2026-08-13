@@ -73,7 +73,7 @@ assert(foundation.includes("편성 개설자\", \"조장"), "party roster creato
 assert(index.includes("briefing-tutorial.js?v=0.4.2"), "briefing tutorial cache key must be refreshed");
 assert(index.includes("foundation-rule-fixes.js?v=0.4.2"), "foundation rule fixes must be loaded");
 assert(index.indexOf("foundation-rule-fixes.js?v=0.4.2") < index.indexOf("app.js?v=0.4.1"), "movement storage guard must install before app.js starts");
-assert(index.includes("tester-auth.js?v=0.3.87"), "tester auth cache key must be refreshed");
+assert(index.includes("tester-auth.js?v=0.3.88"), "tester auth cache key must be refreshed");
 assert(index.includes("tester-login-stable.js?v=0.3.95"), "stable tester login owner must be loaded");
 assert(!index.includes("tester-login-fastpath.js"), "legacy tester login fastpath must not compete with the stable login owner");
 assert(index.indexOf("admin-login-bridge.js") < index.indexOf("tester-login-stable.js"), "admin login bridge must retain first ownership of AD accounts");
