@@ -228,6 +228,24 @@
     flushPendingNarrations();
   }
 
+  function mutateInvestigationChat(reason, callback, input) {
+    const previousState = loadState();
+    state = JSON.parse(JSON.stringify(previousState));
+    callback(state);
+    saveState(reason);
+    const nextState = state;
+    state = previousState;
+    if (!refreshMountedInvestigation()) {
+      state = nextState;
+      render();
+    }
+    if (input?.isConnected) {
+      input.focus();
+      input.setSelectionRange?.(input.value.length, input.value.length);
+    }
+    flushPendingNarrations();
+  }
+
   function currentUserId() { return sessionStorage.getItem(USER_KEY); }
   function currentUser() { return DEMO_USERS[currentUserId()] || null; }
   function currentCharacter() { return state.characters[currentUserId()] || null; }
@@ -703,10 +721,10 @@
     return `<div class="retro-system-line"><span class="retro-log-time">[${time}]</span> ${escapeHtml(entry.text)}</div>`;
   }
 
-  function appendChatDivider(session, scopeKey, label) {
+  function appendChatDivider(session, scopeKey, label, meta = {}) {
     const lastChatEntry = [...session.logs].reverse().find((entry) => entry.type === "interaction" || entry.type === "chat-divider");
     if (lastChatEntry?.type === "chat-divider" && lastChatEntry.scopeKey === scopeKey) return;
-    appendLog(session, "chat-divider", label, null, { scopeKey });
+    appendLog(session, "chat-divider", label, null, { scopeKey, ...meta });
   }
 
 
@@ -822,7 +840,16 @@
     return changes;
   }
 
-  function applyArrival(draft, session, targetNode, ambientRuleId) {
+  function movementLogMeta(token, sessionId, effect) {
+    if (!token) return {};
+    return {
+      id: `movement:${String(token)}:${String(sessionId)}:${String(effect)}`,
+      movementToken: token,
+      movementEffect: effect,
+    };
+  }
+
+  function applyArrival(draft, session, targetNode, ambientRuleId, token) {
     // 도착 직전 스냅샷으로 먼저 와 있던 다른 조사조를 확정한다.
     const waitingSessions = fieldSessions(draft, session, `node:${targetNode}`);
     const waitingIds = unique(waitingSessions.flatMap((candidate) => candidate.memberIds));
@@ -831,11 +858,11 @@
     session.currentNode = targetNode;
     session.currentDetailId = null;
     ui.selectedDetailId = null;
-    appendChatDivider(session, `node:${targetNode}`, nodeDisplayName(targetNode));
+    appendChatDivider(session, `node:${targetNode}`, nodeDisplayName(targetNode), movementLogMeta(token, session.id, "arrival-divider"));
 
     const ambient = ambientArrivalChanges(draft, session, targetNode, ambientRuleId);
     waitingSessions.forEach((candidate) => {
-      appendLog(candidate, "presence", `${arrivingNames}가 ${nodeDisplayName(targetNode)}에 도착해 현장에 합류했다.`);
+      appendLog(candidate, "presence", `${arrivingNames}가 ${nodeDisplayName(targetNode)}에 도착해 현장에 합류했다.`, null, movementLogMeta(token, candidate.id, "arrival-presence"));
     });
 
     const parts = [`${arrivingNames}는 ${nodeDisplayName(targetNode)}에 도착했다.`];
@@ -852,16 +879,16 @@
     witnesses.forEach((candidate) => appendLog(candidate, "presence", `${leavingNames}가 ${nodeDisplayName(originNode)}을 떠나 ${nodeDisplayName(route.to)} 방향으로 이동을 시작했다.`));
   }
 
-  function announceRouteEncounter(draft, session, route) {
+  function announceRouteEncounter(draft, session, route, token) {
     const scopeKey = `route:${route.from}:${route.to}`;
     const waitingSessions = fieldSessions(draft, session, scopeKey);
     if (!waitingSessions.length) return;
     const waitingIds = unique(waitingSessions.flatMap((candidate) => candidate.memberIds));
     const arrivingNames = joinNames(session.memberIds);
     waitingSessions.forEach((candidate) => {
-      appendLog(candidate, "presence", `${arrivingNames}도 같은 통로에 들어섰다. 가까운 곳에서 겹쳐지는 발소리와 인기척이 선명해진다.`);
+      appendLog(candidate, "presence", `${arrivingNames}도 같은 통로에 들어섰다. 가까운 곳에서 겹쳐지는 발소리와 인기척이 선명해진다.`, null, movementLogMeta(token, candidate.id, "route-presence"));
     });
-    appendLog(session, "presence", `앞서 이 통로에 들어온 ${joinNames(waitingIds)}의 발소리와 인기척이 가까이 느껴진다.`);
+    appendLog(session, "presence", `앞서 이 통로에 들어온 ${joinNames(waitingIds)}의 발소리와 인기척이 가까이 느껴진다.`, null, movementLogMeta(token, session.id, "route-presence"));
   }
 
   function scheduleMovement(session) {
@@ -885,10 +912,15 @@
   }
 
   function completeMovement(sessionId, token) {
+    const latestSession = loadState().sessions?.[sessionId];
+    if (!latestSession?.movement || latestSession.movement.token !== token || latestSession.lastMovementTransition?.token === token) {
+      movementTimers.delete(sessionId);
+      return;
+    }
     mutate("complete-movement", (draft) => {
       const session = draft.sessions[sessionId];
       const movement = session?.movement;
-      if (!session || !movement || movement.token !== token) return;
+      if (!session || !movement || movement.token !== token || session.lastMovementTransition?.token === token) return;
       const route = DATA.routes.find((candidate) => candidate.id === movement.routeId);
       const profile = DATA.riskProfiles[`${route.id}:${session.variant}`];
       const hazards = profile?.hazards || [];
@@ -900,9 +932,9 @@
       if (hazards.length) {
         const overview = combinedHazardOverview(hazards);
         session.activeEncounter = { routeId: route.id, fromNode: route.from, targetNode: route.to, overview, ambientRuleId: profile.ambientRuleId, hazards, currentIndex: 0, resolutions: [] };
-        appendChatDivider(session, `route:${route.from}:${route.to}`, `${nodeDisplayName(route.from)} → ${nodeDisplayName(route.to)} 이동 경로`);
-        announceRouteEncounter(draft, session, route);
-        appendLog(session, "risk", `${movementNarration} 그 앞에서 ${overview}`);
+        appendChatDivider(session, `route:${route.from}:${route.to}`, `${nodeDisplayName(route.from)} → ${nodeDisplayName(route.to)} 이동 경로`, movementLogMeta(token, session.id, "encounter-divider"));
+        announceRouteEncounter(draft, session, route, token);
+        appendLog(session, "risk", `${movementNarration} 그 앞에서 ${overview}`, null, movementLogMeta(token, session.id, "encounter-risk"));
         session.lastMovementTransition = {
           token,
           kind: "ENCOUNTER",
@@ -912,8 +944,12 @@
           completedAt: Date.now(),
         };
       } else {
-        const arrival = applyArrival(draft, session, route.to, profile?.ambientRuleId);
-        appendLog(session, "scene", `${movementNarration} ${arrival}`);
+        const contaminationBefore = Object.fromEntries(session.memberIds.map((memberId) => [memberId, Number(draft.characters?.[memberId]?.contamination || 0)]));
+        const arrival = applyArrival(draft, session, route.to, profile?.ambientRuleId, token);
+        appendLog(session, "scene", `${movementNarration} ${arrival}`, null, movementLogMeta(token, session.id, "arrival-scene"));
+        const contaminationDeltas = Object.fromEntries(session.memberIds
+          .map((memberId) => [memberId, Number(draft.characters?.[memberId]?.contamination || 0) - contaminationBefore[memberId]])
+          .filter(([, delta]) => delta > 0));
         session.lastMovementTransition = {
           token,
           kind: "ARRIVED",
@@ -921,6 +957,8 @@
           fromNode: route.from,
           targetNode: route.to,
           completedAt: Date.now(),
+          contaminationBaselines: contaminationBefore,
+          contaminationDeltas,
         };
       }
     });
@@ -2807,7 +2845,7 @@
     if (!isSystemAction) {
       clearChatComposer(input);
       requestLatestLogScroll({ chat: true, system: isNavigationHintRequest(text) });
-      mutate("field-chat", (draft) => {
+      mutateInvestigationChat("field-chat", (draft) => {
         const current = draft.sessions[sessionId];
         if (!current || current.movement) return;
         broadcastCharacterLine(draft, current, text, uid);
@@ -2816,7 +2854,7 @@
           const currentHazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex];
           appendLog(current, "scene", hintResponseText(current, currentHazardId ? DATA.hazardTemplates[currentHazardId] : null));
         }
-      });
+      }, input);
       return;
     }
 
@@ -2961,6 +2999,13 @@
       const encounter = session?.activeEncounter;
       if (!encounter) return;
       const hazardId = encounter.hazards[encounter.currentIndex];
+      const hazardIndex = encounter.currentIndex;
+      const transition = session.lastMovementTransition?.kind === "ENCOUNTER"
+        && session.lastMovementTransition.routeId === encounter.routeId
+        ? session.lastMovementTransition
+        : null;
+      const movementToken = transition?.token || "";
+      const contaminationBefore = Object.fromEntries(session.memberIds.map((memberId) => [memberId, Number(draft.characters?.[memberId]?.contamination || 0)]));
       const hazard = DATA.hazardTemplates[hazardId];
       const lower = text.toLowerCase();
       const risky = /(뛰|달려|맨손|무시|강하게 밀|밟고|잡고 버틴|그냥 간)/.test(lower);
@@ -2981,14 +3026,36 @@
       let resultText = actionResolutionText(DEMO_USERS[uid].name, text, outcome, hazardId, delta, `${session.id}:${encounter.currentIndex}:${encounter.resolutions.length}:${session.logs.length}`, itemUse);
       encounter.currentIndex += 1;
       if (encounter.currentIndex >= encounter.hazards.length) {
-        const arrival = applyArrival(draft, session, encounter.targetNode, encounter.ambientRuleId);
+        const arrival = applyArrival(draft, session, encounter.targetNode, encounter.ambientRuleId, movementToken);
         resultText += ` ${arrival}`;
         session.activeEncounter = null;
       } else {
         const nextHazardId = encounter.hazards[encounter.currentIndex];
         resultText += ` 이어서 ${HAZARD_PHENOMENA[nextHazardId] || DATA.hazardTemplates[nextHazardId]?.name}`;
       }
-      const entry = appendLog(session, outcome === "FAIL" ? "fail" : "success", resultText);
+      if (transition) {
+        const contaminationBaselines = { ...(transition.contaminationBaselines || {}) };
+        const contaminationDeltas = { ...(transition.contaminationDeltas || {}) };
+        session.memberIds.forEach((memberId) => {
+          if (!(memberId in contaminationBaselines)) contaminationBaselines[memberId] = contaminationBefore[memberId];
+          const change = Number(draft.characters?.[memberId]?.contamination || 0) - contaminationBefore[memberId];
+          if (change > 0) contaminationDeltas[memberId] = Number(contaminationDeltas[memberId] || 0) + change;
+        });
+        session.lastMovementTransition = {
+          ...transition,
+          kind: session.activeEncounter ? "ENCOUNTER" : "ARRIVED",
+          completedAt: session.activeEncounter ? transition.completedAt : Date.now(),
+          contaminationBaselines,
+          contaminationDeltas,
+        };
+      }
+      const entry = appendLog(
+        session,
+        outcome === "FAIL" ? "fail" : "success",
+        resultText,
+        null,
+        movementLogMeta(movementToken, session.id, `hazard:${hazardIndex}:${hazardId}`),
+      );
       queueActionNarration(session, entry, text, interpretation || localActionInterpretation(session, text), {
         kind: "HAZARD_RESPONSE",
         outcome,

@@ -61,8 +61,10 @@ class ClockDate extends Date {
 }
 
 const composerListeners = new Map();
+let composerFocusCalls = 0;
 const composer = {
   value: "한글 조합 중인 입력",
+  isConnected: true,
   disabled: false,
   placeholder: "",
   selectionStart: 4,
@@ -76,9 +78,21 @@ const composer = {
     (composerListeners.get(event.type) || []).forEach((callback) => callback.call(this, event));
   },
   setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
-  focus() {},
+  focus() { composerFocusCalls += 1; },
 };
-const sendButton = { disabled: false, textContent: "전송", addEventListener() {} };
+const sendListeners = new Map();
+const sendButton = {
+  disabled: false,
+  textContent: "전송",
+  addEventListener(type, callback) {
+    const callbacks = sendListeners.get(type) || [];
+    callbacks.push(callback);
+    sendListeners.set(type, callbacks);
+  },
+  dispatchEvent(event) {
+    (sendListeners.get(event.type) || []).forEach((callback) => callback.call(this, event));
+  },
+};
 const listeners = new Map();
 function eventNode(extra = {}) {
   return {
@@ -105,8 +119,18 @@ const chatStream = {
   set innerHTML(value) { this.writes += 1; this._html = value; },
   get innerHTML() { return this._html || ""; },
 };
-const scene = { outerHTML: "", setAttribute() {} };
-const systemPanel = { querySelector() { return null; }, innerHTML: "" };
+const scene = {
+  writes: 0,
+  set outerHTML(value) { this.writes += 1; this._outerHTML = value; },
+  get outerHTML() { return this._outerHTML || ""; },
+  setAttribute() {},
+};
+const systemPanel = {
+  writes: 0,
+  querySelector() { return null; },
+  set innerHTML(value) { this.writes += 1; this._html = value; },
+  get innerHTML() { return this._html || ""; },
+};
 const panelBody = { innerHTML: "" };
 const enterInvestigationButton = eventNode({});
 const retiredMapButtons = [];
@@ -213,6 +237,52 @@ const initial = world();
 initial.sessions.sA.memberIds = ["test_a", "test_b"];
 api.setState(initial);
 api.bindInvestigation(initial.sessions.sA);
+localStorage.resetWrites();
+
+const ownChatRoot = root;
+const ownChatComposer = composer;
+const ownChatMessages = ["own chat one", "own chat two", "own chat three", "own chat four"];
+composer.dispatchEvent({ type: "compositionstart" });
+const writesBeforeComposingEnter = localStorage.writes();
+composer.dispatchEvent({ type: "keydown", key: "Enter", shiftKey: false, isComposing: true, preventDefault() {} });
+assert.equal(localStorage.writes(), writesBeforeComposingEnter, "an IME Enter must not submit or write shared state");
+composer.dispatchEvent({ type: "compositionend", target: composer });
+for (const [index, message] of ownChatMessages.entries()) {
+  composer.value = message;
+  composer.selectionStart = message.length;
+  composer.selectionEnd = message.length;
+  const writesBeforeSend = localStorage.writes();
+  const chatWritesBeforeSend = chatStream.writes;
+  sendButton.dispatchEvent({ type: "click" });
+  assert.equal(localStorage.writes(), writesBeforeSend + 1, `own chat ${index + 1} must write shared state exactly once`);
+  assert.equal(chatStream.writes, chatWritesBeforeSend + 1, `own chat ${index + 1} must paint the chat stream exactly once`);
+  assert.equal(document.querySelector("[data-chat-input]"), ownChatComposer, `own chat ${index + 1} must preserve textarea identity`);
+  assert.equal(root, ownChatRoot, `own chat ${index + 1} must preserve investigation root identity`);
+  assert.equal(composer.value, "", `own chat ${index + 1} must clear the existing composer`);
+  assert.equal(composer.selectionStart, 0, `own chat ${index + 1} must restore the caret in the cleared composer`);
+  assert.equal(composer.selectionEnd, 0, `own chat ${index + 1} must collapse the selection in the cleared composer`);
+}
+assert.equal(app.writes, 0, "four own chat sends must perform zero full-shell replacements");
+assert.equal(scene.writes, 0, "plain chat must not replace the investigation scene");
+assert.equal(systemPanel.writes, 0, "plain chat must not repaint the system panel");
+assert.equal(composerFocusCalls, ownChatMessages.length, "each own chat send must restore focus to the same composer");
+const ownChatState = api.getState();
+assert.equal(ownChatState.sessions.sA.logs.filter((entry) => entry.type === "interaction").length, 5, "the sender session must receive each own chat line once");
+assert.equal(ownChatState.sessions.sC.logs.filter((entry) => entry.type === "interaction").length, 4, "same-field solo C must receive each A/B chat line once");
+
+const mapBranch = source.match(/if \(isMapRequest\(text\)\) \{[\s\S]*?return applyActionInterpretation\(sessionId, text, localActionInterpretation\(session, text\)\);\n    \}/)?.[0] || "";
+assert.match(mapBranch, /mutate\("map-chat"/, "map input must keep the existing mutation contract outside the local plain-chat fix");
+assert.doesNotMatch(mapBranch, /mutateInvestigationChat/, "map input semantics must stay outside the local plain-chat selective path");
+
+api.setState(initial);
+composer.value = "한글 조합 중인 입력";
+composer.selectionStart = 4;
+composer.selectionEnd = 6;
+api.getUi().actionText = composer.value;
+chatStream.writes = 0;
+scene.writes = 0;
+systemPanel.writes = 0;
+app.writes = 0;
 localStorage.resetWrites();
 
 const charactersOnly = structuredClone(initial);
