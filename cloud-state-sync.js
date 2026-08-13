@@ -10,6 +10,8 @@
   const ACTIVE_POLL_MS = 1500;
   const HIDDEN_POLL_MS = 5000;
   const PUSH_DEBOUNCE_MS = 120;
+  const RECOVERY_QUIET_MS = 4000;
+  const UNSYNCED_KEY_PREFIX = "baekji_city_cloud_unsynced_v1:";
 
   const storageProto = typeof Storage !== "undefined" ? Storage.prototype : null;
   const nativeSetItem = storageProto?.setItem;
@@ -21,6 +23,15 @@
   let applyingRemote = false;
   let revision = 0;
   let pendingRaw = null;
+  let pendingGeneration = 0;
+  let unsyncedRaw = null;
+  let unsyncedGeneration = 0;
+  let unsyncedOwnerKey = "";
+  let remoteBasisRaw = null;
+  let recoveryTimer = 0;
+  let recoveryNotBefore = 0;
+  let recoveryOwnerId = "";
+  let recoveryOwnerKey = "";
   let pushTimer = 0;
   let pushInFlight = false;
   let pollTimer = 0;
@@ -32,6 +43,89 @@
 
   function syncEnabled() {
     return Boolean(activeUserId());
+  }
+
+  function unsyncedKey(userId = activeUserId()) {
+    return userId ? `${UNSYNCED_KEY_PREFIX}${userId}` : "";
+  }
+
+  function syncOwner() {
+    const userId = activeUserId();
+    return { userId, overlayKey: unsyncedKey(userId) };
+  }
+
+  function sameSyncOwner(owner) {
+    return Boolean(owner?.userId && activeUserId() === owner.userId && unsyncedKey() === owner.overlayKey);
+  }
+
+  function parseUnsyncedRecord(raw) {
+    try {
+      const record = JSON.parse(raw || "null");
+      if (record?.format !== 1 || !safeParse(record.baseRaw) || !safeParse(record.stateRaw)) return null;
+      return record;
+    } catch {
+      return null;
+    }
+  }
+
+  function persistUnsyncedOverlayForOwner(state, owner, updateActiveMemory = sameSyncOwner(owner), baseState = safeParse(remoteBasisRaw), generation = null) {
+    if (!owner?.overlayKey || !state || state.version !== 3 || !baseState || baseState.version !== 3) return null;
+    const nextGeneration = generation == null ? unsyncedGeneration + 1 : Number(generation || 0);
+    const raw = JSON.stringify({
+      format: 1,
+      ownerId: owner.userId,
+      generation: nextGeneration,
+      baseRaw: JSON.stringify(baseState),
+      stateRaw: JSON.stringify(state),
+    });
+    nativeSetItem?.call(localStorage, owner.overlayKey, raw);
+    if (updateActiveMemory) {
+      unsyncedRaw = raw;
+      unsyncedOwnerKey = owner.overlayKey;
+      unsyncedGeneration = nextGeneration;
+    }
+    return state;
+  }
+
+  function loadUnsyncedOverlay() {
+    const key = unsyncedKey();
+    unsyncedOwnerKey = key;
+    unsyncedRaw = key ? nativeGetItem?.call(localStorage, key) || null : null;
+    const record = parseUnsyncedRecord(unsyncedRaw);
+    if (!record || record.ownerId !== activeUserId()) {
+      unsyncedRaw = null;
+      unsyncedGeneration = 0;
+      return null;
+    }
+    unsyncedGeneration = Number(record.generation || 0);
+    return safeParse(record.stateRaw);
+  }
+
+  function persistUnsyncedOverlay(state) {
+    return persistUnsyncedOverlayForOwner(state, syncOwner(), true);
+  }
+
+  function clearUnsyncedOverlay(generation = unsyncedGeneration) {
+    if (generation !== unsyncedGeneration) return false;
+    const key = unsyncedKey();
+    if (key) nativeRemoveItem?.call(localStorage, key);
+    unsyncedRaw = null;
+    unsyncedOwnerKey = "";
+    clearTimeout(recoveryTimer);
+    recoveryTimer = 0;
+    recoveryOwnerId = "";
+    recoveryOwnerKey = "";
+    return true;
+  }
+
+  function activeUnsyncedOverlay() {
+    if (unsyncedOwnerKey !== unsyncedKey()) return loadUnsyncedOverlay();
+    return safeParse(parseUnsyncedRecord(unsyncedRaw)?.stateRaw);
+  }
+
+  function activeUnsyncedRecord() {
+    if (unsyncedOwnerKey !== unsyncedKey()) loadUnsyncedOverlay();
+    return parseUnsyncedRecord(unsyncedRaw);
   }
 
   function safeParse(raw) {
@@ -84,6 +178,129 @@
       return result;
     }
     return local === undefined ? remote : local;
+  }
+
+  function movementTerminalMarker(session, movement) {
+    const marker = session?.lastMovementTransition;
+    if (!marker || !movement || marker.token !== movement.token) return null;
+    if (marker.kind !== "ARRIVED" && marker.kind !== "ENCOUNTER") return null;
+    return marker;
+  }
+
+  function legacyMovementCompletionEvidence(session, movement) {
+    if (!session || !movement || session.lastMovementTransition) return false;
+    if (movement.targetNode && String(session.currentNode || "") === String(movement.targetNode)) return true;
+    const encounter = session.activeEncounter;
+    return Boolean(encounter && (
+      (movement.routeId && encounter.routeId === movement.routeId)
+      || (movement.fromNode && movement.targetNode
+        && encounter.fromNode === movement.fromNode
+        && encounter.targetNode === movement.targetNode)
+    ));
+  }
+
+  function synthesizeLegacyMovementTransition(session, movement) {
+    const encounter = session?.activeEncounter;
+    const kind = encounter ? "ENCOUNTER" : "ARRIVED";
+    return {
+      token: movement.token,
+      kind,
+      routeId: movement.routeId || encounter?.routeId || "",
+      fromNode: movement.fromNode || encounter?.fromNode || "",
+      targetNode: movement.targetNode || encounter?.targetNode || session?.currentNode || "",
+      completedAt: Math.max(0, Number(session?.endedAt || movement.resolveAt || movement.startedAt || 0)),
+    };
+  }
+
+  function copyMovementTransition(target, source) {
+    ["movement", "currentNode", "currentDetailId", "activeEncounter", "choiceReveal", "lastMovementTransition"].forEach((key) => {
+      if (hasOwn(source, key)) target[key] = source[key];
+      else delete target[key];
+    });
+    return target;
+  }
+
+  function sameMovementOrigin(session, movement, otherSession) {
+    const node = String(session?.currentNode || "");
+    return Boolean(node && (
+      node === String(movement?.fromNode || "")
+      || node === String(otherSession?.currentNode || "")
+    ));
+  }
+
+  function reconcileSessionMovement(remoteSession, localSession, mergedSession) {
+    if (!remoteSession || !localSession || !mergedSession) return mergedSession;
+    const remoteMovement = remoteSession.movement || null;
+    const localMovement = localSession.movement || null;
+
+    if (remoteMovement && !localMovement) {
+      if (movementTerminalMarker(localSession, remoteMovement)) {
+        return copyMovementTransition(mergedSession, localSession);
+      }
+      if (legacyMovementCompletionEvidence(localSession, remoteMovement)) {
+        copyMovementTransition(mergedSession, localSession);
+        mergedSession.lastMovementTransition = synthesizeLegacyMovementTransition(localSession, remoteMovement);
+        return mergedSession;
+      }
+      if (sameMovementOrigin(localSession, remoteMovement, remoteSession)) {
+        return copyMovementTransition(mergedSession, remoteSession);
+      }
+      return mergedSession;
+    }
+
+    if (!remoteMovement && localMovement) {
+      if (movementTerminalMarker(remoteSession, localMovement)) {
+        return copyMovementTransition(mergedSession, remoteSession);
+      }
+      if (legacyMovementCompletionEvidence(remoteSession, localMovement)) {
+        copyMovementTransition(mergedSession, remoteSession);
+        mergedSession.lastMovementTransition = synthesizeLegacyMovementTransition(remoteSession, localMovement);
+        return mergedSession;
+      }
+      return copyMovementTransition(mergedSession, localSession);
+    }
+
+    if (!remoteMovement || !localMovement) {
+      const remoteMarkerAt = Number(remoteSession.lastMovementTransition?.completedAt || 0);
+      const localMarkerAt = Number(localSession.lastMovementTransition?.completedAt || 0);
+      if (!remoteMarkerAt && !localMarkerAt) return mergedSession;
+      return copyMovementTransition(mergedSession, remoteMarkerAt > localMarkerAt ? remoteSession : localSession);
+    }
+    if (movementTerminalMarker(remoteSession, remoteMovement)) {
+      return copyMovementTransition(mergedSession, remoteSession);
+    }
+    if (movementTerminalMarker(localSession, localMovement)) {
+      return copyMovementTransition(mergedSession, localSession);
+    }
+    if (String(remoteMovement.token || "") !== String(localMovement.token || "")) {
+      const remoteStartedAt = Number(remoteMovement.startedAt || 0);
+      const localStartedAt = Number(localMovement.startedAt || 0);
+      const remoteIsNewer = remoteStartedAt > localStartedAt
+        || (remoteStartedAt === localStartedAt && String(remoteMovement.token || "") > String(localMovement.token || ""));
+      return copyMovementTransition(mergedSession, remoteIsNewer ? remoteSession : localSession);
+    }
+
+    const movement = mergeValues(remoteMovement, localMovement);
+    movement.resolveAt = Math.max(Number(remoteMovement.resolveAt || 0), Number(localMovement.resolveAt || 0));
+    if (remoteMovement.mobilityFoundationAdjusted || localMovement.mobilityFoundationAdjusted) {
+      movement.mobilityFoundationAdjusted = true;
+      movement.mobilityPenalty = localMovement.mobilityFoundationAdjusted
+        ? localMovement.mobilityPenalty
+        : remoteMovement.mobilityPenalty;
+    }
+    copyMovementTransition(mergedSession, localSession);
+    mergedSession.movement = movement;
+    return mergedSession;
+  }
+
+  function reconcileMovementTransitions(remote, local, merged) {
+    if (!merged || merged.version !== 3) return merged;
+    const remoteSessions = remote?.sessions || {};
+    const localSessions = local?.sessions || {};
+    Object.keys(merged.sessions || {}).forEach((sessionId) => {
+      reconcileSessionMovement(remoteSessions[sessionId], localSessions[sessionId], merged.sessions[sessionId]);
+    });
+    return merged;
   }
 
   function hasOwn(object, key) {
@@ -168,6 +385,93 @@
     return merged;
   }
 
+  function mergeCloudStates(remote, local) {
+    // Legacy contract equivalent: reconcileAdminControl(result.state, localState, mergeValues(result.state, localState))
+    const merged = reconcileMovementTransitions(remote, local, mergeValues(remote, local));
+    return reconcileAdminControl(remote, local, merged);
+  }
+
+  function valuesEqual(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function rebaseArrayDelta(base, desired, remote, path) {
+    if (valuesEqual(desired, base)) return remote;
+    if (valuesEqual(remote, base)) return desired;
+    const baseValues = Array.isArray(base) ? base : [];
+    const desiredValues = Array.isArray(desired) ? desired : [];
+    const remoteValues = Array.isArray(remote) ? remote : [];
+    const baseByKey = new Map(baseValues.map((value) => [stableArrayKey(value), value]));
+    const desiredByKey = new Map(desiredValues.map((value) => [stableArrayKey(value), value]));
+    const removed = new Set([...baseByKey.keys()].filter((key) => !desiredByKey.has(key)));
+    const output = [];
+    const outputKeys = new Set();
+
+    remoteValues.forEach((remoteValue) => {
+      const key = stableArrayKey(remoteValue);
+      if (removed.has(key)) return;
+      const baseValue = baseByKey.get(key);
+      const desiredValue = desiredByKey.get(key);
+      const nextValue = desiredByKey.has(key) && baseByKey.has(key)
+        ? rebaseUnsyncedValue(baseValue, desiredValue, remoteValue, [...path, key])
+        : remoteValue;
+      output.push(nextValue);
+      outputKeys.add(key);
+    });
+    desiredValues.forEach((desiredValue) => {
+      const key = stableArrayKey(desiredValue);
+      if (!baseByKey.has(key) && !outputKeys.has(key)) {
+        output.push(desiredValue);
+        outputKeys.add(key);
+      }
+    });
+    return output;
+  }
+
+  function rebaseUnsyncedValue(base, desired, remote, path = []) {
+    if (valuesEqual(desired, base)) return remote;
+    if (valuesEqual(remote, base)) return desired;
+    if (Array.isArray(base) || Array.isArray(desired) || Array.isArray(remote)) {
+      return rebaseArrayDelta(base, desired, remote, path);
+    }
+    const baseObject = base && typeof base === "object";
+    const desiredObject = desired && typeof desired === "object";
+    const remoteObject = remote && typeof remote === "object";
+    if (!baseObject || !desiredObject || !remoteObject) return desired;
+
+    const result = {};
+    const keys = new Set([...Object.keys(base), ...Object.keys(desired), ...Object.keys(remote)]);
+    keys.forEach((key) => {
+      const baseHas = hasOwn(base, key);
+      const desiredHas = hasOwn(desired, key);
+      const remoteHas = hasOwn(remote, key);
+      if (!desiredHas && baseHas) return;
+      if (!desiredHas) {
+        if (remoteHas) result[key] = remote[key];
+        return;
+      }
+      if (!baseHas) {
+        result[key] = desired[key];
+        return;
+      }
+      result[key] = rebaseUnsyncedValue(base[key], desired[key], remoteHas ? remote[key] : undefined, [...path, key]);
+    });
+
+    if (path.length === 2 && path[0] === "sessions") {
+      const transitionKeys = ["movement", "currentNode", "currentDetailId", "activeEncounter", "choiceReveal", "lastMovementTransition"];
+      if (transitionKeys.some((key) => !valuesEqual(base[key], desired[key]))) {
+        reconcileSessionMovement(remote, desired, result);
+      }
+    }
+    return result;
+  }
+
+  function rebaseUnsyncedOverlay(base, desired, latestRemote) {
+    if (!base || !desired || !latestRemote) return desired || latestRemote;
+    const rebased = rebaseUnsyncedValue(base, desired, latestRemote, []);
+    return reconcileAdminControl(latestRemote, desired, rebased);
+  }
+
   function writerId() {
     let value = nativeGetItem?.call(localStorage, WRITER_KEY) || "";
     if (!value) {
@@ -228,8 +532,12 @@
   function suspendSync() {
     clearTimeout(pushTimer);
     clearTimeout(pollTimer);
+    clearTimeout(recoveryTimer);
     pushTimer = 0;
     pollTimer = 0;
+    recoveryTimer = 0;
+    recoveryOwnerId = "";
+    recoveryOwnerKey = "";
     pendingRaw = null;
     initialized = false;
     if (document.documentElement.dataset.cloudSyncStatus !== "idle") notifyStatus("idle");
@@ -255,7 +563,15 @@
     if (!syncEnabled()) return false;
     const remote = row?.state;
     if (!remote || remote.version !== 3) return false;
-    const nextRaw = JSON.stringify(remote);
+    const record = activeUnsyncedRecord();
+    const base = safeParse(record?.baseRaw);
+    const desired = safeParse(record?.stateRaw);
+    const nextState = base && desired ? rebaseUnsyncedOverlay(base, desired, remote) : remote;
+    const nextRaw = JSON.stringify(nextState);
+    remoteBasisRaw = JSON.stringify(remote);
+    if (record && base && desired) {
+      persistUnsyncedOverlayForOwner(nextState, syncOwner(), true, remote, record.generation);
+    }
     const oldRaw = nativeGetItem.call(localStorage, GLOBAL_KEY);
     revision = Number(row.revision || 0);
     if (oldRaw === nextRaw) return false;
@@ -288,6 +604,7 @@
     const mergedRaw = JSON.stringify(merged);
     const oldRaw = nativeGetItem.call(localStorage, GLOBAL_KEY);
     revision = Number(row.revision || 0);
+    remoteBasisRaw = JSON.stringify(remote);
     if (oldRaw !== mergedRaw) {
       applyingRemote = true;
       try { nativeSetItem.call(localStorage, GLOBAL_KEY, mergedRaw); }
@@ -295,13 +612,26 @@
       dispatchExternalUpdate(oldRaw, mergedRaw);
     }
     pendingRaw = mergedRaw;
+    pendingGeneration += 1;
     return merged;
   }
 
   function schedulePush(raw) {
     if (!syncEnabled()) return;
     if (!safeParse(raw)) return;
-    pendingRaw = raw;
+    const state = safeParse(raw);
+    const record = activeUnsyncedRecord();
+    const pendingState = state;
+    pendingRaw = JSON.stringify(pendingState);
+    if (record) {
+      persistUnsyncedOverlayForOwner(
+        pendingState,
+        syncOwner(),
+        true,
+        safeParse(record.baseRaw),
+      );
+    }
+    pendingGeneration += 1;
     if (!initialized || applyingRemote) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(flushPush, PUSH_DEBOUNCE_MS);
@@ -314,34 +644,73 @@
     }
     if (!initialized || pushInFlight || !pendingRaw) return;
     const raw = pendingRaw;
+    const batchOwner = syncOwner();
+    const batchGeneration = pendingGeneration;
+    const batchUnsyncedGeneration = unsyncedGeneration;
+    let batchBase = safeParse(activeUnsyncedRecord()?.baseRaw) || safeParse(remoteBasisRaw);
     pendingRaw = null;
     const localState = safeParse(raw);
     if (!localState) return;
     pushInFlight = true;
     notifyStatus("saving");
     try {
-      let result = await putRemoteState(localState, revision);
-      if (!syncEnabled()) return;
-      if (result?.accepted === false && result.state?.version === 3) {
-        const merged = reconcileAdminControl(result.state, localState, mergeValues(result.state, localState));
-        result = await putRemoteState(merged, Number(result.revision || 0));
-        if (!syncEnabled()) return;
-        if (result?.accepted) {
-          applyingRemote = true;
-          try { nativeSetItem.call(localStorage, GLOBAL_KEY, JSON.stringify(merged)); }
-          finally { applyingRemote = false; }
+      const maxAttempts = 3;
+      let candidate = localState;
+      let result = null;
+      let conflictCount = 0;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        result = await putRemoteState(candidate, attempt === 0 ? revision : Number(result?.revision || 0));
+        if (!sameSyncOwner(batchOwner)) {
+          const abandoned = result?.state?.version === 3 && batchBase
+            ? rebaseUnsyncedOverlay(batchBase, candidate, result.state)
+            : candidate;
+          persistUnsyncedOverlayForOwner(abandoned, batchOwner, false, result?.state?.version === 3 ? result.state : batchBase, batchUnsyncedGeneration || 1);
+          return;
         }
+        if (result?.accepted || result?.state?.version !== 3) break;
+        conflictCount += 1;
+        candidate = batchBase ? rebaseUnsyncedOverlay(batchBase, candidate, result.state) : mergeCloudStates(result.state, candidate);
+        batchBase = result.state;
       }
       if (result?.accepted) {
         revision = Number(result.revision || revision);
+        remoteBasisRaw = JSON.stringify(candidate);
+        clearUnsyncedOverlay(batchUnsyncedGeneration);
+        if (conflictCount) {
+          applyingRemote = true;
+          try { nativeSetItem.call(localStorage, GLOBAL_KEY, JSON.stringify(candidate)); }
+          finally { applyingRemote = false; }
+        }
         notifyStatus("synced");
       } else {
-        if (result?.state) applyRemoteState(result);
+        if (result?.state?.version === 3) {
+          // A logical write batch owns one bounded retry budget. Reconcile its
+          // terminal transitions locally with the newest remote snapshot, but do
+          // not re-queue that exhausted batch. A genuinely newer write that was
+          // scheduled while this batch was in flight keeps its own generation.
+          const hasNewerPending = pendingGeneration > batchGeneration && Boolean(pendingRaw);
+          const newerPendingState = hasNewerPending ? safeParse(pendingRaw) : null;
+          const desiredState = newerPendingState || candidate;
+          const finalResolved = batchBase
+            ? rebaseUnsyncedOverlay(batchBase, desiredState, result.state)
+            : mergeCloudStates(result.state, desiredState);
+          const finalRaw = JSON.stringify(finalResolved);
+          pendingRaw = hasNewerPending ? finalRaw : null;
+          persistUnsyncedOverlayForOwner(finalResolved, batchOwner, true, result.state);
+          applyRemoteState(result);
+          scheduleRecovery();
+        }
         notifyStatus("conflict");
       }
     } catch (error) {
-      if (syncEnabled()) {
-        pendingRaw = pendingRaw || raw;
+      if (!sameSyncOwner(batchOwner)) {
+        persistUnsyncedOverlayForOwner(localState, batchOwner, false, batchBase, batchUnsyncedGeneration || 1);
+      } else if (syncEnabled()) {
+        const newerPending = safeParse(pendingRaw);
+        const recoveryState = newerPending ? mergeCloudStates(localState, newerPending) : localState;
+        persistUnsyncedOverlayForOwner(recoveryState, batchOwner, true, batchBase);
+        pendingRaw = null;
+        deferRecovery();
         notifyStatus("offline", { message: String(error?.message || error) });
       }
     } finally {
@@ -349,8 +718,42 @@
       if (syncEnabled() && pendingRaw) {
         clearTimeout(pushTimer);
         pushTimer = setTimeout(flushPush, 350);
+      } else if (sameSyncOwner(batchOwner) && unsyncedRaw) {
+        scheduleRecovery(batchOwner);
       }
     }
+  }
+
+  function deferRecovery(delay = RECOVERY_QUIET_MS) {
+    const owner = syncOwner();
+    if (!sameSyncOwner(owner) || !activeUnsyncedOverlay()) return;
+    recoveryNotBefore = Date.now() + Math.max(RECOVERY_QUIET_MS, Number(delay || 0));
+    scheduleRecovery(owner, true);
+  }
+
+  async function recoverUnsyncedOverlay(owner = syncOwner()) {
+    if (!sameSyncOwner(owner) || pendingRaw || pushInFlight) return false;
+    const overlay = activeUnsyncedOverlay();
+    if (!overlay) return false;
+    pendingRaw = JSON.stringify(overlay);
+    pendingGeneration += 1;
+    await flushPush();
+    return true;
+  }
+
+  function scheduleRecovery(owner = syncOwner(), reset = false) {
+    if (!sameSyncOwner(owner) || !activeUnsyncedOverlay() || pendingRaw || pushInFlight) return;
+    if (recoveryTimer && !reset && recoveryOwnerId === owner.userId && recoveryOwnerKey === owner.overlayKey) return;
+    clearTimeout(recoveryTimer);
+    recoveryTimer = 0;
+    recoveryOwnerId = owner.userId;
+    recoveryOwnerKey = owner.overlayKey;
+    const wait = Math.max(RECOVERY_QUIET_MS, recoveryNotBefore - Date.now());
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = 0;
+      if (!sameSyncOwner(owner)) return false;
+      return recoverUnsyncedOverlay(owner);
+    }, wait);
   }
 
   async function pollOnce(forceFull = false) {
@@ -359,29 +762,26 @@
       return;
     }
     if (!initialized || pushInFlight || pendingRaw) return;
+    const pollOwner = syncOwner();
     try {
       const remoteRevision = forceFull ? revision + 1 : await readRemoteRevision();
-      if (!syncEnabled()) {
-        suspendSync();
-        return;
-      }
+      if (!sameSyncOwner(pollOwner)) return;
       if (!forceFull && (!remoteRevision || remoteRevision <= revision)) {
         notifyStatus("synced");
+        scheduleRecovery();
         return;
       }
       const row = await readRemoteState();
-      if (!syncEnabled()) {
-        suspendSync();
-        return;
-      }
+      if (!sameSyncOwner(pollOwner)) return;
       if (!row) return;
-      if (Number(row.revision || 0) > revision || forceFull) applyRemoteState(row);
-      notifyStatus("synced");
-    } catch (error) {
-      if (!syncEnabled()) {
-        suspendSync();
-        return;
+      if (Number(row.revision || 0) > revision || forceFull) {
+        if (unsyncedRaw) deferRecovery();
+        applyRemoteState(row);
       }
+      notifyStatus("synced");
+      scheduleRecovery();
+    } catch (error) {
+      if (!sameSyncOwner(pollOwner)) return;
       notifyStatus("offline", { message: String(error?.message || error) });
     }
   }
@@ -403,15 +803,15 @@
       suspendSync();
       return;
     }
+    const bootstrapOwner = syncOwner();
     notifyStatus("connecting");
     try {
+      loadUnsyncedOverlay();
       const row = await readRemoteState();
-      if (!syncEnabled()) {
-        suspendSync();
-        return;
-      }
+      if (!sameSyncOwner(bootstrapOwner)) return;
       if (row?.state?.version === 3) {
-        const preserved = preserveCurrentCharacterOnBootstrap(row);
+        const hasOverlay = Boolean(activeUnsyncedRecord());
+        const preserved = hasOverlay ? null : preserveCurrentCharacterOnBootstrap(row);
         if (!preserved) {
           pendingRaw = null;
           applyRemoteState(row);
@@ -421,12 +821,13 @@
         const localState = safeParse(localRaw);
         if (localState) {
           const created = await putRemoteState(localState, null);
-          if (!syncEnabled()) {
-            suspendSync();
+          if (!sameSyncOwner(bootstrapOwner)) {
+            persistUnsyncedOverlayForOwner(localState, bootstrapOwner, false);
             return;
           }
           if (created?.state?.version === 3) {
             revision = Number(created.revision || 0);
+            remoteBasisRaw = JSON.stringify(created.state);
             if (created.accepted === false) applyRemoteState(created);
           }
         }
@@ -434,11 +835,9 @@
       initialized = true;
       notifyStatus("synced");
       if (pendingRaw) flushPush();
+      else scheduleRecovery();
     } catch (error) {
-      if (!syncEnabled()) {
-        suspendSync();
-        return;
-      }
+      if (!sameSyncOwner(bootstrapOwner)) return;
       initialized = true;
       notifyStatus("offline", { message: String(error?.message || error) });
     }
@@ -498,6 +897,28 @@
     adminControlHistory,
     applyAdminControlPatch,
     reconcileAdminControl,
+    movementTerminalMarker,
+    legacyMovementCompletionEvidence,
+    synthesizeLegacyMovementTransition,
+    reconcileSessionMovement,
+    reconcileMovementTransitions,
+    mergeCloudStates,
+    valuesEqual,
+    rebaseArrayDelta,
+    rebaseUnsyncedValue,
+    rebaseUnsyncedOverlay,
+    parseUnsyncedRecord,
+    unsyncedKey,
+    syncOwner,
+    sameSyncOwner,
+    persistUnsyncedOverlayForOwner,
+    activeUnsyncedOverlay,
+    loadUnsyncedOverlay,
+    persistUnsyncedOverlay,
+    clearUnsyncedOverlay,
+    deferRecovery,
+    recoverUnsyncedOverlay,
+    scheduleRecovery,
     activeUserId,
     syncEnabled,
     preserveCurrentCharacterOnBootstrap,

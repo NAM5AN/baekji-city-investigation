@@ -21,6 +21,45 @@ const localStorage = storage();
 const sessionStorage = storage();
 sessionStorage.setItem(USER_KEY, "test_a");
 
+function fakeClock(startAt = 100_000) {
+  let now = startAt;
+  let nextId = 0;
+  const timers = new Map();
+  const runs = new Map();
+  return {
+    get now() { return now; },
+    setTimeout(callback, delay = 0) {
+      const id = ++nextId;
+      timers.set(id, { callback, dueAt: now + Math.max(0, Number(delay) || 0) });
+      return id;
+    },
+    clearTimeout(id) { timers.delete(id); },
+    pending(id) { return timers.has(id); },
+    runCount(id) { return runs.get(id) || 0; },
+    advance(ms) {
+      const target = now + Math.max(0, Number(ms) || 0);
+      while (true) {
+        const next = [...timers.entries()]
+          .filter(([, timer]) => timer.dueAt <= target)
+          .sort((left, right) => left[1].dueAt - right[1].dueAt || left[0] - right[0])[0];
+        if (!next) break;
+        const [id, timer] = next;
+        timers.delete(id);
+        now = timer.dueAt;
+        runs.set(id, (runs.get(id) || 0) + 1);
+        timer.callback();
+      }
+      now = target;
+    },
+  };
+}
+
+const clock = fakeClock();
+class ClockDate extends Date {
+  constructor(...args) { super(...(args.length ? args : [clock.now])); }
+  static now() { return clock.now; }
+}
+
 const composerListeners = new Map();
 const composer = {
   value: "한글 조합 중인 입력",
@@ -36,6 +75,7 @@ const composer = {
   dispatchEvent(event) {
     (composerListeners.get(event.type) || []).forEach((callback) => callback.call(this, event));
   },
+  setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
   focus() {},
 };
 const sendButton = { disabled: false, textContent: "전송", addEventListener() {} };
@@ -130,8 +170,8 @@ const context = vm.createContext({
   location: { hash: "#/investigate/sA" },
   history: { pushState() {} },
   navigator: {},
-  Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise,
-  setTimeout, clearTimeout, setInterval: () => 0,
+  Intl, Date: ClockDate, Math, JSON, String, Object, Array, Set, Map, Promise,
+  setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: () => 0,
   requestAnimationFrame: (callback) => callback(),
   console,
 });
@@ -140,7 +180,7 @@ vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url)
 let source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const footer = source.indexOf('  window.addEventListener("hashchange", render);');
 assert.ok(footer > 0, "test harness must run before app startup rendering");
-source = source.slice(0, footer) + '\n  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) renderExternalUpdate(); });\n  window.addEventListener("pageshow", () => { if (routeParts()[0] === "investigate") renderExternalUpdate(); });\n  window.__TEST__ = { semanticStateEqual, investigationProjection, classifyExternalInvestigationUpdate, refreshMountedInvestigation, syncChoiceRevealUi, chatPanel, chatStreamMarkup, chatComposerPlaceholder, chatLogEntries, bindInvestigation, playerRouteProjection, consumeUnrelatedExternalRouteUpdate, renderExternalUpdate, render, mutate, setUiTab(value) { ui.tab = value; }, getUi() { return ui; }, setState(value) { state = value; localStorage.setItem(GLOBAL_KEY, JSON.stringify(value)); }, getState() { return state; } };\n})();';
+source = source.slice(0, footer) + '\n  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) renderExternalUpdate(); });\n  window.addEventListener("pageshow", () => { if (routeParts()[0] === "investigate") renderExternalUpdate(); });\n  window.__TEST__ = { semanticStateEqual, investigationProjection, classifyExternalInvestigationUpdate, refreshMountedInvestigation, syncChoiceRevealUi, chatPanel, chatStreamMarkup, chatComposerPlaceholder, chatLogEntries, bindInvestigation, playerRouteProjection, consumeUnrelatedExternalRouteUpdate, renderExternalUpdate, render, mutate, beginMove, scheduleMovement, completeMovement, setUiTab(value) { ui.tab = value; }, getUi() { return ui; }, setState(value) { state = value; localStorage.setItem(GLOBAL_KEY, JSON.stringify(value)); }, getState() { return state; }, getMovementTimer(sessionId) { return movementTimers.get(sessionId) || null; }, resetMovementTimers() { movementTimers.forEach((entry) => clearTimeout(entry.timerId)); movementTimers.clear(); } };\n})();';
 vm.runInContext(source, context, { filename: "app.js" });
 const api = window.__TEST__;
 
@@ -392,5 +432,81 @@ for (const button of retiredMapButtons) {
   assert.ok((listeners.get(button)?.get("click") || []).length <= 1, "retired map buttons must never accumulate duplicate listeners");
 }
 assert.equal((listeners.get(headerMapButton)?.get("click") || []).length, 1, "the current map button must have exactly one listener");
+
+function assertMovementCompleted(session, token, routeId, label) {
+  assert.equal(session.movement, null, `${label}: the real movement timer must clear the in-flight movement`);
+  assert.equal(session.lastMovementTransition?.token, token, `${label}: completion must persist the terminal token`);
+  assert.equal(session.lastMovementTransition?.routeId, routeId, `${label}: completion must persist the completed route`);
+  assert.ok(["ARRIVED", "ENCOUNTER"].includes(session.lastMovementTransition?.kind), `${label}: completion must record arrival or encounter semantics`);
+  if (session.lastMovementTransition.kind === "ARRIVED") assert.equal(session.currentNode, "E_G_PLAZA", `${label}: a safe arrival must reach the target node`);
+  else assert.equal(session.activeEncounter?.routeId, routeId, `${label}: a hazardous route must enter the matching encounter`);
+}
+
+const actualMovementWorld = world();
+actualMovementWorld.sessions.sA.memberIds = ["test_a", "test_b"];
+sessionStorage.setItem(USER_KEY, "test_a");
+context.location.hash = "#/investigate/sA";
+root.dataset.sessionId = "sA";
+api.resetMovementTimers();
+api.setState(actualMovementWorld);
+api.beginMove("sA", "E_R001");
+
+const startedAB = structuredClone(api.getState().sessions.sA);
+const abToken = startedAB.movement?.token;
+const firstABTimer = api.getMovementTimer("sA");
+assert.ok(abToken, "A/B actual beginMove must create a movement token");
+assert.equal(startedAB.movement.resolveAt, clock.now + 1800, "A/B actual beginMove must schedule the production movement delay");
+assert.ok(firstABTimer && clock.pending(firstABTimer.timerId), "A/B movement must own one live completion timer");
+
+const concurrentDuringAB = structuredClone(api.getState());
+concurrentDuringAB.sessions.sC.logs.push({ id: "c-concurrent-chat", type: "interaction", actorId: "test_c", scopeKey: "node:E_ENTRY", at: clock.now + 10, text: "C concurrent" });
+concurrentDuringAB.sessions.sA.logs.push({ id: "entry-presence-concurrent", type: "presence", actorId: null, scopeKey: "node:E_ENTRY", at: clock.now + 11, text: "entry presence" });
+localStorage.setItem(GLOBAL_KEY, JSON.stringify(concurrentDuringAB));
+window.dispatchEvent({ type: "storage", key: GLOBAL_KEY });
+assert.equal(api.getState().sessions.sA.movement?.token, abToken, "concurrent C chat/presence writes must preserve A/B's movement token");
+assert.equal(api.getMovementTimer("sA")?.timerId, firstABTimer.timerId, "unrelated external writes must not duplicate or replace the movement timer");
+
+api.render();
+assert.equal(api.getMovementTimer("sA")?.timerId, firstABTimer.timerId, "ordinary rerender must keep exactly one timer for the same token");
+api.resetMovementTimers();
+assert.equal(clock.pending(firstABTimer.timerId), false, "a simulated page restart must retire the old page timer");
+api.render();
+const restartedABTimer = api.getMovementTimer("sA");
+assert.ok(restartedABTimer && restartedABTimer.timerId !== firstABTimer.timerId, "restart must reschedule the persisted movement token");
+api.render();
+assert.equal(api.getMovementTimer("sA")?.timerId, restartedABTimer.timerId, "post-restart rerender must not schedule a second timer");
+
+clock.advance(1800);
+const completedAB = api.getState().sessions.sA;
+assert.equal(clock.runCount(restartedABTimer.timerId), 1, "A/B completion timer must fire exactly once");
+assertMovementCompleted(completedAB, abToken, "E_R001", "A/B");
+assert.ok(api.getState().sessions.sC.logs.some((entry) => entry.id === "c-concurrent-chat"), "A/B completion must retain concurrent solo C chat");
+const abTransition = structuredClone(completedAB.lastMovementTransition);
+clock.advance(5000);
+assert.equal(clock.runCount(restartedABTimer.timerId), 1, "later timers must not repeat A/B movement completion");
+assert.deepEqual(api.getState().sessions.sA.lastMovementTransition, abTransition, "A/B terminal marker must be written exactly once");
+
+const soloMovementWorld = structuredClone(api.getState());
+soloMovementWorld.sessions.sC.movement = null;
+soloMovementWorld.sessions.sC.activeEncounter = null;
+soloMovementWorld.sessions.sC.currentNode = "E_ENTRY";
+delete soloMovementWorld.sessions.sC.lastMovementTransition;
+sessionStorage.setItem(USER_KEY, "test_c");
+context.location.hash = "#/investigate/sC";
+root.dataset.sessionId = "sC";
+api.resetMovementTimers();
+api.setState(soloMovementWorld);
+api.beginMove("sC", "E_R001");
+const cToken = api.getState().sessions.sC.movement?.token;
+const cTimer = api.getMovementTimer("sC");
+assert.ok(cToken && cTimer && clock.pending(cTimer.timerId), "solo C actual beginMove must create one live timer");
+const concurrentDuringC = structuredClone(api.getState());
+concurrentDuringC.sessions.sA.logs.push({ id: "ab-concurrent-presence", type: "presence", actorId: null, scopeKey: "node:E_ENTRY", at: clock.now + 5, text: "A/B concurrent" });
+localStorage.setItem(GLOBAL_KEY, JSON.stringify(concurrentDuringC));
+window.dispatchEvent({ type: "storage", key: GLOBAL_KEY });
+assert.equal(api.getState().sessions.sC.movement?.token, cToken, "A/B concurrent writes must preserve solo C's movement token");
+clock.advance(1800);
+assert.equal(clock.runCount(cTimer.timerId), 1, "solo C completion timer must fire exactly once");
+assertMovementCompleted(api.getState().sessions.sC, cToken, "E_R001", "solo C");
 
 console.log("PASS: external world sync selectively refreshes investigation surfaces without composer replacement, false chat diffs, or write ping-pong");

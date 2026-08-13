@@ -38,7 +38,9 @@ const GROUPS = Object.freeze({
   sync: [
     "action-log-sync-check.mjs",
     "cloud-state-sync-check.mjs",
+    "cloud-auth-race-check.mjs",
     "investigation-external-sync-render-check.mjs",
+    "movement-cloud-sync-check.mjs",
     "observation-ai-check.mjs",
     "sound-event-sync-check.mjs",
     "runtime-baseline-stability-check.mjs",

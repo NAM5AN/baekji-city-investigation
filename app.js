@@ -872,6 +872,11 @@
       movementTimers.delete(session?.id);
       return;
     }
+    if (session.lastMovementTransition?.token === movement.token) {
+      if (existing) clearTimeout(existing.timerId);
+      movementTimers.delete(session.id);
+      return;
+    }
     if (existing?.token === movement.token) return;
     if (existing) clearTimeout(existing.timerId);
     const wait = Math.max(0, movement.resolveAt - Date.now());
@@ -898,9 +903,25 @@
         appendChatDivider(session, `route:${route.from}:${route.to}`, `${nodeDisplayName(route.from)} → ${nodeDisplayName(route.to)} 이동 경로`);
         announceRouteEncounter(draft, session, route);
         appendLog(session, "risk", `${movementNarration} 그 앞에서 ${overview}`);
+        session.lastMovementTransition = {
+          token,
+          kind: "ENCOUNTER",
+          routeId: route.id,
+          fromNode: route.from,
+          targetNode: route.to,
+          completedAt: Date.now(),
+        };
       } else {
         const arrival = applyArrival(draft, session, route.to, profile?.ambientRuleId);
         appendLog(session, "scene", `${movementNarration} ${arrival}`);
+        session.lastMovementTransition = {
+          token,
+          kind: "ARRIVED",
+          routeId: route.id,
+          fromNode: route.from,
+          targetNode: route.to,
+          completedAt: Date.now(),
+        };
       }
     });
     movementTimers.delete(sessionId);
