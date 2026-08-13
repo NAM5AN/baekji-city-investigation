@@ -5,8 +5,8 @@
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const STATE_KEY = "day1_world";
   const WRITER_KEY = "baekji_city_cloud_writer_v1";
-  const SUPABASE_URL = "https://zstgpnwnwmeifgmyeqtz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_g-cXysHfl260KTtSRLABTw_4wnaaxDY";
+  const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const ACTIVE_POLL_MS = 1500;
   const HIDDEN_POLL_MS = 5000;
   const PUSH_DEBOUNCE_MS = 120;

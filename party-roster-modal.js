@@ -4,8 +4,8 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
-  const LEGACY_SUPABASE_URL = "https://zstgpnwnwmeifgmyeqtz.supabase.co";
-  const LEGACY_SUPABASE_KEY = "sb_publishable_g-cXysHfl260KTtSRLABTw_4wnaaxDY";
+  const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const STYLE_ID = "baekji-party-roster-style";
   const DEMO_USERS = new Map([
     ["test_a", { id: "test_a", name: "테스트 캐릭터 A", profilePhoto: "" }],
@@ -95,11 +95,10 @@
   }
 
   async function loadDirectory() {
-    const response = await fetch(`${LEGACY_SUPABASE_URL}/rest/v1/rpc/baekji_tester_list_accounts`, {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/baekji_tester_list_accounts`, {
       method: "POST",
       headers: {
-        apikey: LEGACY_SUPABASE_KEY,
-        Authorization: `Bearer ${LEGACY_SUPABASE_KEY}`,
+        apikey: SUPABASE_KEY,
         "Content-Type": "application/json",
         Accept: "application/json",
       },

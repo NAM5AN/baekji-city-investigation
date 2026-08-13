@@ -1,11 +1,8 @@
 import fs from "node:fs";
 
 const mode = process.argv[2] || "all";
-const recoveryPath = new URL("../supabase-endpoint-recovery.js", import.meta.url);
 const testerPath = new URL("../tester-auth.js", import.meta.url);
-const source = fs.existsSync(recoveryPath)
-  ? fs.readFileSync(recoveryPath, "utf8")
-  : fs.readFileSync(testerPath, "utf8");
+const source = fs.readFileSync(testerPath, "utf8");
 const url = source.match(/const SUPABASE_URL = "([^"]+)"/)?.[1];
 const key = source.match(/const SUPABASE_KEY = "([^"]+)"/)?.[1];
 

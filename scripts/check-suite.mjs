@@ -22,7 +22,7 @@ const GROUPS = Object.freeze({
     "party-roster-modal-check.mjs",
     "party-flow-ux-fix-check.mjs",
     "party-membership-ux-fix-check.mjs",
-    "tester-login-fastpath-check.mjs",
+    "tester-login-stable-contract-check.mjs",
     "choice-chat-feedback-check.mjs",
     "cross-party-hazard-interaction-check.mjs",
     "party-transfer-flow-check.mjs",
@@ -69,7 +69,7 @@ const GROUPS = Object.freeze({
     "render-motion-stability-check.mjs",
     "investigation-feedback-ui-check.mjs",
     "investigation-visual-polish-check.mjs",
-    "retro-motion-replay-guard-check.mjs",
+    "retro-motion-contract-check.mjs",
     "retro-sound-check.mjs",
     "retro-sound-boost-check.mjs",
     "tester-party-mobile-topbar-check.mjs",
@@ -80,6 +80,8 @@ const GROUPS = Object.freeze({
     "ai-server-check.mjs",
     "vercel-deploy-check.mjs",
     "github-pages-test-environment-check.mjs",
+    "supabase-direct-endpoint-check.mjs",
+    "recovered-production-migrations-check.mjs",
   ],
 });
 

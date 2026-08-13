@@ -1,0 +1,2 @@
+# Preserve recovered production migration snapshots byte-for-byte.
+supabase/recovered-production-migrations/*.sql -text

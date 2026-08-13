@@ -1,3 +1,4 @@
+// Regression contract for the sole tester-login owner.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
