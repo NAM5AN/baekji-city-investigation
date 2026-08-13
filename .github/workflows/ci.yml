@@ -14,7 +14,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm run check
+      - name: Syntax check
+        run: npm run check:syntax
+      - name: Core regression tests
+        run: npm run test:core
+      - name: Player regression tests
+        run: npm run test:player
+      - name: Sync regression tests
+        run: npm run test:sync
+      - name: Admin regression tests
+        run: npm run test:admin
+      - name: UI regression tests
+        run: npm run test:ui
+      - name: Server regression tests
+        run: npm run test:server
       - name: Tester registry guard check
         run: node --check tester-registry-guard.js && node tests/tester-registry-guard-check.mjs
       - name: Tester MutationObserver loop check

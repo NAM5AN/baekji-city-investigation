@@ -127,11 +127,13 @@ assert.doesNotMatch(hiddenPayload.fallback, /테스트C|뻐큐|가운데손가�
 const html = fs.readFileSync("index.html", "utf8");
 const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8"));
 const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const checkSuite = fs.readFileSync("scripts/check-suite.mjs", "utf8");
 assert.ok(html.indexOf("storage-sync-bridge.js") < html.indexOf("observation-ai-sync.js"));
 assert.ok(html.indexOf("observation-ai-sync.js") < html.indexOf("action-log-sync.js"));
 assert.ok(html.indexOf("action-log-sync.js") < html.indexOf("observation-final-guard.js"));
 assert.ok(vercel.rewrites.some((rule) => rule.source === "/api/narrate-observation" && rule.destination === "/api/narrate-observation.mjs"));
-assert.match(packageJson.scripts.check, /observation-ai-check\.mjs/);
+assert.match(packageJson.scripts.check, /scripts\/check-suite\.mjs all/);
+assert.match(checkSuite, /"observation-ai-check\.mjs"/, "observation regression must remain tracked by the grouped suite");
 assert.match(fs.readFileSync("observation-final-guard.js", "utf8"), /restoreFinalTexts/);
 assert.match(fs.readFileSync("docs/perception-traits-plan.md", "utf8"), /perception\.vision/);
 assert.match(clientSource, /retro-system-event-results/);
