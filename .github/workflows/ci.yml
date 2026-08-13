@@ -42,8 +42,8 @@ jobs:
         run: node tests/cloud-auth-reload-bootstrap-check.mjs
       - name: Cross-tab authenticated world check
         run: node tests/cross-tab-authenticated-world-check.mjs
-      - name: Supabase recovery wiring check
-        run: node tests/supabase-recovery-wiring-check.mjs
+      - name: Supabase direct endpoint check
+        run: node tests/supabase-direct-endpoint-check.mjs
       - name: Probe live tester login RPC
         id: tester_login
         run: node tests/tester-auth-live-check.mjs probe-login
