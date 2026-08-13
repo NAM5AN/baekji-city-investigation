@@ -40,6 +40,7 @@ const GROUPS = Object.freeze({
     "cloud-state-sync-check.mjs",
     "observation-ai-check.mjs",
     "sound-event-sync-check.mjs",
+    "runtime-baseline-stability-check.mjs",
   ],
   admin: [
     "admin-dashboard-mvp-check.mjs",
