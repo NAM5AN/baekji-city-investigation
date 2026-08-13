@@ -101,7 +101,14 @@ function collectCodeFiles(directory, output = []) {
   return output;
 }
 
+function actionError(label) {
+  if (!process.env.GITHUB_ACTIONS) return;
+  const safe = String(label).replace(/[%\r\n]/g, " ");
+  console.error(`::error title=check-suite failure::${safe}`);
+}
+
 function runNode(args, label) {
+  console.log(`[check-suite] RUN: ${label}`);
   const result = spawnSync(process.execPath, args, {
     cwd: ROOT,
     env: process.env,
@@ -109,6 +116,7 @@ function runNode(args, label) {
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
+    actionError(label);
     console.error(`\n[check-suite] FAIL: ${label}`);
     process.exit(result.status || 1);
   }
