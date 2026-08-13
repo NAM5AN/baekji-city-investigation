@@ -31,6 +31,22 @@
       .map(({ entry }) => entry);
   }
 
+  function chatSourceEntries(session) {
+    return (session?.logs || [])
+      .filter((entry) => entry?.type === "interaction" || entry?.type === "chat-divider");
+  }
+
+  function needsChronologyRepair(session) {
+    const source = chatSourceEntries(session);
+    let previousAt = -Infinity;
+    for (const entry of source) {
+      const at = Number(entry?.at) || 0;
+      if (at < previousAt) return true;
+      previousAt = at;
+    }
+    return false;
+  }
+
   function spatialScopeKey(session) {
     if (!session) return "";
     if (session.movement) return `route:${session.movement.fromNode}:${session.movement.targetNode}`;
@@ -40,8 +56,7 @@
   }
 
   function chatTimelineEntries(session) {
-    const source = stableChronologicalEntries((session?.logs || [])
-      .filter((entry) => entry?.type === "interaction" || entry?.type === "chat-divider"));
+    const source = stableChronologicalEntries(chatSourceEntries(session));
     const timeline = [];
     let lastScopeKey = null;
 
@@ -67,12 +82,13 @@
 
     const currentScopeKey = spatialScopeKey(session);
     if (currentScopeKey && currentScopeKey !== lastScopeKey) {
+      const lastAt = timeline.length ? Number(timeline.at(-1)?.at) || 0 : 0;
       timeline.push({
         id: `virtual_current_${currentScopeKey}`,
         type: "chat-divider",
         text: "",
         scopeKey: currentScopeKey,
-        at: Date.now(),
+        at: lastAt + 1,
         virtual: true,
       });
     }
@@ -89,6 +105,7 @@
   const TEST_API = Object.freeze({
     NARRATION_STALE_MS,
     stableChronologicalEntries,
+    needsChronologyRepair,
     spatialScopeKey,
     chatTimelineEntries,
     isFreshNarrationPending,
@@ -194,7 +211,7 @@
     if (!stream || !sessionId) return;
     const state = readState();
     const session = state?.sessions?.[sessionId];
-    if (!session) return;
+    if (!session || !needsChronologyRepair(session)) return;
 
     const userId = currentUserId();
     const timeline = chatTimelineEntries(session);
@@ -252,8 +269,11 @@
     });
   }
 
-  const observer = new MutationObserver(scheduleApply);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  const appRoot = document.getElementById("app");
+  if (appRoot) {
+    const observer = new MutationObserver(scheduleApply);
+    observer.observe(appRoot, { childList: true, subtree: true });
+  }
   window.addEventListener("hashchange", scheduleApply);
   window.addEventListener("pageshow", scheduleApply);
   window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) scheduleApply(); });
