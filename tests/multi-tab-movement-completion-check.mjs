@@ -31,6 +31,8 @@ function storageClass(values = sharedValues) {
 
 class FakeEvent {
   constructor(type, init = {}) { this.type = type; Object.assign(this, init); }
+  preventDefault() { this.defaultPrevented = true; }
+  stopImmediatePropagation() { this.immediatePropagationStopped = true; }
 }
 class FakeStorageEvent extends FakeEvent {}
 class FakeCustomEvent extends FakeEvent {
@@ -108,7 +110,7 @@ function movementWorld() {
   };
 }
 
-function makeAppRuntime({ gameplayVariance = false } = {}) {
+function makeAppRuntime({ gameplayVariance = false, flexibleHazard = false, flexSessionId = "sC", flexDecisions = [] } = {}) {
   const Storage = storageClass();
   const localStorage = new Storage();
   const sessionStorage = new Storage(new Map());
@@ -119,20 +121,41 @@ function makeAppRuntime({ gameplayVariance = false } = {}) {
     static now() { return clock.now; }
   }
   const window = eventTarget();
+  const input = {
+    ...eventTarget(), value: "", disabled: false,
+    matches(selector) { return selector === "[data-chat-input]"; },
+  };
+  const button = { disabled: false, textContent: "" };
   const document = {
     ...eventTarget(),
     body: { classList: { add() {}, remove() {} } },
     fonts: { ready: Promise.resolve() },
     getElementById() { return { innerHTML: "", querySelectorAll() {} }; },
-    querySelector() { return null; },
+    querySelector(selector) {
+      if (selector === "[data-chat-input]") return input;
+      if (selector === "[data-send-chat]") return button;
+      return null;
+    },
     querySelectorAll() { return []; },
     createElement() { return { classList: { add() {}, remove() {} }, style: {}, dataset: {}, appendChild() {}, remove() {} }; },
+  };
+  const decisions = flexDecisions.map((decision) => structuredClone(decision));
+  const flexCalls = [];
+  const fetch = async (url, options = {}) => {
+    if (String(url).includes("baekji_tester_list_accounts")) return { ok: true, json: async () => [] };
+    if (String(url) === "/api/resolve-hazard-flex") {
+      flexCalls.push(JSON.parse(String(options.body || "{}")));
+      const decision = decisions.shift();
+      assert.ok(decision, "each flexible hazard submit must receive an explicit deterministic decision");
+      return { ok: true, json: async () => structuredClone(decision) };
+    }
+    return { ok: false, json: async () => ({}) };
   };
   const context = vm.createContext({
     window, document, localStorage, sessionStorage, Storage,
     Event: FakeEvent, StorageEvent: FakeStorageEvent, CustomEvent: FakeCustomEvent,
-    location: { hash: "#/investigate/sC", href: "https://example.test/#/investigate/sC" },
-    history: { pushState() {} }, navigator: {}, fetch: async () => ({ ok: false }),
+    location: { hash: `#/investigate/${flexSessionId}`, href: `https://example.test/#/investigate/${flexSessionId}` },
+    history: { pushState() {} }, navigator: {}, fetch, AbortController,
     Date: ClockDate, Intl, Math, JSON, String, Object, Array, Set, Map, Promise,
     setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: () => 0,
     requestAnimationFrame: (callback) => callback(), queueMicrotask,
@@ -152,7 +175,22 @@ function makeAppRuntime({ gameplayVariance = false } = {}) {
   });
 })();`;
   vm.runInContext(source, context, { filename: "app.js" });
-  return { api: window.__SHARED_APP__, clock };
+  if (flexibleHazard) {
+    const indexSource = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+    assert.ok(indexSource.indexOf('src="app.js') < indexSource.indexOf('src="flexible-hazard-resolution.js'), "the harness must preserve the production app-before-flexible-handler order");
+    vm.runInContext(fs.readFileSync(new URL("../flexible-hazard-resolution.js", import.meta.url), "utf8"), context, { filename: "flexible-hazard-resolution.js" });
+  }
+  return {
+    api: window.__SHARED_APP__, clock, flexCalls,
+    async submitFlex(text) {
+      assert.ok(flexibleHazard, "flexible handler must be installed before dispatching a slash action");
+      input.value = text;
+      const event = new FakeEvent("keydown", { key: "Enter", shiftKey: false, isComposing: false, target: input });
+      document.dispatchEvent(event);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(event.defaultPrevented, true, "the real flexible keydown handler must intercept the slash submit");
+    },
+  };
 }
 
 function makeCloudRuntime(userId) {
@@ -299,7 +337,8 @@ assert.equal(arrivalLogs("sAB").filter((entry) => entry.type === "presence").len
 
 // Exercise the production failure topology all the way through a two-hazard
 // encounter. The movement first terminates as ENCOUNTER, then two actual
-// resolveHazard mutations must promote that same token to ARRIVED atomically.
+// production flexible-handler submissions must promote that same token to
+// ARRIVED atomically. This intentionally does not call app.resolveHazard.
 // A/B/C subsequently receive the original in-flight snapshot independently.
 const hazardRunning = movementWorld();
 hazardRunning.sessions.sAB.variant = "d";
@@ -321,7 +360,23 @@ hazardRunning.sessions.sH = {
   activeEncounter: null, choiceReveal: null, inspectedObjectIds: [], takenItemKeys: [], logs: [],
 };
 sharedValues.set(GLOBAL_KEY, JSON.stringify(hazardRunning));
-const hazardApp = makeAppRuntime({ gameplayVariance: true });
+const hazardApp = makeAppRuntime({
+  gameplayVariance: true,
+  flexibleHazard: true,
+  flexSessionId: "sH",
+  flexDecisions: [
+    {
+      outcome: "PARTIAL", progress: "CURRENT", selfExposure: "LOW",
+      targetName: "", targetExposure: "NONE", observationNote: "",
+      usedItemId: "", usedItemContaminated: false, narration: "first hazard result",
+    },
+    {
+      outcome: "PARTIAL", progress: "CURRENT", selfExposure: "LOW",
+      targetName: "", targetExposure: "NONE", observationNote: "",
+      usedItemId: "", usedItemContaminated: false, narration: "second hazard result",
+    },
+  ],
+});
 hazardApp.api.scheduleMovement(hazardApp.api.loadState().sessions.sH);
 hazardApp.clock.advance(1800);
 
@@ -337,15 +392,22 @@ hazardEncounter.sessions.sAB.currentNode = "E_ENTRY";
 hazardEncounter.sessions.sAB.activeEncounter = null;
 sharedValues.set(GLOBAL_KEY, JSON.stringify(hazardEncounter));
 
-hazardApp.api.resolveHazard("sH", "first careful attempt");
+await hazardApp.submitFlex("/first careful attempt");
 const afterFirstHazard = currentWorld();
 assert.equal(afterFirstHazard.sessions.sH.activeEncounter?.currentIndex, 1, "the first real hazard action must advance only one step");
 assert.equal(afterFirstHazard.sessions.sH.lastMovementTransition?.kind, "ENCOUNTER");
+assert.equal(afterFirstHazard.sessions.sH.lastMovementTransition?.token, "hazard-0");
+assert.equal(hazardApp.flexCalls.length, 1, "the first slash action must traverse the flexible hazard API seam once");
 const partialHazardContamination = afterFirstHazard.characters.test_c.contamination;
 assert.ok(partialHazardContamination > 0, "the partial ENCOUNTER fixture must carry a real cumulative hazard delta");
+assert.equal(afterFirstHazard.sessions.sH.lastMovementTransition?.contaminationBaselines?.test_c, 0, "the partial marker must retain the movement contamination baseline");
+assert.equal(afterFirstHazard.sessions.sH.lastMovementTransition?.contaminationDeltas?.test_c, partialHazardContamination, "the partial marker must store a cumulative, not per-submit, delta");
+assert.equal(tokenLogs(afterFirstHazard, "sH", "hazard-0").filter((entry) => entry.movementEffect?.startsWith("flex-action:0:")).length, 1);
+assert.equal(tokenLogs(afterFirstHazard, "sH", "hazard-0").filter((entry) => entry.movementEffect?.startsWith("flex-result:0:")).length, 1);
 const staleInFlightAfterWitness = structuredClone(hazardRunning);
 staleInFlightAfterWitness.sessions.sAB = structuredClone(afterFirstHazard.sessions.sAB);
-hazardApp.api.resolveHazard("sH", "second careful attempt");
+await hazardApp.submitFlex("/second careful attempt");
+assert.equal(hazardApp.flexCalls.length, 2, "the second slash action must traverse the flexible hazard API seam once");
 
 const completedHazards = currentWorld();
 const completedMarker = completedHazards.sessions.sH.lastMovementTransition;
@@ -400,7 +462,8 @@ assert.equal(finalHazardArrival.characters.test_c.contamination, completedContam
 assert.equal(hazardTokenLogs("sH").filter((entry) => entry.movementEffect === "encounter-divider").length, 1);
 assert.equal(hazardTokenLogs("sH").filter((entry) => entry.movementEffect === "encounter-risk").length, 1);
 assert.equal(hazardTokenLogs("sH").filter((entry) => entry.movementEffect === "arrival-divider").length, 1, "final hazard arrival divider must be emitted exactly once");
-assert.equal(hazardTokenLogs("sH").filter((entry) => entry.movementEffect?.startsWith("hazard:")).length, 2, "each real hazard result must be emitted once");
+assert.equal(hazardTokenLogs("sH").filter((entry) => entry.movementEffect?.startsWith("flex-action:")).length, 2, "each intercepted slash action must be emitted once");
+assert.equal(hazardTokenLogs("sH").filter((entry) => entry.movementEffect?.startsWith("flex-result:")).length, 2, "each flexible hazard result must be emitted once");
 assert.equal(hazardTokenLogs("sAB").filter((entry) => entry.movementEffect === "route-presence").length, 1);
 assert.equal(hazardTokenLogs("sAB").filter((entry) => entry.movementEffect === "arrival-presence").length, 1, "final hazard arrival witness presence must be emitted exactly once");
 assert.equal(hazardApp.api.timer("sH"), null);
