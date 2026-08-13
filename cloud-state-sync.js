@@ -303,6 +303,85 @@
     return merged;
   }
 
+  function acceptedLocalMovementTerminal(localSession, remoteSession) {
+    const remoteMovement = remoteSession?.movement || null;
+    const marker = localSession?.lastMovementTransition;
+    if (!marker || localSession?.movement || (marker.kind !== "ARRIVED" && marker.kind !== "ENCOUNTER")) return null;
+    if (remoteMovement && marker.token !== remoteMovement.token) return null;
+    if (marker.routeId && remoteMovement?.routeId && marker.routeId !== remoteMovement.routeId) return null;
+    if (marker.kind === "ENCOUNTER") {
+      const encounter = localSession.activeEncounter;
+      if (!encounter || (marker.routeId && encounter.routeId !== marker.routeId)) return null;
+    } else if (String(localSession.currentNode || "") !== String(marker.targetNode || remoteMovement?.targetNode || "")) {
+      return null;
+    }
+    if (remoteMovement) return marker;
+
+    const remoteMarker = remoteSession?.lastMovementTransition;
+    if (!remoteMarker || remoteMarker.token !== marker.token) return null;
+    if (marker.kind === "ARRIVED" && remoteMarker.kind === "ENCOUNTER") return marker;
+    if (marker.kind === "ENCOUNTER" && remoteMarker.kind === "ENCOUNTER") {
+      const localProgress = Math.max(Number(localSession.activeEncounter?.currentIndex || 0), localSession.activeEncounter?.resolutions?.length || 0);
+      const remoteProgress = Math.max(Number(remoteSession.activeEncounter?.currentIndex || 0), remoteSession.activeEncounter?.resolutions?.length || 0);
+      return localProgress > remoteProgress ? marker : null;
+    }
+    return marker.kind === remoteMarker.kind && Number(marker.completedAt || 0) > Number(remoteMarker.completedAt || 0)
+      ? marker
+      : null;
+  }
+
+  function contaminationStage(value) {
+    if (value >= 100) return "완전 용해";
+    if (value >= 80) return "붕락";
+    if (value >= 60) return "용해";
+    if (value >= 40) return "유화";
+    if (value >= 20) return "번짐";
+    return "안정";
+  }
+
+  function preserveAcceptedLocalMovementTransitions(remote, currentLocal) {
+    if (!remote || remote.version !== 3 || !currentLocal || currentLocal.version !== 3) return remote;
+    const protectedState = JSON.parse(JSON.stringify(remote));
+    const acceptedTokens = new Map();
+    Object.entries(remote.sessions || {}).forEach(([sessionId, remoteSession]) => {
+      const localSession = currentLocal.sessions?.[sessionId];
+      const marker = acceptedLocalMovementTerminal(localSession, remoteSession);
+      if (!marker) return;
+      copyMovementTransition(protectedState.sessions[sessionId], localSession);
+      acceptedTokens.set(String(marker.token), { marker, sessionId });
+    });
+    if (!acceptedTokens.size) return remote;
+
+    Object.entries(currentLocal.sessions || {}).forEach(([sessionId, localSession]) => {
+      const targetSession = protectedState.sessions?.[sessionId];
+      if (!targetSession) return;
+      const terminalLogs = (localSession.logs || []).filter((entry) => acceptedTokens.has(String(entry?.movementToken || "")));
+      if (terminalLogs.length) targetSession.logs = mergeArrays(targetSession.logs || [], terminalLogs);
+    });
+    acceptedTokens.forEach(({ marker, sessionId }) => {
+      Object.entries(marker.contaminationDeltas || {}).forEach(([characterId, rawDelta]) => {
+        const character = protectedState.characters?.[characterId];
+        const delta = Math.max(0, Number(rawDelta || 0));
+        if (!character || !delta) return;
+        const current = Number(character.contamination || 0);
+        const localBaseline = Number(marker.contaminationBaselines?.[characterId]);
+        const remoteMarker = remote.sessions?.[sessionId]?.lastMovementTransition;
+        const sameTokenRemoteMarker = remoteMarker?.token === marker.token ? remoteMarker : null;
+        const remoteBaseline = Number(sameTokenRemoteMarker?.contaminationBaselines?.[characterId]);
+        const remoteDelta = Math.max(0, Number(sameTokenRemoteMarker?.contaminationDeltas?.[characterId] || 0));
+        if (Number.isFinite(localBaseline)) {
+          const comparableBaseline = Number.isFinite(remoteBaseline) ? remoteBaseline : localBaseline;
+          const unrelatedDelta = Math.max(0, current - comparableBaseline - remoteDelta);
+          character.contamination = Math.min(100, localBaseline + delta + unrelatedDelta);
+        } else {
+          character.contamination = Math.min(100, current + Math.max(0, delta - remoteDelta));
+        }
+        character.symptom = contaminationStage(character.contamination);
+      });
+    });
+    return protectedState;
+  }
+
   function hasOwn(object, key) {
     return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
   }
@@ -563,16 +642,18 @@
     if (!syncEnabled()) return false;
     const remote = row?.state;
     if (!remote || remote.version !== 3) return false;
+    const oldRaw = nativeGetItem.call(localStorage, GLOBAL_KEY);
+    const currentLocal = safeParse(oldRaw);
+    const protectedRemote = preserveAcceptedLocalMovementTransitions(remote, currentLocal);
     const record = activeUnsyncedRecord();
     const base = safeParse(record?.baseRaw);
     const desired = safeParse(record?.stateRaw);
-    const nextState = base && desired ? rebaseUnsyncedOverlay(base, desired, remote) : remote;
+    const nextState = base && desired ? rebaseUnsyncedOverlay(base, desired, protectedRemote) : protectedRemote;
     const nextRaw = JSON.stringify(nextState);
     remoteBasisRaw = JSON.stringify(remote);
     if (record && base && desired) {
       persistUnsyncedOverlayForOwner(nextState, syncOwner(), true, remote, record.generation);
     }
-    const oldRaw = nativeGetItem.call(localStorage, GLOBAL_KEY);
     revision = Number(row.revision || 0);
     if (oldRaw === nextRaw) return false;
     applyingRemote = true;
