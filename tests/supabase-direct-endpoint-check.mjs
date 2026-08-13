@@ -37,6 +37,13 @@ const apiRuntimeFiles = [
   "api/player-admin-system.mjs",
   "api/player-presence.mjs",
 ];
+const serverRuntimeFiles = [
+  "server.mjs",
+  ...fs.readdirSync(path.join(ROOT, "api"), { withFileTypes: true })
+    .filter((entry) => entry.isFile() && path.extname(entry.name) === ".mjs")
+    .map((entry) => path.posix.join("api", entry.name))
+    .sort(),
+];
 const legacyAuditFiles = [
   "index.html",
   ".env.example",
@@ -131,12 +138,33 @@ function assertBrowserAuthorizationContract(label, source, expected) {
   assert.equal(hasAuthorizationHeaderToken(source), expected, label);
 }
 
+function isSupabaseDataApiServerClient(source) {
+  const identifiesCanonicalBackend = source.includes(canonicalUrl)
+    || /\bSUPABASE_(?:PUBLISHABLE_|ANON_)?KEY\b/.test(source);
+  return identifiesCanonicalBackend && /\/rest\/v1\//.test(source) && /\bfetch\b/.test(source);
+}
+
+function hasPublishableSupabaseBearerHeader(source) {
+  const publishableKey = String.raw`(?:SUPABASE_(?:PUBLISHABLE_|ANON_)?KEY|DEFAULT_SUPABASE_KEY|key)`;
+  const bearerValue = "`Bearer\\s+\\$\\{\\s*" + publishableKey + "\\s*\\}`";
+  const authorizationHeader = String.raw`(?:\bauthorization\b\s*:|\[\s*["']authorization["']\s*\]\s*=|\.set\(\s*["']authorization["']\s*,)`;
+  return new RegExp(authorizationHeader + String.raw`\s*` + bearerValue, "i").test(withoutComments(source));
+}
+
 function directBrowserFixture(headerCode) {
   return [
     `const SUPABASE_URL = "${canonicalUrl}";`,
     `const SUPABASE_KEY = "${canonicalKey}";`,
     "fetch(`${SUPABASE_URL}/rest/v1/rpc/baekji_tester_list_accounts`, { headers: { apikey: SUPABASE_KEY } });",
     headerCode,
+  ].join("\n");
+}
+
+function directServerFixture(headerCode) {
+  return [
+    `const SUPABASE_URL = "${canonicalUrl}";`,
+    `const SUPABASE_KEY = "${canonicalKey}";`,
+    "fetch(`${SUPABASE_URL}/rest/v1/rpc/baekji_tester_login`, { headers: { apikey: SUPABASE_KEY, " + headerCode + " } });",
   ].join("\n");
 }
 
@@ -155,6 +183,11 @@ assertBrowserAuthorizationContract("headers.set", directBrowserFixture("headers.
 assertBrowserAuthorizationContract("bracket property", directBrowserFixture("headers[\"Authorization\"] = token;"), true);
 assertBrowserAuthorizationContract("alias property", directBrowserFixture("const headerName = \"Authorization\"; headers[headerName] = token;"), true);
 assertBrowserAuthorizationContract("apikey-only request with an Authorization comment", directBrowserFixture("// Authorization examples belong in documentation, not the runtime."), false);
+
+assert.equal(hasPublishableSupabaseBearerHeader(directServerFixture("Authorization: `Bearer ${SUPABASE_KEY}`")), true, "server-side Supabase Data API calls must reject a publishable Supabase Bearer header");
+assert.equal(hasPublishableSupabaseBearerHeader(directServerFixture("Authorization: `Bearer ${userAccessToken}`")), false, "server-side Supabase Data API calls may use a user JWT");
+assert.equal(hasPublishableSupabaseBearerHeader(directServerFixture("Authorization: `Bearer ${apiKey}`")), false, "server-side Supabase Data API calls must not flag unrelated API keys");
+assert.equal(isSupabaseDataApiServerClient("fetch(\"https://api.openai.com/v1/responses\", { headers: { Authorization: `Bearer ${apiKey}` } });"), false, "OpenAI calls are not Supabase Data API calls");
 
 if (index.includes("supabase-endpoint-recovery.js")) {
   throw new Error("index.html still loads the Supabase endpoint recovery adapter");
@@ -188,6 +221,13 @@ const browserAuthorizationViolations = browserRuntimeFiles()
   .filter((file) => hasAuthorizationHeaderToken(read(file)));
 if (browserAuthorizationViolations.length) {
   throw new Error(`direct canonical Supabase browser clients must not contain an Authorization header token (${browserAuthorizationViolations.join(", ")})`);
+}
+
+const serverAuthorizationViolations = serverRuntimeFiles
+  .filter((file) => isSupabaseDataApiServerClient(read(file)))
+  .filter((file) => hasPublishableSupabaseBearerHeader(read(file)));
+if (serverAuthorizationViolations.length) {
+  throw new Error(`server-side Supabase Data API calls must not send publishable keys as Authorization Bearer (${serverAuthorizationViolations.join(", ")})`);
 }
 
 for (const file of apiRuntimeFiles) {
