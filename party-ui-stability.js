@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.91";
+  const VERSION = "0.3.92";
   const EDITABLE_STATUSES = new Set(["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"]);
   const DEFAULT_NAME_RE = /^해오름역 조사조\s+\d+$/;
   const DEMO_NAMES = {
@@ -149,57 +149,9 @@
     }
   }
 
-  function ensureReadyBackButton(party) {
-    if (party?.status !== "READY_CHECK" || party.sessionId) return;
-    const actionRow = document.querySelector("[data-ready]")?.closest(".button-row")
-      || document.querySelector("[data-start-session]")?.closest(".button-row");
-    if (!actionRow || actionRow.querySelector("[data-party-preflight-back-confirmed]")) return;
-    const back = document.createElement("button");
-    back.type = "button";
-    back.className = "button party-flow-back party-preflight-back";
-    back.dataset.partyPreflightBackConfirmed = party.id;
-    back.textContent = "← 이전 단계";
-    actionRow.prepend(back);
-  }
-
-  function ensurePartyNameControl(party, userId) {
-    const [page, partyId] = routeParts();
-    if (page !== "party" || partyId !== party?.id || party.creatorId !== userId || party.sessionId || !EDITABLE_STATUSES.has(String(party.status || ""))) return;
-    const hero = document.querySelector("main.container.narrow .hero");
-    const heading = hero?.querySelector("h1");
-    if (!hero || !heading) return;
-    if (heading.textContent !== String(party.name || "")) heading.textContent = String(party.name || "");
-
-    let row = hero.querySelector(".party-name-heading-row");
-    if (!row) {
-      row = document.createElement("div");
-      row.className = "party-name-heading-row";
-      heading.before(row);
-      row.append(heading);
-    }
-    let button = row.querySelector("[data-party-name-edit]");
-    if (!button) {
-      button = document.createElement("button");
-      button.type = "button";
-      button.className = "party-name-edit-button";
-      button.dataset.partyNameEdit = party.id;
-      button.innerHTML = '<span class="party-name-pencil" aria-hidden="true">✎</span><span>조 이름 변경</span>';
-      row.append(button);
-    }
-    button.dataset.partyNameEdit = party.id;
-  }
-
   function stabilizePaint(snapshot = readState(), userId = currentUserId()) {
     if (!snapshot || !userId) return;
     hideImpossibleInviteCard(snapshot, userId);
-    const [page, partyId] = routeParts();
-    if (page === "party" && partyId) {
-      const party = snapshot.parties?.[partyId];
-      if (party?.creatorId === userId) {
-        ensureReadyBackButton(party);
-        ensurePartyNameControl(party, userId);
-      }
-    }
     document.documentElement.dataset.partyUiStabilityVersion = VERSION;
   }
 

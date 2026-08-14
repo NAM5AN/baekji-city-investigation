@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const VERSION = "0.3.81";
+  const VERSION = "0.3.82";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -143,10 +143,6 @@
     if (node && node.textContent !== text) node.textContent = text;
   }
 
-  function setClass(node, className) {
-    if (node && node.className !== className) node.className = className;
-  }
-
   function dispatchStateUpdate(oldRaw, newRaw) {
     try {
       window.dispatchEvent(new StorageEvent("storage", {
@@ -271,79 +267,6 @@
     setText(help, helpCopy);
   }
 
-  function decorateLeaderParty(snapshot, userId) {
-    const [page, partyId] = routeParts();
-    if (page !== "party" || !partyId) return;
-    const party = snapshot.parties?.[partyId];
-    if (!party || party.creatorId !== userId) return;
-
-    const members = unique(party.memberIds);
-    const count = readyCount(party);
-    const allReady = members.length > 0 && count === members.length;
-    const participantSection = document.querySelector(".member-grid")?.closest("section.card");
-    const help = participantSection?.querySelector(".card-header .muted.small");
-    const headerBadge = participantSection?.querySelector(".card-header > .badge");
-    const helpCopy = party.status === "RECRUITING"
-      ? "조원 구성을 확인한 뒤 조장이 구성을 확정합니다."
-      : "각 조원은 홈 화면에서 준비 상태를 바꿀 수 있습니다. 전원 준비 완료 후 세션을 시작합니다.";
-    setText(help, helpCopy);
-
-    if (headerBadge) {
-      if (["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) {
-        setText(headerBadge, `${count}/${members.length}명 준비 완료`);
-        setClass(headerBadge, `badge party-ready-count ${allReady ? "is-all-ready" : "is-waiting"}`);
-      } else {
-        setText(headerBadge, `${members.length}명`);
-        setClass(headerBadge, "badge green");
-      }
-    }
-
-    const memberRows = [...document.querySelectorAll(".member-grid .member")];
-    memberRows.forEach((row, index) => {
-      const memberId = members[index];
-      const pills = row.querySelector(".status-pills");
-      if (!pills || !memberId || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) return;
-      const ready = effectiveReady(party, memberId);
-      const markup = `<span class="party-ready-state ${ready ? "is-ready" : "is-waiting"}">${ready ? "● 준비 완료" : "○ 준비 대기"}</span>`;
-      if (pills.innerHTML !== markup) pills.innerHTML = markup;
-    });
-
-    const readyButton = document.querySelector("[data-ready]");
-    const actionRow = readyButton?.closest(".button-row") || document.querySelector("[data-confirm-composition]")?.closest(".button-row");
-    document.querySelectorAll("[data-party-flow-back-recruiting]").forEach((button) => {
-      if (party.status !== "COMPOSITION_CONFIRMED") button.remove();
-    });
-    if (party.status === "COMPOSITION_CONFIRMED" && actionRow && readyButton && !actionRow.querySelector("[data-party-flow-back-recruiting]")) {
-      const back = document.createElement("button");
-      back.type = "button";
-      back.className = "button party-flow-back";
-      back.dataset.partyFlowBackRecruiting = partyId;
-      back.textContent = "← 이전 단계";
-      actionRow.insertBefore(back, readyButton);
-    }
-
-    if (readyButton && ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) {
-      const ownReady = effectiveReady(party, userId);
-      setText(readyButton, ownReady ? "준비 완료 취소" : "조사 준비 완료");
-      readyButton.classList.toggle("party-ready-button-active", ownReady);
-    }
-
-    const startButton = document.querySelector("[data-start-session]");
-    if (startButton && !allReady) startButton.remove();
-
-    const footer = actionRow?.closest("section.card")?.querySelector("p.muted.small");
-    if (footer) {
-      const footerCopy = party.status === "RECRUITING"
-        ? `현재 조원 ${members.length}명 · 조장이 구성을 확정하면 준비 단계로 이동합니다.`
-        : ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)
-          ? allReady
-            ? `준비 완료 ${count}/${members.length}명 · 전원 준비가 완료되었습니다.`
-            : `준비 완료 ${count}/${members.length}명 · ${members.length - count}명의 준비를 기다리는 중입니다.`
-          : footer.textContent;
-      setText(footer, footerCopy);
-    }
-  }
-
   function decorateBriefingRoster(snapshot, userId) {
     const [page, sessionId] = routeParts();
     if (page !== "briefing" || !sessionId) return;
@@ -362,7 +285,6 @@
     const userId = currentUserId();
     if (!snapshot || !userId) return;
     decorateMemberHome(snapshot, userId);
-    decorateLeaderParty(snapshot, userId);
     decorateBriefingRoster(snapshot, userId);
     if (document.documentElement.dataset.partyFlowUxVersion !== VERSION) document.documentElement.dataset.partyFlowUxVersion = VERSION;
   }

@@ -530,6 +530,18 @@
     return 1;
   }
 
+  function effectivePartyReady(party, memberId) {
+    const marker = party?.readyStateBy?.[memberId];
+    if (marker && typeof marker === "object" && typeof marker.ready === "boolean") return marker.ready;
+    if (typeof marker === "boolean") return marker;
+    return Array.isArray(party?.readyBy) && party.readyBy.includes(memberId);
+  }
+
+  function partyReadyIds(party) {
+    return [...new Set(Array.isArray(party?.memberIds) ? party.memberIds : [])]
+      .filter((memberId) => effectivePartyReady(party, memberId));
+  }
+
   function renderParty(partyId) {
     if (!ensureAuth()) return;
     document.body.classList.add("retro-mode", "retro-page-mode");
@@ -538,16 +550,35 @@
     const uid = currentUserId();
     if (!party || (!party.memberIds.includes(uid) && !party.invitedIds.includes(uid))) return go("home");
     const isCreator = party.creatorId === uid;
-    const allConfirmed = party.memberIds.every((id) => party.confirmedBy.includes(id));
-    const allReady = party.memberIds.every((id) => party.readyBy.includes(id));
+    const members = [...new Set(party.memberIds)];
+    const allConfirmed = members.every((id) => party.confirmedBy.includes(id));
+    const readyIds = partyReadyIds(party);
+    const readyCount = readyIds.length;
+    const allReady = members.length > 0 && readyCount === members.length;
     const step = partyStep(party);
     const inviteCandidates = Object.values(DEMO_USERS).filter((u) => u.id !== uid && !party.memberIds.includes(u.id) && !party.invitedIds.includes(u.id));
+    const readyStage = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status);
+    const ownReady = effectivePartyReady(party, uid);
+    const participantHelp = party.status === "RECRUITING"
+      ? "조원 구성을 확인한 뒤 조장이 구성을 확정합니다."
+      : "각 조원은 홈 화면에서 준비 상태를 바꿀 수 있습니다. 전원 준비 완료 후 세션을 시작합니다.";
+    const participantBadge = readyStage
+      ? `<span class="badge party-ready-count ${allReady ? "is-all-ready" : "is-waiting"}">${readyCount}/${members.length}명 준비 완료</span>`
+      : `<span class="badge green">${members.length}명</span>`;
+    const footerCopy = party.status === "RECRUITING"
+      ? `현재 조원 ${members.length}명 · 조장이 구성을 확정하면 준비 단계로 이동합니다.`
+      : readyStage
+        ? allReady
+          ? `준비 완료 ${readyCount}/${members.length}명 · 전원 준비가 완료되었습니다.`
+          : `준비 완료 ${readyCount}/${members.length}명 · ${members.length - readyCount}명의 준비를 기다리는 중입니다.`
+        : `${allConfirmed ? "모든 조원이 구성을 확인했습니다." : "모든 조원의 구성 확인을 기다리는 중입니다."} ${allReady ? "전원 준비가 완료되었습니다." : "세션 생성 전 전원 준비 완료가 필요합니다."}`;
+    const editablePartyName = isCreator && !party.sessionId && ["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status);
 
     shell(`
       <main class="container narrow">
         <section class="hero">
           <div class="eyebrow">Party composition</div>
-          <h1 style="font-size:48px">${escapeHtml(party.name)}</h1>
+          ${editablePartyName ? `<div class="party-name-heading-row"><h1 style="font-size:48px">${escapeHtml(party.name)}</h1><button type="button" class="party-name-edit-button" data-party-name-edit="${escapeHtml(party.id)}"><span class="party-name-pencil" aria-hidden="true">✎</span><span>조 이름 변경</span></button></div>` : `<h1 style="font-size:48px">${escapeHtml(party.name)}</h1>`}
           <p class="lead">조사조는 매일 자율적으로 새로 편성합니다. 조사조를 생성한 캐릭터가 이번 조사조의 조장을 맡으며, 조원 관리와 세션 시작을 담당합니다.</p>
         </section>
         <div class="stepper">
@@ -555,9 +586,9 @@
         </div>
 
         <section class="section card pad">
-          <div class="card-header"><div><h2 class="card-title">참가 캐릭터</h2><p class="muted small">각 캐릭터가 자신의 탭에서 구성 확인과 준비 완료를 눌러야 합니다.</p></div><span class="badge green">${party.memberIds.length}명</span></div>
+          <div class="card-header"><div><h2 class="card-title">참가 캐릭터</h2><p class="muted small">${participantHelp}</p></div>${participantBadge}</div>
           <div class="member-grid">
-            ${party.memberIds.map((memberId) => memberRow(party, memberId)).join("")}
+            ${members.map((memberId) => memberRow(party, memberId)).join("")}
           </div>
         </section>
 
@@ -576,13 +607,15 @@
 
         <section class="section card pad">
           <div class="button-row">
+            ${party.status === "COMPOSITION_CONFIRMED" ? `<button type="button" class="button party-flow-back" data-party-flow-back-recruiting="${escapeHtml(party.id)}">← 이전 단계</button>` : ""}
+            ${party.status === "READY_CHECK" ? `<button type="button" class="button party-flow-back party-preflight-back" data-party-preflight-back-confirmed="${escapeHtml(party.id)}">← 이전 단계</button>` : ""}
             ${party.status === "RECRUITING" ? `<button class="button primary" data-confirm-composition>${party.confirmedBy.includes(uid) ? "구성 확인 완료" : "이 구성으로 확정"}</button>` : ""}
-            ${party.status === "COMPOSITION_CONFIRMED" || party.status === "READY_CHECK" ? `<button class="button primary" data-ready>${party.readyBy.includes(uid) ? "준비 완료됨" : "조사 준비 완료"}</button>` : ""}
-            ${isCreator && allReady && party.status === "READY_CHECK" ? `<button class="button primary" data-start-session>조사 세션 시작</button>` : ""}
+            ${readyStage ? `<button class="button primary ${ownReady ? "party-ready-button-active" : ""}" data-ready>${ownReady ? "준비 완료 취소" : "조사 준비 완료"}</button>` : ""}
+            ${isCreator && allReady && party.status === "READY_CHECK" ? `<button class="button primary" data-start-session>조사 출발</button>` : ""}
             ${party.sessionId ? `<button class="button primary" data-open-session>브리핑으로 이동</button>` : ""}
             ${party.status === "RECRUITING" ? `<button class="button danger" data-leave-party>${isCreator ? "조사조 해산" : "조사조 나가기"}</button>` : ""}
           </div>
-          <p class="muted small" style="margin:12px 0 0">${allConfirmed ? "모든 조원이 구성을 확인했습니다." : "모든 조원의 구성 확인을 기다리는 중입니다."} ${allReady ? "전원 준비가 완료되었습니다." : "세션 생성 전 전원 준비 완료가 필요합니다."}</p>
+          <p class="muted small" style="margin:12px 0 0">${footerCopy}</p>
         </section>
       </main>`);
 
@@ -597,8 +630,11 @@
   function memberRow(party, memberId) {
     const u = DEMO_USERS[memberId];
     const confirmed = party.confirmedBy.includes(memberId);
-    const ready = party.readyBy.includes(memberId);
-    return `<div class="member"><div class="member-avatar">${u.initial}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "조장" : "참가 조원"}</div></div><div class="status-pills"><span class="badge ${confirmed ? "green" : ""}">${confirmed ? "구성 확인" : "확인 대기"}</span><span class="badge ${ready ? "blue" : ""}">${ready ? "준비 완료" : "준비 대기"}</span></div></div>`;
+    const ready = effectivePartyReady(party, memberId);
+    const statusMarkup = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)
+      ? `<span class="party-ready-state ${ready ? "is-ready" : "is-waiting"}">${ready ? "● 준비 완료" : "○ 준비 대기"}</span>`
+      : `<span class="badge ${confirmed ? "green" : ""}">${confirmed ? "구성 확인" : "확인 대기"}</span><span class="badge ${ready ? "blue" : ""}">${ready ? "준비 완료" : "준비 대기"}</span>`;
+    return `<div class="member"><div class="member-avatar">${u.initial}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "조장" : "참가 조원"}</div></div><div class="status-pills">${statusMarkup}</div></div>`;
   }
 
   function inviteUser(partyId, userId) {
