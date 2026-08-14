@@ -51,9 +51,10 @@ assert.equal(api.membershipChangeAllowed(sessionWorld.parties.p1), false, "membe
 const selfLeft = api.removeMemberState(world(), "p1", "member_b", "member_b", 1000, "캐릭터 B");
 assert.deepEqual(plain(selfLeft.parties.p1.memberIds), ["leader", "member_c"], "member can leave their own party");
 assert.equal(selfLeft.characters.member_b.currentPartyId, null);
-assert.equal(selfLeft.parties.p1.status, "RECRUITING", "membership changes reopen composition");
-assert.deepEqual(plain(selfLeft.parties.p1.confirmedBy), [], "composition confirmation resets after membership changes");
-assert.deepEqual(plain(selfLeft.parties.p1.readyBy), [], "ready state resets after membership changes");
+assert.equal(selfLeft.parties.p1.status, "COMPOSITION_CONFIRMED", "confirmed-stage membership changes must remain at composition confirmation for guarded departure");
+assert.deepEqual(plain(selfLeft.parties.p1.confirmedBy), ["leader", "member_c"], "remaining members stay composition-confirmed after a pre-departure removal");
+assert.deepEqual(plain(selfLeft.parties.p1.readyBy), ["leader"], "removing a ready member preserves the remaining leader and unready member readiness");
+assert.equal(selfLeft.parties.p1.readyStateBy.member_c.ready, false, "an already-unready remaining member must stay unready after another member leaves");
 assert.equal(selfLeft.partyMembershipRemovals["p1:member_b"].kind, "SELF_LEAVE");
 assert.equal(selfLeft.partyMembershipRemovals["p1:member_b"].active, true);
 const selfNotice = Object.values(selfLeft.partyMembershipNotices)[0];
@@ -63,6 +64,8 @@ assert.equal(selfNotice.leaderId, "leader", "leave notice targets the party lead
 const kicked = api.removeMemberState(world(), "p1", "member_c", "leader", 1100, "캐릭터 C");
 assert.deepEqual(plain(kicked.parties.p1.memberIds), ["leader", "member_b"], "leader can remove another member");
 assert.equal(kicked.characters.member_c.currentPartyId, null);
+assert.deepEqual(plain(kicked.parties.p1.readyBy), ["leader", "member_b"], "removing an unready member must preserve another remaining member's ready state");
+assert.equal(kicked.parties.p1.readyStateBy.member_b.ready, true);
 assert.equal(kicked.partyMembershipRemovals["p1:member_c"].kind, "LEADER_KICK");
 assert.equal(Object.values(kicked.partyMembershipNotices)[0].memberName, "캐릭터 C");
 
@@ -120,7 +123,7 @@ assert.match(source, /party-membership-ready-only/, "leader participant status m
 assert.doesNotMatch(source, /function decorateInviteVisibility|function normalizeMemberHomeButtons/, "membership runtime must not post-process home UI");
 assert.doesNotMatch(source, /queueMicrotask\(refresh\)/, "membership observer refresh must yield to the browser instead of creating an unbounded microtask chain");
 assert.match(source, /setTimeout\(refresh, 16\)/, "membership observer refresh should be frame-throttled");
-assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.86/, "membership UX fix must be cache-bumped after direct home rendering");
+assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.87/, "membership UX fix must be cache-bumped after guarded-departure membership rendering");
 
 const reinviteSource = fs.readFileSync(new URL("../party-reinvite-runtime-fix.js", import.meta.url), "utf8");
 const reinviteSandbox = { window: {}, console, structuredClone };
@@ -179,7 +182,7 @@ assert.match(reinviteSource, /reinvite-atomic/, "same-party invite click must be
 assert.match(reinviteSource, /reinvite-accept-atomic/, "same-party accept click must be owned by the atomic runtime path");
 assert.match(reinviteSource, /rejoin-invariant-repair/, "post-join cloud merge repair must stay wired");
 assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.89/, "reinvite runtime fix must be loaded with a fresh cache key");
-assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.89") < index.indexOf("party-membership-ux-fix.js?v=0.3.86"), "atomic reinvite capture must run before the legacy membership sidecar capture listener");
+assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.89") < index.indexOf("party-membership-ux-fix.js?v=0.3.87"), "atomic reinvite capture must run before the guarded-departure membership sidecar capture listener");
 
 class MembershipClickTarget {
   constructor(matches = {}, dataset = {}) { this.matches = matches; this.dataset = dataset; }
@@ -256,7 +259,7 @@ const runtimeAfterLeave = JSON.parse(runtimeLocal.get("baekji_city_mvp_state_v3"
 assert.equal(membershipWrites, 1, "confirmed self-leave must commit exactly one state write");
 assert.equal(runtimeAfterLeave.characters.member_b.currentPartyId, null);
 assert.ok(!runtimeAfterLeave.parties.p1.memberIds.includes("member_b"));
-assert.deepEqual(runtimeAfterLeave.parties.p1.readyBy, [], "self-leave must clean stale ready state with membership cleanup");
+assert.deepEqual(Array.from(runtimeAfterLeave.parties.p1.readyBy), ["leader"], "self-leave must retain only automatic leader readiness after membership cleanup");
 assert.equal(leaveConfirm.prevented, true);
 assert.equal(leaveConfirm.stopped, true);
 

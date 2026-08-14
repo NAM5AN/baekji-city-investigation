@@ -35,12 +35,12 @@ assert.match(app, /data-invite="\$\{u\.id\}"/, "invite actions must remain in th
 // Departure confirmation reuses the invite-modal shell, but its two actions
 // have different layout needs. Keep that scope explicit so ordinary invite
 // flows remain on their existing three-column desktop contract.
-const departureModalStart = app.indexOf("  function showPendingDepartureModal(");
-const departureModalEnd = app.indexOf("  function commitSessionStart(", departureModalStart);
-assert.ok(departureModalStart >= 0 && departureModalEnd > departureModalStart, "pending-departure modal markup must stay discoverable");
+const departureModalStart = app.indexOf("  function showDepartureModal(");
+const departureModalEnd = app.indexOf("  function commitForcedDeparture(", departureModalStart);
+assert.ok(departureModalStart >= 0 && departureModalEnd > departureModalStart, "guarded departure modal markup must stay discoverable");
 const departureModal = app.slice(departureModalStart, departureModalEnd);
 assert.match(departureModal, /class="retro-invite-actions retro-departure-actions"/, "departure confirmation must opt into its dedicated actions class without replacing the shared modal class");
-assert.match(departureModal, /<button[^>]*class="button"[^>]*data-party-start-pending-cancel[^>]*>[^<]+<\/button>[\s\S]*?<button[^>]*class="button primary"[^>]*data-party-start-pending-confirm=/, "departure markup must retain exactly the secondary and primary action buttons in order");
+assert.match(departureModal, /<button[^>]*class="button"[^>]*data-party-departure-cancel[^>]*>[^<]+<\/button>[\s\S]*?<button[^>]*class="button primary"[^>]*data-party-departure-confirm=/, "departure markup must retain exactly the secondary and primary action buttons in order");
 
 assert.doesNotMatch(visual, /function profileDataUri|function decorateInviteGrid|retro-invite-card/, "visual polish must not create or decorate invite DOM after paint");
 assert.match(profileSync, /function decorateInviteCandidates/, "profile sync may hydrate a late tester directory record without owning invite structure");
@@ -63,7 +63,7 @@ assert.match(partyFlowCss, /\.retro-departure-actions\s*\{\s*width:\s*100%;\s*gr
 assert.match(partyFlowCss, /\.retro-departure-actions\s*>\s*\.button\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-height:\s*46px;/, "both departure actions must have equal minimum height and fill their columns");
 assert.match(partyFlowCss, /\.retro-departure-actions\s*>\s*\.button\.primary\s*\{\s*white-space:\s*nowrap;/, "the primary departure action label must not wrap");
 assert.match(partyFlowCss, /@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.retro-departure-actions\s*\{\s*grid-template-columns:\s*1fr;/, "phone departure actions must stack into one column at 640px or below");
-assert.match(index, /app\.js\?v=0\.4\.5[^"']*party-invite-grid-stability=1/, "app cache key must identify the first-paint invite grid implementation");
+assert.match(index, /app\.js\?v=0\.4\.6[^"']*party-invite-grid-stability=1/, "app cache key must identify the first-paint invite grid implementation");
 assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.52/);
 assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.53/);
 assert.match(index, /party-member-home-roster\.css\?v=0\.3\.94/);

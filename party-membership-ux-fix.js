@@ -6,7 +6,7 @@
   const JOIN_INTENT_KEY = "baekji_city_party_join_intent_v1";
   const NOTICE_SEEN_KEY_PREFIX = "baekji_city_party_membership_notice_seen_v1:";
   const STYLE_ID = "baekji-party-membership-ux-style";
-  const VERSION = "0.3.86";
+  const VERSION = "0.3.87";
   const DEMO_NAMES = {
     test_a: "테스트 캐릭터 A",
     test_b: "테스트 캐릭터 B",
@@ -40,11 +40,18 @@
 
   function resetCompositionAfterMembershipChange(party, at = Date.now()) {
     if (!party) return;
-    party.status = "RECRUITING";
-    party.confirmedBy = [];
-    party.readyBy = [];
-    party.readyStateBy = {};
-    party.compositionLockedAt = null;
+    const stayConfirmed = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(String(party.status || ""));
+    const memberIds = unique(party.memberIds);
+    const retainedReadyIds = stayConfirmed
+      ? memberIds.filter((memberId) => memberId === party.creatorId || effectiveReady(party, memberId))
+      : [];
+    party.status = stayConfirmed ? "COMPOSITION_CONFIRMED" : "RECRUITING";
+    party.confirmedBy = stayConfirmed ? memberIds : [];
+    party.readyBy = retainedReadyIds;
+    party.readyStateBy = stayConfirmed
+      ? Object.fromEntries(memberIds.map((memberId) => [memberId, { ready: retainedReadyIds.includes(memberId), at }]))
+      : {};
+    if (!stayConfirmed) party.compositionLockedAt = null;
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
     party.membershipChangedAt = at;
   }
@@ -186,7 +193,7 @@
         sessionId: character?.currentSessionId,
       });
       if (before !== after) {
-        resetCompositionAfterMembershipChange(party, Number(removal.at || Date.now()));
+        if (membershipChangeAllowed(party)) resetCompositionAfterMembershipChange(party, Number(removal.at || Date.now()));
         changed = true;
       }
     });

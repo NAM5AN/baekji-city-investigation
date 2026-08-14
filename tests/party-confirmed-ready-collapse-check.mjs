@@ -15,14 +15,14 @@ const renderParty = app.slice(renderStart, renderEnd);
 assert.match(renderParty, /\["조원 구성", "구성 확정", "세션 생성"\]/, "new party flow must render exactly three steps");
 assert.doesNotMatch(renderParty, /\["조원 구성", "구성 확정", "전원 준비", "세션 생성"\]|data-party-preflight-back-confirmed/, "new composition-confirmed flow must not expose a separate ready step or back button");
 assert.match(renderParty, /readyStage[\s\S]*?party-ready-count/, "confirmed state must retain direct ready counts through the legacy-compatible ready-stage projection");
-assert.match(renderParty, /isCreator && allReady && readyStage[\s\S]*?data-start-session/, "only a fully-ready leader can see departure in confirmed state");
+assert.match(renderParty, /isCreator && readyStage[\s\S]*?data-start-session/, "the confirmed-stage leader must retain departure control so in-site guards can resolve pending or unready blockers");
 assert.match(renderParty, /readyStage && !isCreator[\s\S]*?data-ready/, "only members retain the collapsed-flow ready action");
 assert.match(renderParty, /pendingInviteIds\.map\(\(memberId\) => pendingInviteRow/, "pending invitations must remain visible in confirmed state");
 assert.match(app, /startSessionState/, "atomic confirmed-departure reducer must be exposed through the pending-invite test seam");
 assert.doesNotMatch(ux, /party\.status = "READY_CHECK"/, "UX runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(preflight, /party\.status = "READY_CHECK"/, "preflight runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(ux, /window\.alert/, "party readiness must not use browser alerts");
-assert.match(index, /app\.js\?v=0\.4\.5[^"']*party-confirmed-ready-collapse=1/, "app cache key must identify the collapsed confirmed-ready flow");
+assert.match(index, /app\.js\?v=0\.4\.6[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1/, "app cache key must identify the collapsed confirmed-ready and guarded-departure flow");
 
 const apiEnd = app.indexOf("  function renderParty(partyId)");
 const helperSource = `${app.slice(0, apiEnd)}\n})();`;
@@ -117,20 +117,20 @@ function appRuntime(initialState, userId = "test_a") {
     set innerHTML(value) {
       this._html = String(value);
       modalElements = {};
-      if (!this._html.includes("data-party-start-pending-modal")) return;
+      if (!this._html.includes("data-party-start-pending-modal") && !this._html.includes("data-party-departure-modal")) return;
       modalBuilds += 1;
       modalElements.modal = new RuntimeElement();
       modalElements.cancel = new RuntimeElement();
-      const partyId = this._html.match(/data-party-start-pending-confirm="([^"]+)"/)?.[1] || "";
-      modalElements.confirm = new RuntimeElement({ partyStartPendingConfirm: partyId });
+      const partyId = this._html.match(/data-party-(?:start-pending|departure)-confirm="([^"]+)"/)?.[1] || "";
+      modalElements.confirm = new RuntimeElement({ partyStartPendingConfirm: partyId, partyDepartureConfirm: partyId });
       lastConfirm = modalElements.confirm;
     },
     get innerHTML() { return this._html; },
     replaceChildren() { this._html = ""; modalElements = {}; },
     querySelector(selector) {
-      if (selector === "[data-party-start-pending-modal]") return modalElements.modal || null;
-      if (selector === "[data-party-start-pending-cancel]") return modalElements.cancel || null;
-      if (selector === "[data-party-start-pending-confirm]") return modalElements.confirm || null;
+      if (selector === "[data-party-start-pending-modal]" || selector === "[data-party-departure-modal]") return modalElements.modal || null;
+      if (selector === "[data-party-start-pending-cancel]" || selector === "[data-party-departure-cancel]") return modalElements.cancel || null;
+      if (selector === "[data-party-start-pending-confirm]" || selector === "[data-party-departure-confirm]") return modalElements.confirm || null;
       return null;
     },
   };
@@ -280,9 +280,9 @@ assert.equal(replacementRuntime.confirms(), 0, "stale pending replacement must n
 
 const unreadyMemberRuntime = appRuntime(runtimeFixture({ pending: ["test_c"], memberReady: false }));
 unreadyMemberRuntime.render();
-assert.equal(unreadyMemberRuntime.hasStartButton(), false, "an unready member must suppress departure before modal binding");
+assert.equal(unreadyMemberRuntime.hasStartButton(), true, "the leader must retain departure control when a member is unready so the guard can offer atomic removal");
 unreadyMemberRuntime.start();
-assert.equal(unreadyMemberRuntime.modalBuilds(), 0);
+assert.equal(unreadyMemberRuntime.modalBuilds(), 1);
 assert.equal(unreadyMemberRuntime.writes(), 0);
 
 const unreadyLeaderRuntime = appRuntime(runtimeFixture({ pending: ["test_c"], status: "RECRUITING", leaderReady: false }));
