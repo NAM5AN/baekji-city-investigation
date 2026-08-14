@@ -167,7 +167,7 @@ assert.match(cloudSource, /action === "INVENTORY_TRANSFER"/);
 const adminHtml = fs.readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 assert.match(adminHtml, /admin-control-mvp4\.css\?v=0\.4\.1&stage4-item-transfer=1/);
-assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.3&stage4-item-transfer=1&lazy-entry=1&async-entry=1/);
+assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.4&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1/);
 assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.2&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1/);
 
 const Storage = class { getItem() { return null; } setItem() {} removeItem() {} };
@@ -204,7 +204,7 @@ const fakeDocument = {
   addEventListener(type, handler) { if (type === "click") capturedClick = handler; },
 };
 const uiCalls = [];
-const uiWindow = { DAY1_DATA: { places: {}, variants: {}, itemCatalog: {}, objectItems: {} }, addEventListener() {}, dispatchEvent() {} };
+const uiWindow = { DAY1_DATA: { places: {}, variants: {}, itemCatalog: {}, objectItems: {} }, addEventListener(type, handler, capture = false) { if (type === "click" && capture === true) capturedClick = handler; }, dispatchEvent() {} };
 const uiContext = { window: uiWindow, document: fakeDocument, Element: FakeElement, MutationObserver: class { observe() {} }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } }, crypto: { randomUUID: () => "ui-request" }, fetch: async (url, options = {}) => { uiCalls.push({ url, options }); return { ok: true, status: 200, json: async () => String(url) === "/api/admin-snapshot" ? { ok: true, revision: 1, state: { characters: { b: { id: "b", inventory: {} } }, itemClaimsByVariant: { a: {} } }, directory: [] } : { ok: true, revision: 2, summary: "ok" } }; }, setTimeout: () => 0, queueMicrotask, console, Date, Math, JSON, Object, Array, Number, String, Boolean, Set, Map };
 uiContext.globalThis = uiContext;
 vm.createContext(uiContext);
