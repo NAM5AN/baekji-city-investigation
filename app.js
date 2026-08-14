@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const { escapeHtml, clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
+  const { clone, escapeHtml, clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
   const { spatialScopeKey, contaminationStage, effectivePartyReady } = window.__BAEKJI_DOMAIN_RULES__;
 
   const DATA = window.DAY1_DATA;
@@ -599,10 +599,6 @@
 
   const PARTY_INVITE_ACCEPT_STATUSES = Object.freeze(["RECRUITING", "COMPOSITION_CONFIRMED"]);
 
-  function clonePartyInviteSnapshot(snapshot) {
-    return typeof structuredClone === "function" ? structuredClone(snapshot) : JSON.parse(JSON.stringify(snapshot));
-  }
-
   function activePendingInviteIds(snapshot, partyId) {
     const party = snapshot?.parties?.[partyId];
     if (!party || ![...PARTY_INVITE_ACCEPT_STATUSES, "READY_CHECK"].includes(party.status)) return [];
@@ -639,7 +635,7 @@
   }
 
   function inviteState(snapshot, partyId, inviteeId, leaderId) {
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     const invitee = draft?.characters?.[inviteeId];
     if (!party || party.creatorId !== leaderId || party.sessionId || party.status !== "RECRUITING" || !invitee || invitee.currentPartyId) return draft;
@@ -649,7 +645,7 @@
   }
 
   function cancelInviteState(snapshot, partyId, inviteeId, leaderId) {
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     if (!party || party.creatorId !== leaderId || party.sessionId || !PARTY_INVITE_ACCEPT_STATUSES.includes(party.status) || !party.invitedIds.includes(inviteeId)) return draft;
     party.invitedIds = party.invitedIds.filter((id) => id !== inviteeId);
@@ -658,7 +654,7 @@
   }
 
   function declineInviteState(snapshot, partyId, inviteeId) {
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     if (!party || !PARTY_INVITE_ACCEPT_STATUSES.includes(party.status) || !party.invitedIds.includes(inviteeId)) return draft;
     party.invitedIds = party.invitedIds.filter((id) => id !== inviteeId);
@@ -667,7 +663,7 @@
   }
 
   function acceptInviteState(snapshot, partyId, inviteeId) {
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     const invitee = draft?.characters?.[inviteeId];
     if (!party || !invitee || invitee.currentPartyId || !PARTY_INVITE_ACCEPT_STATUSES.includes(party.status) || !party.invitedIds.includes(inviteeId)) return draft;
@@ -686,7 +682,7 @@
   }
 
   function enterReadyCheckState(snapshot, partyId, leaderId, at = Date.now()) {
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     if (!party || party.creatorId !== leaderId || party.sessionId || party.status !== "COMPOSITION_CONFIRMED") return { snapshot: draft, cancelledIds: [], shouldNotify: false };
     party.readyStateBy = party.readyStateBy && typeof party.readyStateBy === "object" ? { ...party.readyStateBy } : {};
@@ -698,7 +694,7 @@
   }
 
   function startSessionState(snapshot, partyId, leaderId, sessionId, at = Date.now(), variant = "c", cancelPending = false) {
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     if (!party || party.creatorId !== leaderId || party.sessionId || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) return { snapshot: draft, ok: false, pendingIds: [] };
     if (party.status === "READY_CHECK") party.status = "COMPOSITION_CONFIRMED";
@@ -722,7 +718,7 @@
 
   function forcedDepartureState(snapshot, partyId, leaderId, sessionId, at = Date.now(), variant = "c", expectedBlockers = null) {
     const current = departureBlockers(snapshot, partyId);
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     if (!party || party.creatorId !== leaderId || party.sessionId || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) {
       return { snapshot: draft, ok: false, changed: false, reason: "invalid", blockers: current, cancelledIds: [], removedIds: [] };
@@ -762,7 +758,7 @@
   }
 
   function disbandCompletedPartyState(snapshot, sessionId, actorId, at = Date.now()) {
-    const draft = clonePartyInviteSnapshot(snapshot);
+    const draft = clone(snapshot);
     const session = draft?.sessions?.[sessionId];
     if (!session || session.status !== "COMPLETED" || session.partyDisbandedAt || !unique(session.memberIds || []).includes(actorId)) return { snapshot: draft, changed: false };
     const memberIds = unique(session.memberIds || []);

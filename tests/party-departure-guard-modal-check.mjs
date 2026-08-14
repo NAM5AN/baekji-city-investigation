@@ -50,7 +50,7 @@ assert.doesNotMatch(renderPartySource, /isCreator\s*&&\s*allReady\s*&&\s*readySt
 assert.match(app, /초대 중인 캐릭터가 있습니다/, "pending-only departure guard copy must be rendered in-app");
 assert.match(app, /준비 중인 캐릭터가 있습니다/, "unready-only departure guard copy must be rendered in-app");
 assert.match(app, /초대 및 준비 중인 캐릭터가 있습니다/, "combined departure guard copy must be rendered in-app");
-assert.match(index, /app\.js\?v=0\.4\.8[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1/, "app cache key must identify the departure guard and Stage 3-B domain-rule release");
+assert.match(index, /app\.js\?v=0\.4\.9[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/, "app cache key must identify the departure guard and Stage 3-C caller-adoption release");
 
 class Element {
   constructor(dataset = {}) { this.dataset = dataset; this.listeners = new Map(); }

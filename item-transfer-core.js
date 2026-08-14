@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { spatialScopeKey: scope } = window.__BAEKJI_DOMAIN_RULES__;
   const K="baekji_city_mvp_state_v3", U="baekji_city_mvp_current_user_v034", TTL=60000;
   const USERS={test_a:{name:"테스트 캐릭터 A",aliases:["캐릭터A","테스트 캐릭터 A","A"]},test_b:{name:"테스트 캐릭터 B",aliases:["캐릭터B","테스트 캐릭터 B","B"]},test_c:{name:"테스트 캐릭터 C",aliases:["캐릭터C","테스트 캐릭터 C","C"]}};
   const PREFIX={CONTAMINATED:"오염된",DISCHARGED:"방전된",EMPTY:"빈",USED:"사용한",DAMAGED:"파손된",BROKEN:"고장 난",WET:"젖은",CLEAN:""};
@@ -15,7 +16,6 @@
   const sig=item=>JSON.stringify(fields(item));
   const label=item=>LABEL[String(item?.state||"CLEAN")]||item?.customState||item?.statusText||String(item?.state||"정상");
   const display=item=>{const n=String(item?.name||"알 수 없는 물품"),p=PREFIX[String(item?.state||"CLEAN")]||"";return !p||norm(n).includes(norm(p))?n:`${p} ${n}`};
-  const scope=s=>!s?"":s.movement?`route:${s.movement.fromNode}:${s.movement.targetNode}`:s.activeEncounter?`route:${s.activeEncounter.fromNode}:${s.activeEncounter.targetNode}`:s.currentDetailId?`detail:${s.currentNode}:${s.currentDetailId}`:`node:${s.currentNode}`;
   const sessionOf=(state,id)=>{const sid=state?.characters?.[id]?.currentSessionId;return sid?state.sessions?.[sid]||null:null};
   const fieldSessions=(state,source)=>Object.values(state?.sessions||{}).filter(s=>s?.status==="ACTIVE"&&s.variant===source?.variant&&scope(s)===scope(source));
   const visible=(state,source,actor)=>uniq(fieldSessions(state,source).flatMap(s=>s.memberIds||[])).filter(id=>id!==actor);

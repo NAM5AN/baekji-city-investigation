@@ -32,8 +32,8 @@ assert.match(css, /is-action-processing/);
 assert.match(index, /investigation-feedback-ui\.css\?v=0\.3\.49/);
 assert.match(index, /investigation-feedback-ui\.js\?v=0\.3\.49/);
 assert.match(index, /investigation-log-render-flush\.js\?v=0\.3\.49/);
-assert.match(index, /app\.js\?v=0\.4\.8[^"']*stage3a=1[^"']*stage3b=1/);
-assert.ok(index.indexOf("app.js?v=0.4.8") < index.indexOf("investigation-feedback-ui.js?v=0.3.49"));
+assert.match(index, /app\.js\?v=0\.4\.9[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/);
+assert.ok(index.indexOf("app.js?v=0.4.9") < index.indexOf("investigation-feedback-ui.js?v=0.3.49"));
 assert.ok(index.indexOf("investigation-feedback-ui.js?v=0.3.49") < index.indexOf("investigation-log-render-flush.js?v=0.3.49"));
 
 console.log("investigation feedback UI checks passed");
