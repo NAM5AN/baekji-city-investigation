@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const VERSION = "0.3.86";
+  const VERSION = "0.3.87";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -304,15 +304,6 @@
       }
     }
 
-    const start = target.closest("[data-start-session]");
-    if (start) {
-      const [, partyId] = routeParts();
-      const party = readState()?.parties?.[partyId];
-      if (party && readyCount(party) !== unique(party.memberIds).length) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    }
   }, true);
   document.documentElement.dataset.partyFlowUxVersion = VERSION;
 })();

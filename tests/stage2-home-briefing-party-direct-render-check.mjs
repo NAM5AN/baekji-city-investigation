@@ -59,7 +59,7 @@ assert.doesNotMatch(profileSync, /function decorateBriefingMembers/, "profile sy
 
 assert.match(index, /stage2-home-briefing-party-ui=1/);
 assert.match(index, /party-flow-sync\.js\?v=0\.3\.67/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.86/);
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.68/);
 assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.87/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);

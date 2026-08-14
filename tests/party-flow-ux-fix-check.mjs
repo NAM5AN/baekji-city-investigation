@@ -123,9 +123,11 @@ assert.match(css, /party-ready-state\.is-ready/);
 assert.match(css, /party-ready-state\.is-waiting/);
 assert.match(css, /party-ready-count\.is-all-ready/);
 assert.match(index, /party-flow-ux-fix\.css\?v=0\.3\.81/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.86/);
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.86") < index.indexOf("party-leadership-flow.js?v=0.3.68"), "fixed invite interception must run before legacy leadership capture handlers");
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.86") < index.indexOf("party-flow-sync.js?v=0.3.67"), "fixed state flow must own invite/ready clicks before legacy flow sync");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1/);
+const partyFlowUxIndex = index.indexOf("party-flow-ux-fix.js?v=0.3.87&departure-capture-guard=1");
+assert.ok(partyFlowUxIndex >= 0, "party flow UX guard script must be present before checking its load order");
+assert.ok(partyFlowUxIndex < index.indexOf("party-leadership-flow.js?v=0.3.68"), "fixed invite interception must run before legacy leadership capture handlers");
+assert.ok(partyFlowUxIndex < index.indexOf("party-flow-sync.js?v=0.3.67"), "fixed state flow must own invite/ready clicks before legacy flow sync");
 assert.doesNotMatch(source, /function decorateLeaderParty/, "party UI must render directly instead of being decorated after paint");
 assert.doesNotMatch(source, /function decorateMemberHome|function decorateBriefingRoster/, "home and briefing must render directly instead of being decorated after paint");
 
