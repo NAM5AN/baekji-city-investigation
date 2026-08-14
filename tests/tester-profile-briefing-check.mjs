@@ -67,12 +67,11 @@ movement.applyMovementImpairment(blocked, null, 1000);
 assert.equal(blocked.sessions.s1.movement, null, "완전 용해 상태에서는 이동을 시작할 수 없어야 합니다.");
 assert.ok(blocked.sessions.s1.logs.some((entry) => entry.mobilityBlocked === true));
 
-assert(foundation.includes("[data-reset-demo]"), "foundation UI fixes must remove the player demo reset button");
-assert(foundation.includes("조사조를 생성한 캐릭터가 조장을 맡으며"), "home party copy must explain the actual leader role");
-assert(foundation.includes("편성 개설자\", \"조장"), "party roster creator label must become leader");
+assert(!foundation.includes("MutationObserver"), "foundation movement rules must no longer patch rendered UI with an observer");
+assert(!foundation.includes("[data-reset-demo]"), "foundation movement rules must no longer remove player UI after render");
 assert(index.includes("briefing-tutorial.js?v=0.4.2"), "briefing tutorial cache key must be refreshed");
-assert(index.includes("foundation-rule-fixes.js?v=0.4.2"), "foundation rule fixes must be loaded");
-assert(index.indexOf("foundation-rule-fixes.js?v=0.4.2") < index.indexOf("app.js?v=0.4.1"), "movement storage guard must install before app.js starts");
+assert(index.includes("foundation-rule-fixes.js?v=0.4.3"), "foundation movement rules must use the stage 2 cache key");
+assert(index.indexOf("foundation-rule-fixes.js?v=0.4.3") < index.indexOf("app.js?v=0.4.1"), "movement storage guard must install before app.js starts");
 assert(index.includes("tester-auth.js?v=0.3.88"), "tester auth cache key must be refreshed");
 assert(index.includes("tester-login-stable.js?v=0.3.95"), "stable tester login owner must be loaded");
 assert(!index.includes("tester-login-fastpath.js"), "legacy tester login fastpath must not compete with the stable login owner");

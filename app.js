@@ -432,7 +432,7 @@
 
         <section class="section grid two">
           <article class="card pad">
-            <div class="card-header"><div><h2 class="card-title">조사조</h2><p class="muted small">고정 조장이나 직책은 없습니다.</p></div>${party ? `<span class="badge green">편성 중</span>` : ""}</div>
+            <div class="card-header"><div><h2 class="card-title">조사조</h2><p class="muted small">조사조를 생성한 캐릭터가 조장을 맡으며, 조장은 조원 관리와 세션 시작을 담당합니다.</p></div>${party ? `<span class="badge green">편성 중</span>` : ""}</div>
             ${party ? `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(party.name)}</div><div class="list-sub">${party.memberIds.length}명 참여 · ${escapeHtml(party.status)}</div></div><button class="button" data-open-party="${party.id}">열기</button></div>` : `<div class="empty">현재 참여 중인 조사조가 없습니다.</div><div style="height:12px"></div><button class="button primary block" data-create-party>새 조사조 구성</button>`}
           </article>
           <article class="card pad">
@@ -532,7 +532,7 @@
         <section class="hero">
           <div class="eyebrow">Party composition</div>
           <h1 style="font-size:48px">${escapeHtml(party.name)}</h1>
-          <p class="lead">조사조는 매일 자율적으로 새로 편성합니다. 이 화면의 개설자는 편성 작업을 시작한 사람일 뿐 세계관상 조장이 아닙니다.</p>
+          <p class="lead">조사조는 매일 자율적으로 새로 편성합니다. 조사조를 생성한 캐릭터가 이번 조사조의 조장을 맡으며, 조원 관리와 세션 시작을 담당합니다.</p>
         </section>
         <div class="stepper">
           ${["조원 구성", "구성 확정", "전원 준비", "세션 생성"].map((name, i) => `<div class="step ${i + 1 === step ? "active" : i + 1 < step ? "done" : ""}">${i + 1}. ${name}</div>`).join("")}
@@ -582,7 +582,7 @@
     const u = DEMO_USERS[memberId];
     const confirmed = party.confirmedBy.includes(memberId);
     const ready = party.readyBy.includes(memberId);
-    return `<div class="member"><div class="member-avatar">${u.initial}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "편성 개설자" : "참가 조원"}</div></div><div class="status-pills"><span class="badge ${confirmed ? "green" : ""}">${confirmed ? "구성 확인" : "확인 대기"}</span><span class="badge ${ready ? "blue" : ""}">${ready ? "준비 완료" : "준비 대기"}</span></div></div>`;
+    return `<div class="member"><div class="member-avatar">${u.initial}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "조장" : "참가 조원"}</div></div><div class="status-pills"><span class="badge ${confirmed ? "green" : ""}">${confirmed ? "구성 확인" : "확인 대기"}</span><span class="badge ${ready ? "blue" : ""}">${ready ? "준비 완료" : "준비 대기"}</span></div></div>`;
   }
 
   function inviteUser(partyId, userId) {
@@ -682,7 +682,7 @@
           <p class="lead" style="font-size:14px">${escapeHtml(v.situation)} ${escapeHtml(v.space)}</p>
           <div class="rule-list">
             <div class="rule">이동은 현재 위치와 직접 이어진 통로로만 이동할 수 있습니다. 같은 층이어도 연결 경로가 없다면 이동할 수 없습니다.</div>
-            <div class="rule">한 메시지에는 한 가지 행동만 입력합니다. 복수 위험은 서로 다른 행동으로 순서대로 해결합니다.</div>
+            <div class="rule">한 메시지에는 한 가지 행동만 입력합니다. 한 행동이 여러 위험에 영향을 줄 수 있는지는 현재 상황과 행동 내용에 따라 시스템이 판정합니다.</div>
             <div class="rule">오브젝트를 조사해도 물품은 자동으로 들어오지 않습니다. 발견 후 별도의 ‘가져가기’ 행동이 필요합니다.</div>
             <div class="rule">성공·실패와 오염 변화는 조사 시스템이 현재 상황과 행동에 따라 확정합니다.</div>
           </div>
@@ -3388,17 +3388,8 @@
         </section>
         <section class="section card pad"><div class="card-header"><div><h2 class="card-title">조원 상태</h2></div></div><div class="member-grid">${session.memberIds.map((memberId) => memberRow({ ...state.parties[session.partyId], confirmedBy: session.memberIds, readyBy: session.memberIds }, memberId)).join("")}</div></section>
         <section class="section card pad"><div class="card-header"><div><h2 class="card-title">확인된 조사 결과</h2></div></div><div class="list">${inspected.length ? inspected.map((o) => `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(o.name)}</div><div class="list-sub">${escapeHtml(o.result)}</div></div></div>`).join("") : `<div class="empty">확인한 오브젝트가 없습니다.</div>`}</div></section>
-        <section class="section"><div class="button-row"><button class="button" data-go="home">홈으로</button><button class="button danger" data-reset-demo>전체 데모 초기화</button></div></section>
+        <section class="section"><div class="button-row"><button class="button" data-go="home">홈으로</button></div></section>
       </main>`);
-    document.querySelector("[data-reset-demo]").addEventListener("click", resetDemo);
-  }
-
-  function resetDemo() {
-    localStorage.removeItem(GLOBAL_KEY);
-    state = makeInitialState();
-    saveState("reset");
-    toast("데모 상태를 초기화했습니다.");
-    go("home");
   }
 
   function render() {

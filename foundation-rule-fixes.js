@@ -2,7 +2,7 @@
   "use strict";
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
-  const VERSION = "0.4.2";
+  const VERSION = "0.4.3";
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, Number(value) || 0));
@@ -189,40 +189,6 @@
       }
       return previousSetItem.call(this, key, value);
     };
-  }
-
-  function replaceText(node, from, to) {
-    if (!node || String(node.textContent || "").trim() !== from) return false;
-    node.textContent = to;
-    return true;
-  }
-
-  function applyFoundationUiFixes() {
-    if (typeof document === "undefined") return;
-
-    document.querySelectorAll("[data-reset-demo]").forEach((button) => button.remove());
-
-    document.querySelectorAll(".hero .lead, .card-header .muted.small, .list-sub, .rule").forEach((node) => {
-      replaceText(node,
-        "고정 조장이나 직책은 없습니다.",
-        "조사조를 생성한 캐릭터가 조장을 맡으며, 조장은 조원 관리와 세션 시작을 담당합니다.");
-      replaceText(node,
-        "조사조는 매일 자율적으로 새로 편성합니다. 이 화면의 개설자는 편성 작업을 시작한 사람일 뿐 세계관상 조장이 아닙니다.",
-        "조사조는 매일 자율적으로 새로 편성합니다. 조사조를 생성한 캐릭터가 이번 조사조의 조장을 맡으며, 조원 관리와 세션 시작을 담당합니다.");
-      replaceText(node,
-        "한 메시지에는 한 가지 행동만 입력합니다. 복수 위험은 서로 다른 행동으로 순서대로 해결합니다.",
-        "한 메시지에는 한 가지 행동만 입력합니다. 한 행동이 여러 위험에 영향을 줄 수 있는지는 현재 상황과 행동 내용에 따라 시스템이 판정합니다.");
-      replaceText(node, "편성 개설자", "조장");
-    });
-  }
-
-  if (typeof document !== "undefined") {
-    const target = document.getElementById("app") || document.documentElement;
-    if (typeof MutationObserver === "function" && target) {
-      new MutationObserver(applyFoundationUiFixes).observe(target, { childList: true, subtree: true });
-    }
-    window?.addEventListener?.("hashchange", () => queueMicrotask(applyFoundationUiFixes));
-    applyFoundationUiFixes();
   }
 
   if (typeof document !== "undefined") document.documentElement.dataset.foundationRuleVersion = VERSION;
