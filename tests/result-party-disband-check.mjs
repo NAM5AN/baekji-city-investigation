@@ -6,6 +6,7 @@ const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 const appSource = fs.readFileSync("app.js", "utf8");
 const runtimeUtilsSource = fs.readFileSync("runtime-utils.js", "utf8");
+const domainRulesSource = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const cloudSource = fs.readFileSync("cloud-state-sync.js", "utf8");
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -38,6 +39,7 @@ function appReducer() {
   const context = vm.createContext({ window: {}, document: { getElementById() { return null; } }, localStorage: { getItem() { return null; } }, DAY1_DATA: { meta: { startNode: "E_ENTRY" } }, console, structuredClone, Date, JSON, String, Object, Array, Set, Map });
   context.window = context;
   vm.runInContext(runtimeUtilsSource, context, { filename: "runtime-utils.js" });
+  vm.runInContext(domainRulesSource, context, { filename: "runtime-domain-rules.js" });
   vm.runInContext(`${appSource.slice(0, end)}\n})();`, context, { filename: "result-party-disband-reducer.js" });
   const api = context.window.__BAEKJI_PENDING_PARTY_INVITES_TEST__;
   assert.equal(typeof api?.disbandCompletedPartyState, "function", "completed result disband reducer must be exposed for atomic regression coverage");
@@ -138,6 +140,7 @@ function resultRuntime(snapshot, userId) {
   context.addEventListener = () => {};
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
   vm.runInContext(runtimeUtilsSource, context, { filename: "runtime-utils.js" });
+  vm.runInContext(domainRulesSource, context, { filename: "runtime-domain-rules.js" });
   const footer = appSource.lastIndexOf("})();");
   assert.ok(footer > 0, "app runtime footer must be discoverable");
   vm.runInContext(`${appSource.slice(0, footer)}window.__RESULT_PARTY_RUNTIME__ = { renderResult, renderExternalUpdate, getState: () => state };\n})();`, context, { filename: "result-party-disband-runtime.js" });

@@ -4,11 +4,13 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-membership-ux-fix.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const sandbox = { window: {}, console, structuredClone };
 vm.createContext(sandbox);
 vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, sandbox, { filename: "party-membership-ux-fix.js" });
 const api = sandbox.window.__BAEKJI_PARTY_MEMBERSHIP_UX_TEST__;
 assert.ok(api, "party membership UX test API must exist");
@@ -131,6 +133,7 @@ const reinviteSource = fs.readFileSync(new URL("../party-reinvite-runtime-fix.js
 const reinviteSandbox = { window: {}, console, structuredClone };
 vm.createContext(reinviteSandbox);
 vm.runInContext(runtimeUtils, reinviteSandbox, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, reinviteSandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(reinviteSource, reinviteSandbox, { filename: "party-reinvite-runtime-fix.js" });
 const reinviteApi = reinviteSandbox.window.__BAEKJI_PARTY_REINVITE_RUNTIME_TEST__;
 assert.ok(reinviteApi, "same-party reinvite runtime test API must exist");
@@ -238,6 +241,7 @@ membershipRuntime.window = membershipRuntime;
 membershipRuntime.addEventListener = (type, handler) => runtimeHandlers.set(type, handler);
 membershipRuntime.dispatchEvent = () => true;
 vm.runInContext(runtimeUtils, membershipRuntime, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, membershipRuntime, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, membershipRuntime, { filename: "party-membership-ux-fix-runtime.js" });
 assert.equal(typeof membershipClickHandler, "function", "membership UX must own an executable click capture handler");
 

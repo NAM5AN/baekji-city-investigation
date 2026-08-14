@@ -163,6 +163,7 @@ function makeAppRuntime({ gameplayVariance = false, flexibleHazard = false, flex
   });
 vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
 vm.runInContext(fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8"), context, { filename: "runtime-utils.js" });
+vm.runInContext(fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8"), context, { filename: "runtime-domain-rules.js" });
 if (gameplayVariance) vm.runInContext(fs.readFileSync(new URL("../gameplay-variance.js", import.meta.url), "utf8"), context);
   let source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const footer = source.indexOf('  window.addEventListener("hashchange", render);');

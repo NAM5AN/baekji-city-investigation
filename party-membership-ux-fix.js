@@ -1,6 +1,11 @@
 (() => {
   "use strict";
   const { clone, uniqueArray: unique, escapeHtml } = window.__BAEKJI_RUNTIME_UTILS__;
+  const {
+    storedPartyReady: effectiveReady,
+    partyMembershipChangeAllowed: membershipChangeAllowed,
+    partyMembershipRemovalKey: removalKey,
+  } = window.__BAEKJI_DOMAIN_RULES__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -13,22 +18,6 @@
     test_b: "테스트 캐릭터 B",
     test_c: "테스트 캐릭터 C",
   };
-
-  function effectiveReady(party, memberId) {
-    const marker = party?.readyStateBy?.[memberId];
-    if (marker && typeof marker === "object" && typeof marker.ready === "boolean") return marker.ready;
-    if (typeof marker === "boolean") return marker;
-    return unique(party?.readyBy).includes(memberId);
-  }
-
-  function membershipChangeAllowed(party) {
-    if (!party || party.sessionId) return false;
-    return !["SESSION_CREATED", "LOCKED", "CLOSED"].includes(String(party.status || ""));
-  }
-
-  function removalKey(partyId, memberId) {
-    return `${String(partyId || "")}:${String(memberId || "")}`;
-  }
 
   function resetCompositionAfterMembershipChange(party, at = Date.now()) {
     if (!party) return;

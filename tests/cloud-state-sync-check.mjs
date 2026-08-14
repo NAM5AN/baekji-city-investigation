@@ -21,7 +21,8 @@ assert.match(source, /window\.addEventListener\("online"/);
 assert.match(source, /document\.addEventListener\("visibilitychange"/);
 
 const cloudIndex = index.indexOf("cloud-state-sync.js?v=0.4.1&fix=0b1");
-const appIndex = index.indexOf("app.js?v=0.4.7&fix=0b1");
+const appIndex = index.indexOf("app.js?v=0.4.8&fix=0b1");
+assert.match(index, /app\.js\?v=0\.4\.8[^"']*stage3a=1[^"']*stage3b=1/, "app cache key must carry the Stage 3-B domain-rules release marker");
 assert.ok(cloudIndex >= 0, "cloud sync script must be loaded");
 assert.ok(cloudIndex < appIndex, "cloud sync must patch storage before the app starts");
 

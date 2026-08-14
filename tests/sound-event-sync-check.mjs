@@ -4,6 +4,8 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../sound-event-sync.js", import.meta.url), "utf8");
 const inflectionSource = fs.readFileSync(new URL("../sound-event-inflection-fix.js", import.meta.url), "utf8");
+const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const DAY1_DATA = {
   places: {
     A: { id: "A", floorId: "F1", floor: "1층", name: "중앙홀" },
@@ -20,6 +22,8 @@ const DAY1_DATA = {
 const sandbox = { window: { DAY1_DATA }, globalThis: null, JSON, Object, String, Number, Map, Set, Date, Infinity, console };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
+vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, sandbox, { filename: "sound-event-sync.js" });
 const api = sandbox.window.__BAEKJI_SOUND_EVENT_TEST__;
 assert.ok(api, "소음 전파 테스트 API가 필요합니다.");

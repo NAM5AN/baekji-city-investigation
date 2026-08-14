@@ -4,12 +4,14 @@ import vm from "node:vm";
 
 const UUID_B = "11111111-1111-4111-8111-111111111111";
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const registry = { values: () => [{ id: UUID_B, name: "테스트B", loginId: "테스트B" }] };
 
 {
   const window = { __BAEKJI_TESTER_REGISTRY_GUARD__: registry };
   const context = vm.createContext({ window, structuredClone, Date, JSON, Set, Map, console, String, Number, Object, Array });
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   vm.runInContext(fs.readFileSync("action-log-sync.js", "utf8"), context, { filename: "action-log-sync.js" });
   const api = window.__BAEKJI_ACTION_LOG_SYNC_TEST__;
   assert.equal(api.actorNameForId(UUID_B), "테스트B");
@@ -72,6 +74,7 @@ const registry = { values: () => [{ id: UUID_B, name: "테스트B", loginId: "�
   const window = { DAY1_DATA: {}, __BAEKJI_TESTER_REGISTRY_GUARD__: registry };
   const context = vm.createContext({ window, Date, JSON, Set, Map, console, String, Number, Object, Array, Math });
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   vm.runInContext(fs.readFileSync("character-interaction-ai.js", "utf8"), context, { filename: "character-interaction-ai.js" });
   const api = window.__BAEKJI_CHARACTER_INTERACTION_TEST__;
   const mock = api.fallbackDecision("테스트C를 비웃는다", "테스트B", "테스트C", "seed");

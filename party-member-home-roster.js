@@ -1,18 +1,12 @@
 (() => {
   "use strict";
   const { uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
+  const { storedPartyReady: effectiveReady } = window.__BAEKJI_DOMAIN_RULES__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SCROLL_SEEN_PREFIX = "baekji_city_party_creation_top_seen_v1:";
   const VERSION = "0.3.98";
-
-  function effectiveReady(party, memberId) {
-    const marker = party?.readyStateBy?.[memberId];
-    if (marker && typeof marker === "object" && typeof marker.ready === "boolean") return marker.ready;
-    if (typeof marker === "boolean") return marker;
-    return unique(party?.readyBy).includes(memberId);
-  }
 
   function isFreshlyCreatedParty(party, userId, now = Date.now()) {
     if (!party || party.creatorId !== userId || party.sessionId) return false;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const app = fs.readFileSync("app.js", "utf8");
+const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const flowUx = fs.readFileSync("party-flow-ux-fix.js", "utf8");
 const preflight = fs.readFileSync("party-preflight-flow-fix.js", "utf8");
 const stability = fs.readFileSync("party-ui-stability.js", "utf8");
@@ -12,8 +13,8 @@ const end = app.indexOf("  function inviteUser(", start);
 assert.ok(start >= 0 && end > start, "renderParty source must be discoverable");
 const renderParty = app.slice(start, end);
 
-assert.match(app, /function effectivePartyReady\(party, memberId\)/, "party readiness needs one direct-render source of truth");
-assert.match(app, /party\?\.readyStateBy\?\.\[memberId\]/, "authoritative readiness markers must beat stale ready arrays");
+assert.match(app, /BAEKJI_DOMAIN_RULES__/, "party readiness must use the shared Stage 3-B direct-render source of truth");
+assert.match(domainRules, /party\?\.readyStateBy\?\.\[memberId\]/, "authoritative readiness markers must beat stale ready arrays");
 assert.match(renderParty, /조원 구성을 확인한 뒤 조장이 구성을 확정합니다\./, "recruiting help must render directly");
 assert.match(renderParty, /각 조원은 홈 화면에서 준비 상태를 바꿀 수 있습니다\./, "ready-stage help must render directly");
 assert.match(renderParty, /party-ready-count/, "ready count badge must render directly");

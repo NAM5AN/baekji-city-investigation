@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const app = fs.readFileSync("app.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const ux = fs.readFileSync("party-flow-ux-fix.js", "utf8");
 const preflight = fs.readFileSync("party-preflight-flow-fix.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
@@ -23,7 +24,7 @@ assert.match(app, /startSessionState/, "atomic confirmed-departure reducer must 
 assert.doesNotMatch(ux, /party\.status = "READY_CHECK"/, "UX runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(preflight, /party\.status = "READY_CHECK"/, "preflight runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(ux, /window\.alert/, "party readiness must not use browser alerts");
-assert.match(index, /app\.js\?v=0\.4\.7[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1/, "app cache key must identify the collapsed confirmed-ready, guarded-departure, and Stage 3-A utility flow");
+assert.match(index, /app\.js\?v=0\.4\.8[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1/, "app cache key must identify the collapsed confirmed-ready, guarded-departure, and Stage 3-B domain-rule flow");
 
 const apiEnd = app.indexOf("  function renderParty(partyId)");
 const helperSource = `${app.slice(0, apiEnd)}\n})();`;
@@ -31,6 +32,7 @@ const sandbox = { window: {}, console, structuredClone, document: { getElementBy
  sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(helperSource, sandbox, { filename: "app-confirmed-ready-helpers.js" });
 const api = sandbox.window.__BAEKJI_PENDING_PARTY_INVITES_TEST__;
 assert.ok(api, "confirmed-ready atomic reducer API must be exposed");
@@ -167,6 +169,7 @@ function appRuntime(initialState, userId = "test_a") {
   context.confirm = () => { confirmCount += 1; return true; };
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   let fullApp = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const footer = fullApp.indexOf('  window.addEventListener("hashchange", render);');
   assert.ok(footer > 0, "app VM must stop before browser startup listeners");

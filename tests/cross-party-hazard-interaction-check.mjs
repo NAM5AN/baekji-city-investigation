@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 const source = fs.readFileSync("cross-party-hazard-interaction.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 
 function store() {
   const values = new Map();
@@ -49,6 +50,7 @@ context.DAY1_DATA = {
 context.sessionStorage.setItem("baekji_city_mvp_current_user_v034", "test_a");
 
 vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, context, { filename: "cross-party-hazard-interaction.js" });
 const api = context.__BAEKJI_CROSS_PARTY_HAZARD__;
 assert(api, "cross-party hazard test API should be exposed");
@@ -123,6 +125,7 @@ const interactionContext = vm.createContext({ console, window: {}, structuredClo
 interactionContext.window = interactionContext;
 interactionContext.DAY1_DATA = {};
 vm.runInContext(runtimeUtils, interactionContext, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, interactionContext, { filename: "runtime-domain-rules.js" });
 vm.runInContext(interactionSource, interactionContext, { filename: "character-interaction-ai.js" });
 const interactionApi = interactionContext.__BAEKJI_CHARACTER_INTERACTION_TEST__;
 assert(interactionApi, "general character interaction test API should be exposed");
