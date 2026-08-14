@@ -1935,7 +1935,14 @@
   }
 
   function systemLogEntries(session) {
-    return session.logs.filter((entry) => entry.type === "action-input" || (!entry.actorId && entry.type !== "interaction" && entry.type !== "chat-divider"));
+    const userId = String(currentUserId() || "");
+    return session.logs.filter((entry) => {
+      const recipients = Array.isArray(entry?.recipientCharacterIds) ? entry.recipientCharacterIds.map(String) : [];
+      const excluded = Array.isArray(entry?.excludedCharacterIds) ? entry.excludedCharacterIds.map(String) : [];
+      if (recipients.length && !recipients.includes(userId)) return false;
+      if (excluded.includes(userId)) return false;
+      return entry.type === "action-input" || (!entry.actorId && entry.type !== "interaction" && entry.type !== "chat-divider");
+    });
   }
 
   function chatScopeKey(session) {

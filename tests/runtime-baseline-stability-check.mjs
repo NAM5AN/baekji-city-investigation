@@ -100,10 +100,10 @@ assert.equal(api.isFreshNarrationPending({ actionNarrationPending: true }, base)
 assert.equal(api.isFreshNarrationPending({ actionNarrationPending: false, actionNarrationPendingAt: base }, base + 1), false);
 
 const html = fs.readFileSync("index.html", "utf8");
-assert.ok(html.includes("runtime-baseline-stability.js?v=0.4.4"));
+assert.ok(html.includes("runtime-baseline-stability.js?v=0.4.5&stage3a=1&stage3b=1&transfer-privacy=1"));
 assert.ok(html.indexOf("action-log-sync.js") < html.indexOf("runtime-baseline-stability.js"), "stability guard must run after the action pending-marker layer");
-assert.match(html, /app\.js\?v=0\.4\.9[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/);
-assert.ok(html.indexOf("runtime-baseline-stability.js") < html.indexOf("app.js?v=0.4.9"), "stability guard must observe the first investigation render");
+assert.match(html, /app\.js\?v=0\.4\.11[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1/);
+assert.ok(html.indexOf("runtime-baseline-stability.js?v=0.4.5&stage3a=1&stage3b=1&transfer-privacy=1") < html.indexOf("app.js?v=0.4.11&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1"), "stability guard must observe the first investigation render");
 assert.match(source, /retro-action-result-pending\.retro-action-result-stale\{display:block!important\}/);
 assert.match(source, /needsChronologyRepair/);
 assert.match(source, /if \(!session \|\| !needsChronologyRepair\(session\)\) return;/);

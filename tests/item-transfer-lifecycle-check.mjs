@@ -17,7 +17,7 @@ assert.match(sender, /상대방의 답변을 기다리는 중/);
 assert.match(sender, /data-transfer-cancel/);
 assert.match(sender, /data-transfer-sender-bar/);
 assert.match(css, /retro-transfer-sender-actions/);
-assert.match(index, /item-transfer-lifecycle\.js\?v=0\.3\.41/);
-assert.match(index, /item-transfer-sender\.js\?v=0\.3\.42/);
+assert.match(index, /item-transfer-lifecycle\.js\?v=0\.3\.44&transfer-privacy=1/);
+assert.match(index, /item-transfer-sender\.js\?v=0\.3\.43&transfer-privacy=1/);
 
 console.log("item transfer lifecycle checks passed");

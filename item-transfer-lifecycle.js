@@ -20,13 +20,14 @@
       .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
   }
 
-  function appendLog(session, text, offer, decision, reason) {
+  function appendLog(session, text, offer, decision, reason, visibility = {}) {
     if (!session) return;
     if (!Array.isArray(session.logs)) session.logs = [];
-    const duplicate = session.logs.some((entry) => entry?.itemTransferOfferId === offer.id && entry?.itemTransferDecision === decision);
+    const audience = visibility.recipientCharacterIds ? "participants" : "observers";
+    const duplicate = session.logs.some((entry) => entry?.itemTransferOfferId === offer.id && entry?.itemTransferDecision === decision && entry?.itemTransferAudience === audience);
     if (duplicate) return;
     session.logs.push({
-      id: `item_transfer_${decision.toLowerCase()}_${offer.id}_${session.id}`,
+      id: `item_transfer_${decision.toLowerCase()}_${offer.id}_${session.id}_${audience}`,
       type: `item-transfer-${decision.toLowerCase()}`,
       text,
       actorId: null,
@@ -35,15 +36,24 @@
       itemTransferOfferId: offer.id,
       itemTransferDecision: decision,
       itemTransferReason: reason || "",
+      itemTransferAudience: audience,
+      ...visibility,
     });
   }
 
   function transferSessions(state, offer) {
+    const sourceSession = state?.sessions?.[offer.sourceSessionId] || T.sessionOf(state, offer.giverId);
+    const observerSessions = Object.values(state?.sessions || {}).filter((session) =>
+      session?.status === "ACTIVE" &&
+      session.variant === sourceSession?.variant &&
+      T.scope(session) === offer.sourceScopeKey
+    );
     const sessions = [
       state?.sessions?.[offer.sourceSessionId],
       state?.sessions?.[offer.receiverSessionId],
       T.sessionOf(state, offer.giverId),
       T.sessionOf(state, offer.receiverId),
+      ...observerSessions,
     ].filter(Boolean);
     return [...new Map(sessions.map((session) => [session.id, session])).values()];
   }
@@ -52,8 +62,8 @@
     if (!state || !offer || resolution(state, offer.id)) return false;
     const itemName = offer.itemSnapshot?.displayName || T.display(offer.itemSnapshot || {}) || "물품";
     const text = resolvedBy === offer.giverId
-      ? `${T.uname(offer.giverId)}가 ${T.uname(offer.receiverId)}에게 건네려던 ${itemName} ×${offer.quantity} 전달을 취소했다. 물품은 원래 소유자에게 그대로 남았다.`
-      : `${T.uname(offer.giverId)}와 ${T.uname(offer.receiverId)}가 서로 다른 장소로 이동해 ${itemName} ×${offer.quantity} 전달이 자동 취소됐다. 물품은 원래 소유자에게 그대로 남았다.`;
+      ? `${T.uname(offer.giverId, state)}가 ${T.uname(offer.receiverId, state)}에게 건네려던 ${itemName} ×${offer.quantity} 전달을 취소했다. 물품은 원래 소유자에게 그대로 남았다.`
+      : `${T.uname(offer.giverId, state)}와 ${T.uname(offer.receiverId, state)}가 서로 다른 장소로 이동해 ${itemName} ×${offer.quantity} 전달이 자동 취소됐다. 물품은 원래 소유자에게 그대로 남았다.`;
 
     const result = {
       id: `item_transfer_resolution_${offer.id}`,
@@ -66,7 +76,13 @@
       version: 1,
     };
     (state.itemTransferResolutions || (state.itemTransferResolutions = [])).push(result);
-    transferSessions(state, offer).forEach((session) => appendLog(session, text, offer, "CANCELLED", reason));
+    transferSessions(state, offer).forEach((session) => {
+      T.transferLogEntries(session, text, "CANCELLED", offer.giverId, offer.receiverId, {
+        scopeKey: offer.sourceScopeKey || "",
+        itemTransferOfferId: offer.id,
+        itemTransferDecision: "CANCELLED",
+      }).forEach((entry) => appendLog(session, entry.text, offer, "CANCELLED", reason, entry));
+    });
     return true;
   }
 
