@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.93";
+  const VERSION = "0.3.94";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -47,7 +47,7 @@
     const nextReady = !effectiveReady(party, userId);
     party.readyStateBy[userId] = { ready: nextReady, at };
     rebuildReadyBy(party);
-    if (party.status === "COMPOSITION_CONFIRMED") party.status = "READY_CHECK";
+    if (party.status === "COMPOSITION_CONFIRMED" && party.creatorId === userId) return enterReadyCheckState(snapshot, partyId, userId, at).snapshot;
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
     return draft;
   }
@@ -94,6 +94,22 @@
     return draft;
   }
 
+  function enterReadyCheckState(snapshot, partyId, leaderId, at = Date.now()) {
+    const draft = clone(snapshot);
+    const party = draft?.parties?.[partyId];
+    if (!party || party.creatorId !== leaderId || party.sessionId || party.status !== "COMPOSITION_CONFIRMED") return { snapshot: draft, cancelledIds: [], shouldNotify: false };
+    const members = unique(party.memberIds);
+    const declined = new Set(unique(party.declinedIds));
+    const cancelledIds = unique(party.invitedIds).filter((id) => !members.includes(id) && !declined.has(id) && !draft.characters?.[id]?.currentPartyId);
+    party.invitedIds = [];
+    ensureReadyStateMap(party, at);
+    party.readyStateBy[leaderId] = { ready: !effectiveReady(party, leaderId), at };
+    rebuildReadyBy(party);
+    party.status = "READY_CHECK";
+    party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
+    return { snapshot: draft, cancelledIds, shouldNotify: cancelledIds.length > 0 };
+  }
+
   function rollbackBriefingState(snapshot, sessionId, leaderId, at = Date.now()) {
     const draft = clone(snapshot);
     const session = draft?.sessions?.[sessionId];
@@ -119,6 +135,7 @@
     lockCompositionPreserveReadyState,
     reopenRecruitingPreserveReadyState,
     backToCompositionState,
+    enterReadyCheckState,
     rollbackBriefingState,
   });
   if (typeof window !== "undefined") window.__BAEKJI_PARTY_PREFLIGHT_FLOW_TEST__ = TEST_API;
