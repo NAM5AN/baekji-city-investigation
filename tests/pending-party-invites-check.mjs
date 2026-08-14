@@ -149,7 +149,7 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.9[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/, "app cache key must identify the collapsed confirmed-ready, guarded-departure, and Stage 3-C caller-adoption flow");
+assert.match(index, /app\.js\?v=0\.4\.11[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1/, "app cache key must identify the current combined flow");
 assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1&stage3b=1/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.68/);
 assert.match(index, /party-flow-sync\.js\?v=0\.3\.67/);

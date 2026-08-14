@@ -106,7 +106,7 @@
         <div class="retro-transfer-actions"><button type="button" class="retro-modal-button danger" data-transfer-reject>거절</button><button type="button" class="retro-modal-button primary" data-transfer-accept>수락</button></div>
       </section>
     </div>`;
-    root.querySelector(".retro-transfer-sender strong").textContent = T.uname(offer.giverId);
+    root.querySelector(".retro-transfer-sender strong").textContent = T.uname(offer.giverId, state);
     root.querySelector("#transfer-modal-title").textContent = item.displayName || T.display(item);
     root.querySelector(".retro-transfer-category").textContent = `${item.category || "일반"} · 기본 물품 ${item.baseItemId || offer.baseItemId || "-"}`;
     root.querySelector("[data-transfer-state]").textContent = item.stateLabel || T.label(item);

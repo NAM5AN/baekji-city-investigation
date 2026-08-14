@@ -24,7 +24,7 @@ assert.match(app, /startSessionState/, "atomic confirmed-departure reducer must 
 assert.doesNotMatch(ux, /party\.status = "READY_CHECK"/, "UX runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(preflight, /party\.status = "READY_CHECK"/, "preflight runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(ux, /window\.alert/, "party readiness must not use browser alerts");
-assert.match(index, /app\.js\?v=0\.4\.9[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/, "app cache key must identify the collapsed confirmed-ready, guarded-departure, and Stage 3-C caller-adoption flow");
+assert.match(index, /app\.js\?v=0\.4\.11[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1/, "app cache key must identify the current combined flow");
 
 const apiEnd = app.indexOf("  function renderParty(partyId)");
 const helperSource = `${app.slice(0, apiEnd)}\n})();`;

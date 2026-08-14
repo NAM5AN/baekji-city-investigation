@@ -4,6 +4,7 @@
   const { spatialScopeKey } = window.__BAEKJI_DOMAIN_RULES__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const USER_KEY = "baekji_city_mvp_current_user_v034";
   const NARRATION_PENDING_KEY = "actionNarrationPending";
   const NARRATION_PENDING_AT_KEY = "actionNarrationPendingAt";
   const NARRATION_ABORT_MS = 15_000;
@@ -180,10 +181,14 @@
   }
 
   function visibleSystemEntries(session) {
-    return (session?.logs || []).filter((entry) =>
-      entry?.type === "action-input" ||
-      (!entry?.actorId && entry?.type !== "interaction" && entry?.type !== "chat-divider")
-    );
+    const userId = (() => { try { return String(sessionStorage.getItem(USER_KEY) || ""); } catch { return ""; } })();
+    return (session?.logs || []).filter((entry) => {
+      const recipients = Array.isArray(entry?.recipientCharacterIds) ? entry.recipientCharacterIds.map(String) : [];
+      const excluded = Array.isArray(entry?.excludedCharacterIds) ? entry.excludedCharacterIds.map(String) : [];
+      return (!recipients.length || recipients.includes(userId))
+        && !excluded.includes(userId)
+        && (entry?.type === "action-input" || (!entry?.actorId && entry?.type !== "interaction" && entry?.type !== "chat-divider"));
+    });
   }
 
   const TEST_API = Object.freeze({

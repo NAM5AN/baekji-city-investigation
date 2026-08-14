@@ -1437,12 +1437,12 @@
     commitDecision: commitFlexibleHazardDecision,
   });
 
-  function notifyDeparture(draft, session, route) {
+  function notifyDeparture(draft, session, route, token) {
     const originNode = session.currentNode;
     const witnesses = fieldSessions(draft, session, `node:${originNode}`);
     if (!witnesses.length) return;
     const leavingNames = joinNames(session.memberIds);
-    witnesses.forEach((candidate) => appendLog(candidate, "presence", `${leavingNames}가 ${nodeDisplayName(originNode)}을 떠나 ${nodeDisplayName(route.to)} 방향으로 이동을 시작했다.`));
+    witnesses.forEach((candidate) => appendLog(candidate, "presence", `${leavingNames}가 ${nodeDisplayName(originNode)}을 떠나 ${nodeDisplayName(route.to)} 방향으로 이동을 시작했다.`, null, movementLogMeta(token, candidate.id, "departure-presence")));
   }
 
   function announceRouteEncounter(draft, session, route, token) {
@@ -1935,7 +1935,14 @@
   }
 
   function systemLogEntries(session) {
-    return session.logs.filter((entry) => entry.type === "action-input" || (!entry.actorId && entry.type !== "interaction" && entry.type !== "chat-divider"));
+    const userId = String(currentUserId() || "");
+    return session.logs.filter((entry) => {
+      const recipients = Array.isArray(entry?.recipientCharacterIds) ? entry.recipientCharacterIds.map(String) : [];
+      const excluded = Array.isArray(entry?.excludedCharacterIds) ? entry.excludedCharacterIds.map(String) : [];
+      if (recipients.length && !recipients.includes(userId)) return false;
+      if (excluded.includes(userId)) return false;
+      return entry.type === "action-input" || (!entry.actorId && entry.type !== "interaction" && entry.type !== "chat-divider");
+    });
   }
 
   function chatScopeKey(session) {
@@ -3522,10 +3529,11 @@
         appendLog(session, "fail", `${DEMO_USERS[uid].name}는 ${nodeDisplayName(route.to)} 방향으로 이동하려 한다. 그러나 눈앞의 통로는 그 장소와 이어져 있지 않아 발을 옮길 수 없다.`);
         return;
       }
-      notifyDeparture(draft, session, route);
+      const token = id("move");
+      notifyDeparture(draft, session, route, token);
       session.choiceReveal = null;
       session.movement = {
-        token: id("move"), routeId: route.id, fromNode: route.from, targetNode: route.to,
+        token, routeId: route.id, fromNode: route.from, targetNode: route.to,
         actorId: uid, startedAt: Date.now(), resolveAt: Date.now() + MOVE_DELAY_MS,
         actionText: actionContext?.actionText || "",
         itemUse: actionContext?.itemUse?.status === "usable" ? {

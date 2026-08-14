@@ -6,7 +6,8 @@ const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 assert.match(index, /cloud-state-sync\.js\?v=0\.4\.2&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1/, "movement cloud reconciliation must ship behind a fresh browser cache key");
-assert.match(index, /app\.js\?v=0\.4\.9&fix=0b1[^"']*movement-terminal=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/, "movement terminal markers must ship behind a fresh browser cache key");
+assert.match(index, /app\.js\?v=0\.4\.11&fix=0b1[^"']*movement-terminal=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1/, "movement terminal markers must ship behind the exact fresh cache key");
+assert.match(index, /entry-presence-fix\.js\?v=0\.3\.89&isolation=1&movement-departure-presence=1/);
 
 class FakeStorage {
   constructor() {

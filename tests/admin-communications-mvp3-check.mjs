@@ -184,11 +184,12 @@ assert.ok(adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4") < adminHtml.inde
 
 assert.match(entryPresence, /ENTRY_NODE = "E_ENTRY"/);
 assert.match(entryPresence, /entry_meet_/);
-assert.match(entryPresence, /entry_depart_/);
+assert.match(entryPresence, /movement:\$\{token\}:\$\{witness\.id\}:departure-presence/);
+assert.match(entryPresence, /movementEffect: "departure-presence"/);
 assert.match(entryPresence, /hasRecentMeetingLog/);
 assert.match(entryPresence, /hasRecentDepartureLog/);
 assert.match(entryPresence, /a\.variant !== b\.variant/);
-assert.match(index, /entry-presence-fix\.js\?v=0\.3\.88/);
+assert.match(index, /entry-presence-fix\.js\?v=0\.3\.89&isolation=1&movement-departure-presence=1/);
 
 assert.match(senderUi, /DEFAULT_LABEL = "SYSTEM"/);
 assert.match(senderUi, /"안내방송"/);
@@ -212,7 +213,7 @@ assert.match(motionJs, /\.retro-system-line:not\(\.retro-admin-system-line\)/);
 assert.match(playerCss, /retro-admin-system-line/);
 assert.match(playerCss, /retro-admin-system-chat/);
 assert.match(index, /admin-system-feed\.js\?v=0\.3\.88/);
-assert.match(index, /render-motion-stability\.js\?v=0\.3\.88/);
+assert.match(index, /render-motion-stability\.js\?v=0\.3\.89&transfer-privacy=1/);
 
 assert.match(adminHtml, /admin-communications-mvp3\.js\?v=0\.3\.0/);
 assert.match(vercel, /\/api\/admin-communications/);

@@ -69,7 +69,7 @@
     UI.toast(title, itemName);
   }
 
-  function renderSenderModal(offer) {
+  function renderSenderModal(offer, state) {
     const root = document.getElementById("modal-root");
     if (!root) return;
     if (root.querySelector("[data-item-transfer-modal]")) return;
@@ -96,7 +96,7 @@
       </section>
     </div>`;
     const modal = root.querySelector(`[data-item-transfer-sender-modal="${offer.id}"]`);
-    modal.querySelector(".retro-transfer-sender strong").textContent = T.uname(offer.receiverId);
+    modal.querySelector(".retro-transfer-sender strong").textContent = T.uname(offer.receiverId, state);
     modal.querySelector("#transfer-sender-modal-title").textContent = item.displayName || T.display(item);
     modal.querySelector(".retro-transfer-category").textContent = `${item.category || "일반"} · 기본 물품 ${item.baseItemId || offer.baseItemId || "-"}`;
     modal.querySelector("[data-transfer-sender-state]").textContent = item.stateLabel || T.label(item);
@@ -120,7 +120,7 @@
       resolutionNotice(state, previous);
       return;
     }
-    renderSenderModal(offer);
+    renderSenderModal(offer, state);
   }
 
   let refreshQueued = false;
