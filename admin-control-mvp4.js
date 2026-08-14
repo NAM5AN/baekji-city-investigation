@@ -5,7 +5,7 @@
   const AUDIT_API = "/api/admin-audit";
   const SNAPSHOT_API = "/api/admin-snapshot";
   const DATA = window.DAY1_DATA || { places: {}, variants: {}, itemCatalog: {} };
-  const dashboardModalRoot = document.getElementById("admin-modal-root");
+  const dashboardModalRoot = () => document.getElementById("admin-modal-root");
   if (window.__BAEKJI_ADMIN_CONTROL_MVP4__) return;
 
   let controlRoot = null;
@@ -283,7 +283,7 @@
   }
 
   function augmentDetail(kind, id) {
-    const body = dashboardModalRoot?.querySelector(".admin-modal-body");
+    const body = dashboardModalRoot()?.querySelector(".admin-modal-body");
     if (!body || !kind || !id) return;
     body.querySelector("[data-admin-control-entry]")?.remove();
     if (!new Set(["character", "party"]).has(kind)) return;
