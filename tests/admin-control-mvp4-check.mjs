@@ -40,6 +40,8 @@ const base = {
     },
   },
   itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
+  fieldItemPlacementsByVariant: { a: {}, b: {}, c: {}, d: {} },
+  fieldItemPlacementClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
 };
 
 const status = applyOperation(base, {
@@ -99,6 +101,8 @@ assert.equal(resetState.sessionSeq, 0);
 assert.deepEqual(resetState.parties, {});
 assert.deepEqual(resetState.sessions, {});
 assert.deepEqual(resetState.itemClaimsByVariant, { a: {}, b: {}, c: {}, d: {} });
+assert.deepEqual(resetState.fieldItemPlacementsByVariant, { a: {}, b: {}, c: {}, d: {} });
+assert.deepEqual(resetState.fieldItemPlacementClaimsByVariant, { a: {}, b: {}, c: {}, d: {} });
 for (const character of Object.values(resetState.characters)) {
   assert.equal(character.contamination, 0);
   assert.equal(character.symptom, "안정");
@@ -113,6 +117,8 @@ assert.deepEqual(worldSummary(resetState), {
   partyCount: 0,
   sessionCount: 0,
   claimedItemCount: 0,
+  placedFieldItemCount: 0,
+  claimedFieldItemCount: 0,
 });
 
 const html = await readFile(new URL("../admin-dashboard.html", import.meta.url), "utf8");
@@ -129,8 +135,8 @@ const vercel = JSON.parse(vercelRaw);
 const cloud = await readFile(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
 
 assert.match(html, /OBSERVE · COMMUNICATION · CONTROL/);
-assert.match(html, /admin-control-mvp4\.css\?v=0\.4\.1&stage4-item-transfer=1/);
-assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.4&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1/);
+assert.match(html, /admin-control-mvp4\.css\?v=0\.4\.2&stage4-item-transfer=1&item-disposition=1/);
+assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.5&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1/);
 assert.match(html, /admin-control-status-mvp4\.js\?v=0\.4\.0/);
 assert.match(html, /admin-world-reset\.js\?v=0\.5\.1/);
 assert.match(ui, /감사 로그/);

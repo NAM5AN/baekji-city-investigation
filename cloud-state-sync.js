@@ -502,6 +502,17 @@
           else claims[claimKey] = JSON.parse(JSON.stringify(claimChange.claim));
         }
       }
+      const fieldPlacementChange = data.fieldPlacementChange;
+      if (fieldPlacementChange && typeof fieldPlacementChange === "object") {
+        const variant = String(fieldPlacementChange.variant || "");
+        const placementId = String(fieldPlacementChange.placementId || "");
+        if (variant && placementId) {
+          state.fieldItemPlacementsByVariant ||= {};
+          const placements = state.fieldItemPlacementsByVariant[variant] || (state.fieldItemPlacementsByVariant[variant] = {});
+          if (fieldPlacementChange.placement == null) delete placements[placementId];
+          else placements[placementId] = JSON.parse(JSON.stringify(fieldPlacementChange.placement));
+        }
+      }
       return state;
     }
 
@@ -548,10 +559,49 @@
     return merged;
   }
 
+  function reconcileFieldItemPlacements(remote, local, merged) {
+    if (!merged || merged.version !== 3) return merged;
+    merged.fieldItemPlacementsByVariant ||= {};
+    merged.fieldItemPlacementClaimsByVariant ||= {};
+    ["a", "b", "c", "d"].forEach((variant) => {
+      const placements = merged.fieldItemPlacementsByVariant?.[variant] || {};
+      const remoteClaims = remote?.fieldItemPlacementClaimsByVariant?.[variant] || {};
+      const localClaims = local?.fieldItemPlacementClaimsByVariant?.[variant] || {};
+      const claims = {};
+      Object.keys(placements).forEach((placementId) => {
+        const remoteClaim = remoteClaims[placementId];
+        const localClaim = localClaims[placementId];
+        const winner = remoteClaim || localClaim;
+        if (!winner) return;
+        claims[placementId] = JSON.parse(JSON.stringify(winner));
+        [remoteClaim, localClaim].filter(Boolean).forEach((candidate) => {
+          if (candidate === winner || (candidate.characterId === winner.characterId && candidate.targetInventoryKey === winner.targetInventoryKey)) return;
+          const inventory = merged.characters?.[candidate.characterId]?.inventory;
+          const item = inventory?.[candidate.targetInventoryKey];
+          if (item?._fieldPlacementId === placementId) delete inventory[candidate.targetInventoryKey];
+        });
+        const placement = placements[placementId];
+        const character = merged.characters?.[winner.characterId];
+        const targetKey = String(winner.targetInventoryKey || placement?.sourceInventoryKey || "");
+        if (!character || !targetKey || !placement?.item) return;
+        character.inventory ||= {};
+        if (!character.inventory[targetKey]) {
+          const item = JSON.parse(JSON.stringify(placement.item));
+          if (targetKey !== String(placement.sourceInventoryKey || "")) item.itemId = targetKey;
+          item._fieldPlacementId = placementId;
+          character.inventory[targetKey] = item;
+        }
+      });
+      merged.fieldItemPlacementsByVariant[variant] = placements;
+      merged.fieldItemPlacementClaimsByVariant[variant] = claims;
+    });
+    return merged;
+  }
+
   function mergeCloudStates(remote, local) {
     // Legacy contract equivalent: reconcileAdminControl(result.state, localState, mergeValues(result.state, localState))
     const merged = reconcileMovementTransitions(remote, local, mergeValues(remote, local));
-    return reconcileCompletedPartyDisbands(remote, local, reconcileAdminControl(remote, local, merged));
+    return reconcileFieldItemPlacements(remote, local, reconcileCompletedPartyDisbands(remote, local, reconcileAdminControl(remote, local, merged)));
   }
 
   function valuesEqual(left, right) {
@@ -632,7 +682,7 @@
   function rebaseUnsyncedOverlay(base, desired, latestRemote) {
     if (!base || !desired || !latestRemote) return desired || latestRemote;
     const rebased = rebaseUnsyncedValue(base, desired, latestRemote, []);
-    return reconcileCompletedPartyDisbands(latestRemote, desired, reconcileAdminControl(latestRemote, desired, rebased));
+    return reconcileFieldItemPlacements(latestRemote, desired, reconcileCompletedPartyDisbands(latestRemote, desired, reconcileAdminControl(latestRemote, desired, rebased)));
   }
 
   function writerId() {
@@ -1062,6 +1112,7 @@
     adminControlHistory,
     applyAdminControlPatch,
     reconcileAdminControl,
+    reconcileFieldItemPlacements,
     movementTerminalMarker,
     legacyMovementCompletionEvidence,
     synthesizeLegacyMovementTransition,

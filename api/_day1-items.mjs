@@ -15,4 +15,16 @@ export function worldItemSource(objectId, itemId) {
   return mapping ? { objectId: sourceObjectId, itemId: catalogItemId, mapping, catalog: catalogItem(catalogItemId) } : null;
 }
 
+export function fieldObjectSource(objectId) {
+  const sourceObjectId = String(objectId || "");
+  for (const [detailId, entries] of Object.entries(data.objectsByDetail || {})) {
+    const object = (Array.isArray(entries) ? entries : [entries]).find((entry) => String(entry?.id || "") === sourceObjectId);
+    if (!object) continue;
+    const place = Object.values(data.places || {}).find((candidate) => (candidate?.details || []).some((detail) => String(detail?.id || "") === String(detailId)));
+    const detail = (place?.details || []).find((candidate) => String(candidate?.id || "") === String(detailId)) || null;
+    return { object: JSON.parse(JSON.stringify(object)), detail: detail ? JSON.parse(JSON.stringify(detail)) : null, place: place ? JSON.parse(JSON.stringify(place)) : null };
+  }
+  return null;
+}
+
 export { data as day1ItemData };
