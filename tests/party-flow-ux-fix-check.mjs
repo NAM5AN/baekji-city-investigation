@@ -60,6 +60,15 @@ assert.ok(accepted.parties.p1.memberIds.includes("member"));
 assert.ok(!accepted.parties.p1.invitedIds.includes("member"), "accepted invite must disappear");
 assert.equal(base.characters.member.currentPartyId, null, "state helpers must stay pure");
 
+const confirmedInvite = structuredClone(base);
+confirmedInvite.parties.p1.status = "COMPOSITION_CONFIRMED";
+confirmedInvite.parties.p1.confirmedBy = ["leader", "member2"];
+const acceptedDuringConfirmation = api.acceptInviteState(confirmedInvite, "p1", "member");
+assert.equal(acceptedDuringConfirmation.characters.member.currentPartyId, "p1", "composition-confirmed pending invites must still be accepted");
+assert.equal(acceptedDuringConfirmation.parties.p1.status, "COMPOSITION_CONFIRMED");
+assert.ok(acceptedDuringConfirmation.parties.p1.confirmedBy.includes("member"), "a late accepted member must be composition-confirmed atomically");
+assert.ok(!api.effectiveReady(acceptedDuringConfirmation.parties.p1, "member"), "a late accepted member must remain unready");
+
 const locked = api.lockCompositionState(accepted, "p1", "leader", 1000);
 assert.equal(locked.parties.p1.status, "COMPOSITION_CONFIRMED", "leader alone locks composition");
 assert.deepEqual(Array.from(locked.parties.p1.confirmedBy), ["leader", "member2", "member"]);
@@ -67,7 +76,7 @@ assert.equal(api.readyCount(locked.parties.p1), 0);
 assert.equal(api.effectiveReady(locked.parties.p1, "member"), false);
 
 const memberReady = api.toggleReadyState(locked, "p1", "member", 1100);
-assert.equal(memberReady.parties.p1.status, "READY_CHECK");
+assert.equal(memberReady.parties.p1.status, "COMPOSITION_CONFIRMED", "member readiness must not move the leader-owned ready-stage transition");
 assert.equal(api.effectiveReady(memberReady.parties.p1, "member"), true);
 assert.ok(memberReady.parties.p1.readyBy.includes("member"));
 
@@ -100,9 +109,9 @@ assert.match(css, /party-ready-state\.is-ready/);
 assert.match(css, /party-ready-state\.is-waiting/);
 assert.match(css, /party-ready-count\.is-all-ready/);
 assert.match(index, /party-flow-ux-fix\.css\?v=0\.3\.81/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.83/);
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.83") < index.indexOf("party-leadership-flow.js?v=0.3.66"), "fixed invite interception must run before legacy leadership capture handlers");
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.83") < index.indexOf("party-flow-sync.js?v=0.3.65"), "fixed state flow must own invite/ready clicks before legacy flow sync");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.84/);
+assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.84") < index.indexOf("party-leadership-flow.js?v=0.3.67"), "fixed invite interception must run before legacy leadership capture handlers");
+assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.84") < index.indexOf("party-flow-sync.js?v=0.3.66"), "fixed state flow must own invite/ready clicks before legacy flow sync");
 assert.doesNotMatch(source, /function decorateLeaderParty/, "party UI must render directly instead of being decorated after paint");
 assert.doesNotMatch(source, /function decorateMemberHome|function decorateBriefingRoster/, "home and briefing must render directly instead of being decorated after paint");
 
@@ -177,8 +186,8 @@ assert.doesNotMatch(renderBriefing, /조사조 확인/, "redundant briefing rost
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-ready/);
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-waiting/);
 assert.match(index, /party-preflight-flow-fix\.css\?v=0\.3\.90/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.93/);
-assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.86") < index.indexOf("party-preflight-flow-fix.js?v=0.3.93"), "preflight behavior must run after membership UI normalization");
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.94/);
+assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.86") < index.indexOf("party-preflight-flow-fix.js?v=0.3.94"), "preflight behavior must run after membership UI normalization");
 assert.doesNotMatch(preflightSource, /function decorateLeaderParty/, "preflight party UI must not patch the rendered party page");
 assert.doesNotMatch(preflightSource, /function decorateMemberHome|function decorateBriefing/, "preflight runtime must not patch home or briefing");
 
@@ -216,7 +225,7 @@ assert.match(presenceLabelSource, /PARTY_NAME_UI/, "presence labels must reuse t
 assert.match(index, /party-ui-stability\.css\?v=0\.3\.91/);
 assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
 assert.match(index, /entry-presence-party-label-fix\.js\?v=0\.3\.91/);
-assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.93") < index.indexOf("party-ui-stability.js?v=0.3.93"), "preflight behavior must load before the party naming runtime");
+assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.94") < index.indexOf("party-ui-stability.js?v=0.3.93"), "preflight behavior must load before the party naming runtime");
 assert.ok(index.indexOf("party-ui-stability.js?v=0.3.93") < index.indexOf("entry-presence-party-label-fix.js?v=0.3.91"), "presence label normalizer must consume the party display-name API");
 assert.doesNotMatch(stabilitySource, /function ensureReadyBackButton/, "the stability layer must not recreate the party back button");
 assert.doesNotMatch(stabilitySource, /function ensurePartyNameControl/, "the stability layer must not recreate the party name control");

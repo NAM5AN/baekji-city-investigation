@@ -491,7 +491,7 @@
     const character = currentCharacter();
     const party = getUserParty(uid);
     const session = getUserSession(uid);
-    const invitations = Object.values(state.parties).filter((p) => p.invitedIds.includes(uid) && !p.memberIds.includes(uid) && p.status !== "CLOSED");
+    const invitations = Object.values(state.parties).filter((p) => p.invitedIds.includes(uid) && !p.memberIds.includes(uid) && !p.declinedIds?.includes(uid) && PARTY_INVITE_ACCEPT_STATUSES.includes(p.status));
     const inventoryCount = Object.values(character.inventory || {}).reduce((sum, item) => sum + item.quantity, 0);
     const memberPartyHome = Boolean(party && party.creatorId !== uid && unique(party.memberIds).includes(uid));
     const partyMembers = party ? unique(party.memberIds) : [];
@@ -584,21 +584,17 @@
 
   function acceptInvite(partyId) {
     const uid = currentUserId();
-    mutate("accept-invite", (draft) => {
-      const party = draft.parties[partyId];
-      if (!party || party.status !== "RECRUITING") return;
-      if (!party.memberIds.includes(uid)) party.memberIds.push(uid);
-      draft.characters[uid].currentPartyId = partyId;
-    });
+    state = acceptInviteState(loadState(), partyId, uid);
+    saveState("accept-invite");
+    render();
     go(`party/${partyId}`);
   }
 
   function declineInvite(partyId) {
     const uid = currentUserId();
-    mutate("decline-invite", (draft) => {
-      const party = draft.parties[partyId];
-      if (party && !party.declinedIds.includes(uid)) party.declinedIds.push(uid);
-    });
+    state = declineInviteState(loadState(), partyId, uid);
+    saveState("decline-invite");
+    render();
     toast("초대를 거절했습니다.");
   }
 
@@ -622,6 +618,90 @@
       .filter((memberId) => effectivePartyReady(party, memberId));
   }
 
+  const PARTY_INVITE_ACCEPT_STATUSES = Object.freeze(["RECRUITING", "COMPOSITION_CONFIRMED"]);
+
+  function clonePartyInviteSnapshot(snapshot) {
+    return typeof structuredClone === "function" ? structuredClone(snapshot) : JSON.parse(JSON.stringify(snapshot));
+  }
+
+  function activePendingInviteIds(snapshot, partyId) {
+    const party = snapshot?.parties?.[partyId];
+    if (!party || !PARTY_INVITE_ACCEPT_STATUSES.includes(party.status)) return [];
+    const members = new Set(party.memberIds || []);
+    const declined = new Set(party.declinedIds || []);
+    return [...new Set(party.invitedIds || [])].filter((id) => !members.has(id) && !declined.has(id) && !snapshot?.characters?.[id]?.currentPartyId);
+  }
+
+  function inviteCandidateIds(snapshot, partyId, leaderId) {
+    const party = snapshot?.parties?.[partyId];
+    if (!party || party.creatorId !== leaderId) return [];
+    const unavailable = new Set([...(party.memberIds || []), ...(party.invitedIds || [])]);
+    return Object.keys(snapshot?.characters || {}).filter((id) => id !== leaderId && !unavailable.has(id) && !snapshot.characters[id]?.currentPartyId);
+  }
+
+  function inviteState(snapshot, partyId, inviteeId, leaderId) {
+    const draft = clonePartyInviteSnapshot(snapshot);
+    const party = draft?.parties?.[partyId];
+    const invitee = draft?.characters?.[inviteeId];
+    if (!party || party.creatorId !== leaderId || party.sessionId || party.status !== "RECRUITING" || !invitee || invitee.currentPartyId) return draft;
+    if (!party.memberIds.includes(inviteeId) && !party.invitedIds.includes(inviteeId)) party.invitedIds.push(inviteeId);
+    party.declinedIds = (party.declinedIds || []).filter((id) => id !== inviteeId);
+    return draft;
+  }
+
+  function cancelInviteState(snapshot, partyId, inviteeId, leaderId) {
+    const draft = clonePartyInviteSnapshot(snapshot);
+    const party = draft?.parties?.[partyId];
+    if (!party || party.creatorId !== leaderId || party.sessionId || !PARTY_INVITE_ACCEPT_STATUSES.includes(party.status) || !party.invitedIds.includes(inviteeId)) return draft;
+    party.invitedIds = party.invitedIds.filter((id) => id !== inviteeId);
+    party.declinedIds = (party.declinedIds || []).filter((id) => id !== inviteeId);
+    return draft;
+  }
+
+  function declineInviteState(snapshot, partyId, inviteeId) {
+    const draft = clonePartyInviteSnapshot(snapshot);
+    const party = draft?.parties?.[partyId];
+    if (!party || !PARTY_INVITE_ACCEPT_STATUSES.includes(party.status) || !party.invitedIds.includes(inviteeId)) return draft;
+    party.invitedIds = party.invitedIds.filter((id) => id !== inviteeId);
+    party.declinedIds = [...new Set([...(party.declinedIds || []), inviteeId])];
+    return draft;
+  }
+
+  function acceptInviteState(snapshot, partyId, inviteeId) {
+    const draft = clonePartyInviteSnapshot(snapshot);
+    const party = draft?.parties?.[partyId];
+    const invitee = draft?.characters?.[inviteeId];
+    if (!party || !invitee || invitee.currentPartyId || !PARTY_INVITE_ACCEPT_STATUSES.includes(party.status) || !party.invitedIds.includes(inviteeId)) return draft;
+    party.memberIds = [...new Set([...(party.memberIds || []), inviteeId])];
+    party.invitedIds = party.invitedIds.filter((id) => id !== inviteeId);
+    party.declinedIds = (party.declinedIds || []).filter((id) => id !== inviteeId);
+    party.confirmedBy = (party.confirmedBy || []).filter((id) => party.memberIds.includes(id));
+    party.readyBy = (party.readyBy || []).filter((id) => id !== inviteeId && party.memberIds.includes(id));
+    if (party.status === "COMPOSITION_CONFIRMED") {
+      party.confirmedBy = [...new Set([...party.confirmedBy, inviteeId])];
+      party.readyStateBy = party.readyStateBy && typeof party.readyStateBy === "object" ? { ...party.readyStateBy } : {};
+      party.readyStateBy[inviteeId] = { ready: false, at: Date.now() };
+    }
+    invitee.currentPartyId = partyId;
+    return draft;
+  }
+
+  function enterReadyCheckState(snapshot, partyId, leaderId, at = Date.now()) {
+    const draft = clonePartyInviteSnapshot(snapshot);
+    const party = draft?.parties?.[partyId];
+    if (!party || party.creatorId !== leaderId || party.sessionId || party.status !== "COMPOSITION_CONFIRMED") return { snapshot: draft, cancelledIds: [], shouldNotify: false };
+    const cancelledIds = activePendingInviteIds(draft, partyId);
+    party.invitedIds = [];
+    party.readyStateBy = party.readyStateBy && typeof party.readyStateBy === "object" ? { ...party.readyStateBy } : {};
+    party.readyStateBy[leaderId] = { ready: !effectivePartyReady(party, leaderId), at };
+    party.readyBy = [...new Set(party.memberIds || [])].filter((id) => effectivePartyReady(party, id));
+    party.status = "READY_CHECK";
+    party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
+    return { snapshot: draft, cancelledIds, shouldNotify: cancelledIds.length > 0 };
+  }
+
+  window.__BAEKJI_PENDING_PARTY_INVITES_TEST__ = Object.freeze({ activePendingInviteIds, inviteCandidateIds, inviteState, cancelInviteState, declineInviteState, acceptInviteState, enterReadyCheckState });
+
   function renderParty(partyId) {
     if (!ensureAuth()) return;
     document.body.classList.add("retro-mode", "retro-page-mode");
@@ -636,7 +716,9 @@
     const readyCount = readyIds.length;
     const allReady = members.length > 0 && readyCount === members.length;
     const step = partyStep(party);
-    const inviteCandidates = Object.values(DEMO_USERS).filter((u) => u.id !== uid && !party.memberIds.includes(u.id) && !party.invitedIds.includes(u.id));
+    const inviteCandidates = inviteCandidateIds(state, partyId, uid).map((id) => ({ ...partyAccount(id), note: DEMO_USERS[id]?.note || "참가 가능" }));
+    const pendingInviteIds = activePendingInviteIds(state, partyId);
+    const pendingInviteLabel = "초대하는 중...";
     const readyStage = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status);
     const ownReady = effectivePartyReady(party, uid);
     const participantHelp = party.status === "RECRUITING"
@@ -669,6 +751,7 @@
           <div class="card-header"><div><h2 class="card-title">참가 캐릭터</h2><p class="muted small">${participantHelp}</p></div>${participantBadge}</div>
           <div class="member-grid">
             ${members.map((memberId) => memberRow(party, memberId)).join("")}
+            ${pendingInviteIds.map((memberId) => pendingInviteRow(memberId, isCreator, pendingInviteLabel)).join("")}
           </div>
         </section>
 
@@ -700,6 +783,7 @@
       </main>`);
 
     document.querySelectorAll("[data-invite]").forEach((el) => el.addEventListener("click", () => inviteUser(partyId, el.dataset.invite)));
+    document.querySelectorAll("[data-party-invite-cancel]").forEach((el) => el.addEventListener("click", () => cancelInvite(partyId, el.dataset.partyInviteCancel)));
     document.querySelector("[data-confirm-composition]")?.addEventListener("click", () => confirmComposition(partyId));
     document.querySelector("[data-ready]")?.addEventListener("click", () => setReady(partyId));
     document.querySelector("[data-start-session]")?.addEventListener("click", () => startSession(partyId));
@@ -708,22 +792,34 @@
   }
 
   function memberRow(party, memberId) {
-    const u = DEMO_USERS[memberId];
+    const u = partyAccount(memberId);
     const confirmed = party.confirmedBy.includes(memberId);
     const ready = effectivePartyReady(party, memberId);
     const statusMarkup = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)
       ? `<span class="party-ready-state ${ready ? "is-ready" : "is-waiting"}">${ready ? "● 준비 완료" : "○ 준비 대기"}</span>`
       : `<span class="badge ${confirmed ? "green" : ""}">${confirmed ? "구성 확인" : "확인 대기"}</span><span class="badge ${ready ? "blue" : ""}">${ready ? "준비 완료" : "준비 대기"}</span>`;
-    return `<div class="member"><div class="member-avatar">${u.initial}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "조장" : "참가 조원"}</div></div><div class="status-pills">${statusMarkup}</div></div>`;
+    return `<div class="member"><div class="member-avatar">${partyAvatarMarkup(u, "party-member-home-avatar-image")}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "조장" : "참가 조원"}</div></div><div class="status-pills">${statusMarkup}</div></div>`;
+  }
+
+  function pendingInviteRow(memberId, isCreator, pendingInviteLabel = "초대하는 중...") {
+    const account = partyAccount(memberId);
+    const cancelMarkup = isCreator ? `<button type="button" class="button small" data-party-invite-cancel="${escapeHtml(memberId)}">초대 취소</button>` : "";
+    return `<div class="member party-pending-invite-row" data-party-pending-invite="${escapeHtml(memberId)}"><div class="member-avatar">${partyAvatarMarkup(account, "party-member-home-avatar-image")}</div><div><div class="list-title">${escapeHtml(account.name)}</div><div class="list-sub">초대 수락 대기</div></div><div class="status-pills">${cancelMarkup}<span class="party-ready-state is-waiting">${escapeHtml(pendingInviteLabel)}</span></div></div>`;
   }
 
   function inviteUser(partyId, userId) {
     if (state.characters[userId].currentPartyId) return toast("초대할 수 없습니다.", "이미 다른 조사조에 참여 중입니다.", "error");
-    mutate("invite-user", (draft) => {
-      const party = draft.parties[partyId];
-      if (party && !party.invitedIds.includes(userId)) party.invitedIds.push(userId);
-    });
-    toast("초대를 전송했습니다.", DEMO_USERS[userId].name);
+    const uid = currentUserId();
+    state = inviteState(loadState(), partyId, userId, uid);
+    saveState("invite-user");
+    render();
+    toast("초대를 전송했습니다.", partyAccount(userId).name);
+  }
+
+  function cancelInvite(partyId, userId) {
+    state = cancelInviteState(loadState(), partyId, userId, currentUserId());
+    saveState("cancel-invite");
+    render();
   }
 
   function confirmComposition(partyId) {
@@ -737,10 +833,22 @@
 
   function setReady(partyId) {
     const uid = currentUserId();
+    const current = loadState();
+    const transition = enterReadyCheckState(current, partyId, uid, Date.now());
+    if (transition.snapshot.parties?.[partyId]?.status === "READY_CHECK" && current.parties?.[partyId]?.status === "COMPOSITION_CONFIRMED" && current.parties?.[partyId]?.creatorId === uid) {
+      if (transition.shouldNotify) window.alert("초대 중인 캐릭터의 초대가 자동으로 취소됩니다.");
+      state = transition.snapshot;
+      saveState("leader-enter-ready-check");
+      render();
+      return;
+    }
     mutate("ready", (draft) => {
       const party = draft.parties[partyId];
-      if (party.status === "COMPOSITION_CONFIRMED") party.status = "READY_CHECK";
-      if (!party.readyBy.includes(uid)) party.readyBy.push(uid);
+      if (!party || !party.memberIds.includes(uid)) return;
+      party.readyStateBy ||= {};
+      const ready = !effectivePartyReady(party, uid);
+      party.readyStateBy[uid] = { ready, at: Date.now() };
+      party.readyBy = party.memberIds.filter((memberId) => effectivePartyReady(party, memberId));
     });
   }
 
@@ -1991,7 +2099,7 @@
       const party = character.currentPartyId ? snapshot.parties?.[character.currentPartyId] || null : null;
       const session = character.currentSessionId ? snapshot.sessions?.[character.currentSessionId] || null : null;
       const invitations = Object.values(snapshot.parties || {})
-        .filter((candidate) => candidate.invitedIds?.includes(userId) && !candidate.memberIds?.includes(userId) && candidate.status !== "CLOSED")
+        .filter((candidate) => candidate.invitedIds?.includes(userId) && !candidate.memberIds?.includes(userId) && !candidate.declinedIds?.includes(userId) && PARTY_INVITE_ACCEPT_STATUSES.includes(candidate.status))
         .map((candidate) => ({ id: candidate.id, name: candidate.name, creatorId: candidate.creatorId, status: candidate.status }))
         .sort((left, right) => String(left.id).localeCompare(String(right.id)));
       return {

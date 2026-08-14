@@ -78,6 +78,15 @@ assert.ok(accepted.parties.party_1.memberIds.includes("test_b"));
 assert.ok(!accepted.parties.party_1.invitedIds.includes("test_b"));
 assert.equal(base.characters.test_b.currentPartyId, null, "pure helper must not mutate source");
 
+const acceptedAfterCompositionLock = structuredClone(base);
+acceptedAfterCompositionLock.parties.party_1.status = "COMPOSITION_CONFIRMED";
+acceptedAfterCompositionLock.parties.party_1.confirmedBy = ["test_a"];
+const confirmedAcceptance = api.acceptInviteState(acceptedAfterCompositionLock, "party_1", "test_b");
+assert.equal(confirmedAcceptance.characters.test_b.currentPartyId, "party_1", "a pending invitation must remain accept-able after composition confirmation");
+assert.ok(confirmedAcceptance.parties.party_1.memberIds.includes("test_b"));
+assert.ok(!confirmedAcceptance.parties.party_1.invitedIds.includes("test_b"));
+assert.equal(confirmedAcceptance.parties.party_1.status, "COMPOSITION_CONFIRMED", "confirmed-stage acceptance must not roll back the party stage");
+
 const declined = api.declineInviteState(base, "party_1", "test_b");
 assert.ok(!declined.parties.party_1.invitedIds.includes("test_b"));
 assert.ok(declined.parties.party_1.declinedIds.includes("test_b"));

@@ -42,6 +42,14 @@ const accepted = api.acceptInviteAsMemberState(created, "party_new", "member");
 assert.equal(accepted.characters.member.currentPartyId, "party_new");
 assert.ok(accepted.parties.party_new.memberIds.includes("member"));
 assert.ok(!accepted.parties.party_new.invitedIds.includes("member"));
+
+const confirmedInvite = structuredClone(created);
+confirmedInvite.parties.party_new.status = "COMPOSITION_CONFIRMED";
+confirmedInvite.parties.party_new.confirmedBy = ["leader"];
+const acceptedAfterLock = api.acceptInviteAsMemberState(confirmedInvite, "party_new", "member");
+assert.equal(acceptedAfterLock.characters.member.currentPartyId, "party_new", "leadership capture must accept an invitation after composition lock");
+assert.equal(acceptedAfterLock.parties.party_new.status, "COMPOSITION_CONFIRMED");
+assert.ok(acceptedAfterLock.parties.party_new.confirmedBy.includes("member"));
 assert.equal(api.isPartyLeader(accepted, "member", "party_new"), false);
 
 let controls = api.memberControlState(accepted, "member");
@@ -58,7 +66,7 @@ controls = api.memberControlState(confirmed, "member");
 assert.equal(controls.canReady, true, "member must still complete ready check");
 
 const ready = api.setReadyAsMemberState(confirmed, "party_new", "member");
-assert.equal(ready.parties.party_new.status, "READY_CHECK");
+assert.equal(ready.parties.party_new.status, "COMPOSITION_CONFIRMED", "only the leader may transition from composition confirmation into ready check");
 assert.ok(ready.parties.party_new.readyBy.includes("member"));
 assert.equal(api.memberControlState(ready, "member").ready, true);
 
@@ -73,8 +81,8 @@ assert.match(source, /data-member-ready/);
 assert.match(source, /currentPartyId\) card\.remove\(\)/, "busy invite candidates should be removed from leader invite list");
 assert.match(source, /replaceChildren\(\)/, "warning modal must be fully cleared instead of leaving a click-blocking backdrop");
 assert.doesNotMatch(source, /new MutationObserver/, "leadership UI must not self-trigger through a DOM observer");
-assert.match(index, /party-leadership-flow\.js\?v=0\.3\.66/);
-assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.66") < index.indexOf("party-flow-sync.js?v=0.3.65"), "leadership interception must load before party-flow-sync");
+assert.match(index, /party-leadership-flow\.js\?v=0\.3\.67/);
+assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.67") < index.indexOf("party-flow-sync.js?v=0.3.66"), "leadership interception must load before party-flow-sync");
 assert.doesNotMatch(source, /function decorateMemberHome/, "member home must render directly in app.js");
 
 console.log("PASS: leader warning, member confirmation/ready flow, stable navigation, and busy invite filtering");

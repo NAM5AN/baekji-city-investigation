@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const VERSION = "0.3.83";
+  const VERSION = "0.3.84";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -46,13 +46,18 @@
     const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
     const character = draft?.characters?.[userId];
-    if (!party || !character || party.status !== "RECRUITING" || character.currentPartyId) return draft;
+    if (!party || !character || !["RECRUITING", "COMPOSITION_CONFIRMED"].includes(party.status) || character.currentPartyId) return draft;
     if (!unique(party.invitedIds).includes(userId)) return draft;
     party.memberIds = unique([...(party.memberIds || []), userId]);
     party.invitedIds = unique(party.invitedIds).filter((id) => id !== userId);
     party.declinedIds = unique(party.declinedIds).filter((id) => id !== userId);
     party.confirmedBy = unique(party.confirmedBy).filter((id) => party.memberIds.includes(id));
-    party.readyBy = unique(party.readyBy).filter((id) => party.memberIds.includes(id));
+    party.readyBy = unique(party.readyBy).filter((id) => id !== userId && party.memberIds.includes(id));
+    if (party.status === "COMPOSITION_CONFIRMED") {
+      party.confirmedBy = unique([...party.confirmedBy, userId]);
+      party.readyStateBy = party.readyStateBy && typeof party.readyStateBy === "object" ? { ...party.readyStateBy } : {};
+      party.readyStateBy[userId] = { ready: false, at: Date.now() };
+    }
     character.currentPartyId = partyId;
     return draft;
   }
@@ -94,9 +99,25 @@
     const nextReady = !effectiveReady(party, userId);
     party.readyStateBy[userId] = { ready: nextReady, at };
     party.readyBy = unique(party.memberIds).filter((memberId) => effectiveReady(party, memberId));
-    if (party.status === "COMPOSITION_CONFIRMED") party.status = "READY_CHECK";
+    if (party.status === "COMPOSITION_CONFIRMED" && party.creatorId === userId) party.status = "READY_CHECK";
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
     return draft;
+  }
+
+  function enterReadyCheckState(snapshot, partyId, leaderId, at = Date.now()) {
+    const draft = clone(snapshot);
+    const party = draft?.parties?.[partyId];
+    if (!party || party.creatorId !== leaderId || party.sessionId || party.status !== "COMPOSITION_CONFIRMED") return { snapshot: draft, cancelledIds: [], shouldNotify: false };
+    const members = unique(party.memberIds);
+    const declined = new Set(unique(party.declinedIds));
+    const cancelledIds = unique(party.invitedIds).filter((id) => !members.includes(id) && !declined.has(id) && !draft.characters?.[id]?.currentPartyId);
+    party.invitedIds = [];
+    ensureReadyStateMap(party, at);
+    party.readyStateBy[leaderId] = { ready: !effectiveReady(party, leaderId), at };
+    party.readyBy = members.filter((memberId) => effectiveReady(party, memberId));
+    party.status = "READY_CHECK";
+    party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
+    return { snapshot: draft, cancelledIds, shouldNotify: cancelledIds.length > 0 };
   }
 
   const TEST_API = Object.freeze({
@@ -107,6 +128,7 @@
     lockCompositionState,
     reopenCompositionState,
     toggleReadyState,
+    enterReadyCheckState,
   });
   if (typeof window !== "undefined") window.__BAEKJI_PARTY_FLOW_UX_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
@@ -206,6 +228,11 @@
     if (!snapshot || !userId) return false;
     const before = snapshot.parties?.[partyId];
     if (!before) return false;
+    const entering = enterReadyCheckState(snapshot, partyId, userId);
+    if (before.status === "COMPOSITION_CONFIRMED" && before.creatorId === userId && entering.snapshot.parties?.[partyId]?.status === "READY_CHECK") {
+      if (entering.shouldNotify) window.alert("초대 중인 캐릭터의 초대가 자동으로 취소됩니다.");
+      return writeState(entering.snapshot);
+    }
     const next = toggleReadyState(snapshot, partyId, userId);
     const after = next.parties?.[partyId];
     if (!after || effectiveReady(after, userId) === effectiveReady(before, userId)) return false;
@@ -222,7 +249,7 @@
       const snapshot = readState();
       const userId = currentUserId();
       const party = snapshot?.parties?.[partyId];
-      if (party?.status === "RECRUITING" && unique(party.invitedIds).includes(userId) && !snapshot?.characters?.[userId]?.currentPartyId) {
+      if (["RECRUITING", "COMPOSITION_CONFIRMED"].includes(party?.status) && unique(party.invitedIds).includes(userId) && !snapshot?.characters?.[userId]?.currentPartyId) {
         event.preventDefault();
         event.stopImmediatePropagation();
         acceptInvite(partyId);

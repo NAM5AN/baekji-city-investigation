@@ -123,5 +123,32 @@ assert.equal(location.hash, "#/home", "member open click must never navigate int
 assert.equal(openEvent.prevented, true);
 assert.equal(openEvent.stopped, true);
 
+const pendingConfirmed = JSON.parse(local.get(GLOBAL_KEY));
+pendingConfirmed.parties[partyId].status = "COMPOSITION_CONFIRMED";
+pendingConfirmed.parties[partyId].memberIds = ["leader"];
+pendingConfirmed.parties[partyId].invitedIds = ["member"];
+pendingConfirmed.parties[partyId].declinedIds = [];
+pendingConfirmed.parties[partyId].confirmedBy = ["leader"];
+pendingConfirmed.characters.member.currentPartyId = null;
+local.set(GLOBAL_KEY, JSON.stringify(pendingConfirmed));
+session.set(USER_KEY, "member");
+
+const acceptButton = new FakeElement({ "[data-party-flow-accept], [data-accept]": true }, { partyFlowAccept: partyId });
+const acceptEvent = {
+  target: acceptButton,
+  prevented: false,
+  stopped: false,
+  preventDefault() { this.prevented = true; },
+  stopImmediatePropagation() { this.stopped = true; },
+};
+clickHandler(acceptEvent);
+const acceptedConfirmed = JSON.parse(local.get(GLOBAL_KEY));
+assert.equal(acceptedConfirmed.characters.member.currentPartyId, partyId, "capture click must accept an invite while composition is confirmed");
+assert.ok(acceptedConfirmed.parties[partyId].memberIds.includes("member"));
+assert.ok(!acceptedConfirmed.parties[partyId].invitedIds.includes("member"));
+assert.equal(acceptedConfirmed.parties[partyId].status, "COMPOSITION_CONFIRMED");
+assert.equal(acceptEvent.prevented, true);
+assert.equal(acceptEvent.stopped, true);
+
 assert.doesNotMatch(source, /new MutationObserver/, "party leadership layer must not use a self-triggering DOM observer");
 console.log("PASS: leader warning clears and navigates; member open is blocked without page lock");

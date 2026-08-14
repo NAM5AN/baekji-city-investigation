@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const ENHANCEMENT_VERSION = "0.3.65";
+  const ENHANCEMENT_VERSION = "0.3.66";
   const USER_LABELS = {
     test_a: { name: "테스트 캐릭터 A", initial: "A" },
     test_b: { name: "테스트 캐릭터 B", initial: "B" },
@@ -48,7 +48,7 @@
   function pendingInvitationsFor(snapshot, userId) {
     if (!snapshot || !userId || snapshot.characters?.[userId]?.currentPartyId) return [];
     return Object.values(snapshot.parties || {}).filter((party) =>
-      party?.status === "RECRUITING" &&
+      ["RECRUITING", "COMPOSITION_CONFIRMED"].includes(party?.status) &&
       Array.isArray(party.invitedIds) && party.invitedIds.includes(userId) &&
       !unique(party.memberIds).includes(userId) &&
       !unique(party.declinedIds).includes(userId)
@@ -92,10 +92,18 @@
     const draft = clone(snapshot);
     const party = draft.parties?.[partyId];
     const character = draft.characters?.[userId];
-    if (!party || !character || party.status !== "RECRUITING" || character.currentPartyId) return draft;
+    if (!party || !character || !["RECRUITING", "COMPOSITION_CONFIRMED"].includes(party.status) || character.currentPartyId) return draft;
+    if (!unique(party.invitedIds).includes(userId)) return draft;
     party.memberIds = unique([...(party.memberIds || []), userId]);
     party.invitedIds = unique(party.invitedIds).filter((id) => id !== userId);
     party.declinedIds = unique(party.declinedIds).filter((id) => id !== userId);
+    party.readyBy = unique(party.readyBy).filter((id) => id !== userId && party.memberIds.includes(id));
+    party.confirmedBy = unique(party.confirmedBy).filter((id) => party.memberIds.includes(id));
+    if (party.status === "COMPOSITION_CONFIRMED") {
+      party.confirmedBy = unique([...party.confirmedBy, userId]);
+      party.readyStateBy = party.readyStateBy && typeof party.readyStateBy === "object" ? { ...party.readyStateBy } : {};
+      party.readyStateBy[userId] = { ready: false, at: Date.now() };
+    }
     character.currentPartyId = partyId;
     return draft;
   }

@@ -58,11 +58,11 @@ assert.doesNotMatch(roster, /function decorateMemberHome|new MutationObserver/, 
 assert.doesNotMatch(profileSync, /function decorateBriefingMembers/, "profile sync must not rewrite direct briefing members");
 
 assert.match(index, /stage2-home-briefing-party-ui=1/);
-assert.match(index, /party-flow-sync\.js\?v=0\.3\.65/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.83/);
-assert.match(index, /party-leadership-flow\.js\?v=0\.3\.66/);
+assert.match(index, /party-flow-sync\.js\?v=0\.3\.66/);
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.84/);
+assert.match(index, /party-leadership-flow\.js\?v=0\.3\.67/);
 assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.86/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.93/);
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.94/);
 assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
 assert.match(index, /party-member-home-roster\.js\?v=0\.3\.98/);
 
