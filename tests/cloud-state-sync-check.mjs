@@ -20,7 +20,7 @@ assert.match(source, /this === localStorage && key === GLOBAL_KEY/);
 assert.match(source, /window\.addEventListener\("online"/);
 assert.match(source, /document\.addEventListener\("visibilitychange"/);
 
-const cloudIndex = index.indexOf("cloud-state-sync.js?v=0.4.1&fix=0b1");
+const cloudIndex = index.indexOf("cloud-state-sync.js?v=0.4.2&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1");
 const appIndex = index.indexOf("app.js?v=0.4.9&fix=0b1");
 assert.match(index, /app\.js\?v=0\.4\.9[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/, "app cache key must carry the Stage 3-C caller-adoption release marker");
 assert.ok(cloudIndex >= 0, "cloud sync script must be loaded");

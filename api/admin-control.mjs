@@ -1,5 +1,6 @@
 import { adminSessionTokenFromRequest } from "./_admin-auth.mjs";
 import { verifyAdminSession, readWorldState } from "./admin-snapshot.mjs";
+import { worldItemSource } from "./_day1-items.mjs";
 
 const DEFAULT_SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
 const DEFAULT_SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
@@ -194,6 +195,143 @@ function nameForAudit(item, fallback) {
   return String(item?.name || fallback || "소지품");
 }
 
+function inventoryBaseId(inventoryKey, item) {
+  return cleanText(item?.catalogItemId || item?.baseItemId || item?.originalItemId || item?.itemId || inventoryKey, 80).split("::")[0];
+}
+
+function inventoryTargetKey(inventory, preferredKey, requestId, mode, baseId = "") {
+  const preferred = cleanText(preferredKey, 120);
+  if (preferred && !hasOwn(inventory, preferred)) return preferred;
+  const base = cleanText(baseId, 80) || inventoryBaseId(preferred, inventory?.[preferred]) || "ITEM";
+  const seed = cleanText(requestId, 120).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 28) || "request";
+  const prefix = `${base}::admin_${mode.toLowerCase()}_${seed}`;
+  let key = prefix;
+  let suffix = 2;
+  while (hasOwn(inventory, key)) key = `${prefix}_${suffix++}`;
+  return key;
+}
+
+function inventoryCopyKey(inventory, baseId, requestId) {
+  const seed = cleanText(requestId, 120).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 28) || "request";
+  return inventoryTargetKey(inventory, `${baseId || "ITEM"}::admin_copy_${seed}`, requestId, "copy", baseId);
+}
+
+function hasActiveSourceOffer(state, characterId, inventoryKey, now) {
+  const resolved = new Set((state.itemTransferResolutions || []).map((entry) => String(entry?.transferId || "")));
+  return (state.itemTransferOffers || []).some((offer) => String(offer?.giverId || "") === characterId
+    && String(offer?.sourceInventoryKey || "") === inventoryKey
+    && !resolved.has(String(offer?.id || ""))
+    && Number(offer?.expiresAt || 0) >= Number(now));
+}
+
+function inventoryChange(characterId, inventoryKey, item) {
+  return { characterId, inventoryKey, item: item == null ? null : clone(item) };
+}
+
+export function inventoryTransferMutation(sourceState, body, requestId, now = Date.now()) {
+  const state = clone(sourceState);
+  const mode = cleanText(body.mode, 32).toUpperCase();
+  if (!new Set(["WORLD_CLAIM", "CHARACTER_MOVE", "CHARACTER_COPY"]).has(mode)) {
+    throw Object.assign(new Error("ADMIN_ITEM_TRANSFER_MODE_INVALID"), { statusCode: 400 });
+  }
+  const targetCharacterId = cleanText(body.targetCharacterId, 180);
+  const target = state.characters?.[targetCharacterId];
+  if (!target) throw Object.assign(new Error("ADMIN_TARGET_CHARACTER_NOT_FOUND"), { statusCode: 404 });
+  if (!target.inventory || typeof target.inventory !== "object") target.inventory = {};
+
+  const before = { mode, source: null, target: null, claim: null };
+  const after = { mode, source: null, target: null, claim: null };
+  const inventoryChanges = [];
+  let claimChange = null;
+  let metadata = { mode, targetCharacterId };
+
+  if (mode === "WORLD_CLAIM") {
+    const variant = cleanText(body.variant, 8).toLowerCase();
+    const objectId = cleanText(body.objectId, 80);
+    const catalogItemId = cleanText(body.catalogItemId, 80);
+    if (!ALLOWED_VARIANTS.has(variant)) throw Object.assign(new Error("INVALID_ITEM_VARIANT"), { statusCode: 400 });
+    const source = worldItemSource(objectId, catalogItemId);
+    if (!source) throw Object.assign(new Error("ADMIN_WORLD_ITEM_SOURCE_NOT_FOUND"), { statusCode: 404 });
+    state.itemClaimsByVariant ||= { a: {}, b: {}, c: {}, d: {} };
+    const claims = state.itemClaimsByVariant[variant] || (state.itemClaimsByVariant[variant] = {});
+    const claimKey = `${objectId}:${catalogItemId}`;
+    if (claims[claimKey]) throw Object.assign(new Error("ADMIN_WORLD_ITEM_ALREADY_CLAIMED"), { statusCode: 409 });
+    const targetKey = inventoryTargetKey(target.inventory, catalogItemId, requestId, "claim");
+    const item = {
+      itemId: targetKey,
+      baseItemId: catalogItemId,
+      catalogItemId,
+      name: String(source.catalog?.name || source.mapping?.name || catalogItemId),
+      category: String(source.catalog?.category || "일반"),
+      quantity: Number(source.mapping?.default || 1),
+      state: "CLEAN",
+    };
+    const claim = { objectId, itemId: catalogItemId, characterId: targetCharacterId, sessionId: null, claimedAt: Number(now), adminGranted: true };
+    claims[claimKey] = claim;
+    target.inventory[targetKey] = item;
+    inventoryChanges.push(inventoryChange(targetCharacterId, targetKey, item));
+    claimChange = { variant, claimKey, claim: clone(claim) };
+    before.source = { objectId, itemId: catalogItemId, variant };
+    before.target = { characterId: targetCharacterId, inventoryKey: targetKey, item: null };
+    before.claim = { variant, claimKey, claim: null };
+    after.target = { characterId: targetCharacterId, inventoryKey: targetKey, item: clone(item) };
+    after.source = clone(before.source);
+    after.claim = clone(claimChange);
+    metadata = { ...metadata, variant, objectId, catalogItemId, targetInventoryKey: targetKey, quantity: item.quantity };
+  } else {
+    const sourceCharacterId = cleanText(body.sourceCharacterId, 180);
+    const sourceInventoryKey = cleanText(body.sourceInventoryKey, 120);
+    const sourceCharacter = state.characters?.[sourceCharacterId];
+    if (!sourceCharacter) throw Object.assign(new Error("ADMIN_SOURCE_CHARACTER_NOT_FOUND"), { statusCode: 404 });
+    if (mode === "CHARACTER_MOVE" && sourceCharacterId === targetCharacterId) throw Object.assign(new Error("ADMIN_ITEM_TRANSFER_SAME_CHARACTER"), { statusCode: 400 });
+    const sourceInventory = sourceCharacter.inventory && typeof sourceCharacter.inventory === "object" ? sourceCharacter.inventory : {};
+    const sourceItem = sourceInventory[sourceInventoryKey];
+    if (!sourceItem || Number(sourceItem.quantity || 0) <= 0) throw Object.assign(new Error("ADMIN_SOURCE_ITEM_NOT_FOUND"), { statusCode: 404 });
+    if (mode === "CHARACTER_MOVE" && hasActiveSourceOffer(state, sourceCharacterId, sourceInventoryKey, now)) throw Object.assign(new Error("ADMIN_ITEM_TRANSFER_RESERVED"), { statusCode: 409 });
+    const sourceBaseId = inventoryBaseId(sourceInventoryKey, sourceItem);
+    const targetKey = mode === "CHARACTER_MOVE"
+      ? inventoryTargetKey(target.inventory, sourceInventoryKey, requestId, "move", sourceBaseId)
+      : inventoryCopyKey(target.inventory, sourceBaseId, requestId);
+    const targetItem = clone(sourceItem);
+    if (targetKey !== sourceInventoryKey) targetItem.itemId = targetKey;
+    const baseId = sourceBaseId;
+    if (!targetItem.baseItemId) targetItem.baseItemId = baseId;
+    if (!targetItem.catalogItemId) targetItem.catalogItemId = baseId;
+    if (hasOwn(target.inventory, targetKey)) throw Object.assign(new Error("ADMIN_ITEM_TRANSFER_TARGET_COLLISION"), { statusCode: 409 });
+    target.inventory[targetKey] = targetItem;
+    inventoryChanges.push(inventoryChange(targetCharacterId, targetKey, targetItem));
+    before.source = { characterId: sourceCharacterId, inventoryKey: sourceInventoryKey, item: clone(sourceItem) };
+    before.target = { characterId: targetCharacterId, inventoryKey: targetKey, item: null };
+    after.target = { characterId: targetCharacterId, inventoryKey: targetKey, item: clone(targetItem) };
+    if (mode === "CHARACTER_MOVE") {
+      delete sourceInventory[sourceInventoryKey];
+      inventoryChanges.unshift(inventoryChange(sourceCharacterId, sourceInventoryKey, null));
+      after.source = { characterId: sourceCharacterId, inventoryKey: sourceInventoryKey, item: null };
+    } else {
+      after.source = clone(before.source);
+    }
+    metadata = { ...metadata, sourceCharacterId, sourceInventoryKey, targetInventoryKey: targetKey, quantity: Number(targetItem.quantity || 0) };
+  }
+
+  const patch = patchEnvelope(state, requestId, "INVENTORY_TRANSFER", "CHARACTER", targetCharacterId, {
+    mode,
+    inventoryChanges,
+    ...(claimChange ? { claimChange } : {}),
+  });
+  attachPatch(state, patch);
+  const verb = mode === "WORLD_CLAIM" ? "월드 미습득 아이템 지급" : mode === "CHARACTER_MOVE" ? "캐릭터 소지품 이동" : "캐릭터 소지품 복제 지급";
+  return {
+    state,
+    patch,
+    targetKind: "CHARACTER",
+    targetId: targetCharacterId,
+    before,
+    after,
+    summary: `캐릭터 ${targetCharacterId}에 ${verb}을 적용했습니다.`,
+    metadata,
+  };
+}
+
 function sessionMutation(state, body, requestId) {
   const sessionId = cleanText(body.sessionId, 180);
   const session = state.sessions?.[sessionId];
@@ -268,6 +406,7 @@ function applyOperation(sourceState, body, requestId) {
   const operation = cleanText(body.operation, 40).toUpperCase();
   if (operation === "CHARACTER_STATUS") return { state, ...characterStatusMutation(state, body, requestId) };
   if (operation === "INVENTORY_SET") return { state, ...inventoryMutation(state, body, requestId) };
+  if (operation === "INVENTORY_TRANSFER") return inventoryTransferMutation(state, body, requestId);
   if (operation === "SESSION_CONTROL") return { state, ...sessionMutation(state, body, requestId) };
   throw Object.assign(new Error("ADMIN_CONTROL_OPERATION_INVALID"), { statusCode: 400 });
 }
@@ -290,6 +429,10 @@ async function atomicApply(env, token, requestId, world, mutation, fetchImpl) {
   return Array.isArray(rows) ? rows[0] || null : rows || null;
 }
 
+function priorInventoryTransfer(state, requestId) {
+  return (state?.adminControlPatches || []).find((patch) => String(patch?.requestId || "") === requestId && patch?.action === "INVENTORY_TRANSFER") || null;
+}
+
 export async function adminControlHandler(request, response, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   if (request.method !== "POST") return sendJson(response, 405, { ok: false, code: "METHOD_NOT_ALLOWED" });
   const token = adminSessionTokenFromRequest(request);
@@ -304,8 +447,19 @@ export async function adminControlHandler(request, response, { env = process.env
 
     let world = await readWorldState(env, fetchImpl);
     if (!world.state) return sendJson(response, 503, { ok: false, code: "WORLD_STATE_UNAVAILABLE" });
-
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      const prior = cleanText(body.operation, 40).toUpperCase() === "INVENTORY_TRANSFER" ? priorInventoryTransfer(world.state, requestId) : null;
+      if (prior) {
+        return sendJson(response, 200, {
+          ok: true,
+          admin,
+          alreadyApplied: true,
+          revision: world.revision,
+          auditId: 0,
+          adminControlSeq: Number(world.state.adminControlSeq || prior.seq || 0),
+          summary: "이미 적용된 소지품 이동·복제 요청입니다.",
+        });
+      }
       const mutation = applyOperation(world.state, body, requestId);
       const result = await atomicApply(env, token, requestId, world, mutation, fetchImpl);
       if (result?.accepted) {
@@ -333,7 +487,9 @@ export async function adminControlHandler(request, response, { env = process.env
       "REQUEST_TOO_LARGE", "INVALID_JSON", "WORLD_STATE_UNAVAILABLE", "ADMIN_TARGET_CHARACTER_NOT_FOUND",
       "ADMIN_TARGET_SESSION_NOT_FOUND", "INVALID_CONTAMINATION", "ADMIN_CONTROL_NO_CHANGES", "ADMIN_ITEM_ID_REQUIRED",
       "INVALID_ITEM_QUANTITY", "ADMIN_ITEM_NAME_REQUIRED", "INVALID_SESSION_NODE", "INVALID_SESSION_VARIANT",
-      "INVALID_SESSION_STATUS", "ADMIN_CONTROL_OPERATION_INVALID",
+      "INVALID_SESSION_STATUS", "ADMIN_CONTROL_OPERATION_INVALID", "ADMIN_ITEM_TRANSFER_MODE_INVALID", "INVALID_ITEM_VARIANT",
+      "ADMIN_WORLD_ITEM_SOURCE_NOT_FOUND", "ADMIN_WORLD_ITEM_ALREADY_CLAIMED", "ADMIN_SOURCE_CHARACTER_NOT_FOUND",
+      "ADMIN_SOURCE_ITEM_NOT_FOUND", "ADMIN_ITEM_TRANSFER_SAME_CHARACTER", "ADMIN_ITEM_TRANSFER_RESERVED", "ADMIN_ITEM_TRANSFER_TARGET_COLLISION",
     ]);
     const status = Number(error?.statusCode || (known.has(message) ? 400 : 502));
     return sendJson(response, status >= 400 && status < 600 ? status : 502, { ok: false, code: known.has(message) ? message : "ADMIN_CONTROL_UNAVAILABLE" });
