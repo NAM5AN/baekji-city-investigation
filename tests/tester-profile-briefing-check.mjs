@@ -5,7 +5,7 @@ import vm from "node:vm";
 const auth = fs.readFileSync("tester-auth.js", "utf8");
 const guard = fs.readFileSync("tester-registry-guard.js", "utf8");
 const inviteSearch = fs.readFileSync("party-invite-search.js", "utf8");
-const briefing = fs.readFileSync("briefing-tutorial.js", "utf8");
+const app = fs.readFileSync("app.js", "utf8");
 const foundation = fs.readFileSync("foundation-rule-fixes.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 const css = fs.readFileSync("tester-auth.css", "utf8");
@@ -23,17 +23,14 @@ assert(guard.includes("suppressLegacyDemoUsers"), "matching Supabase A/B/C rows 
 assert(guard.includes("registerTester"), "Supabase directory users must enter the same app user registry");
 assert(inviteSearch.includes("캐릭터 이름 검색"), "party invite view needs character-name search");
 assert(inviteSearch.includes("data-party-invite-search"), "party invite search must use a stable control hook");
-assert(briefing.includes("SAFE_LIGHT_NAMES"), "briefing headline should expose only a neutral light label");
-assert(briefing.includes("붉은빛"), "red-light briefing label is required");
-assert(briefing.includes("해오름역은 지상 환승광장과 지하 대합실, 승강장으로 이어진다."), "briefing headline needs a neutral zone description");
-for (const spoiler of ["다른 시간", "시간대", "어긋", "사라지고", "백화", "재난", "변주"]) {
-  assert(!briefing.includes(spoiler), `briefing headline module must not reveal or imply ${spoiler}`);
-}
-assert(briefing.includes("‘/지도’"), "briefing tutorial should explain map guidance");
-assert(briefing.includes("한 메시지에는 한 가지 행동만"), "briefing tutorial should explain one-action input");
-assert(briefing.includes("한 행동이 여러 위험에 영향을 줄 수 있는지는 현재 상황과 행동 내용에 따라 시스템이 판정합니다."), "briefing must match flexible multi-hazard resolution");
-assert(!briefing.includes("위험이 두 개라면 서로 다른 행동으로 하나씩 해결해야 합니다."), "obsolete sequential-hazard wording must be removed");
-assert(briefing.includes("오염도 100%의 완전 용해 상태에서는 이동할 수 없습니다."), "briefing must explain the movement hard stop");
+assert(app.includes("SAFE_BRIEFING_LIGHT_NAMES"), "briefing headline should expose only a neutral light label");
+assert(app.includes("붉은빛"), "red-light briefing label is required");
+assert(app.includes("해오름역은 지상 환승광장과 지하 대합실, 승강장으로 이어진다."), "briefing headline needs a neutral zone description");
+assert(app.includes("‘/지도’"), "briefing tutorial should explain map guidance");
+assert(app.includes("한 메시지에는 한 가지 행동만"), "briefing tutorial should explain one-action input");
+assert(app.includes("한 행동이 여러 위험에 영향을 줄 수 있는지는 현재 상황과 행동 내용에 따라 시스템이 판정합니다."), "briefing must match flexible multi-hazard resolution");
+assert(!app.includes("위험이 두 개라면 서로 다른 행동으로 하나씩 해결해야 합니다."), "obsolete sequential-hazard wording must be removed");
+assert(app.includes("오염도 100%의 완전 용해 상태에서는 이동할 수 없습니다."), "briefing must explain the movement hard stop");
 
 const foundationSandbox = { window: {}, Date, JSON, Object, String, Number, Math, Array, Set, Map, console };
 vm.createContext(foundationSandbox);
@@ -69,7 +66,7 @@ assert.ok(blocked.sessions.s1.logs.some((entry) => entry.mobilityBlocked === tru
 
 assert(!foundation.includes("MutationObserver"), "foundation movement rules must no longer patch rendered UI with an observer");
 assert(!foundation.includes("[data-reset-demo]"), "foundation movement rules must no longer remove player UI after render");
-assert(index.includes("briefing-tutorial.js?v=0.4.2"), "briefing tutorial cache key must be refreshed");
+assert(!index.includes("briefing-tutorial.js"), "absorbed briefing UI must not load a DOM post-processor");
 assert(index.includes("foundation-rule-fixes.js?v=0.4.3"), "foundation movement rules must use the stage 2 cache key");
 assert(index.indexOf("foundation-rule-fixes.js?v=0.4.3") < index.indexOf("app.js?v=0.4.1"), "movement storage guard must install before app.js starts");
 assert(index.includes("tester-auth.js?v=0.3.88"), "tester auth cache key must be refreshed");

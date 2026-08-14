@@ -8,6 +8,22 @@
     scene: { default: null, byNode: {}, byDetail: {}, byRoute: {} },
     object: { byId: {} },
   };
+  const SAFE_BRIEFING_LIGHT_NAMES = Object.freeze({
+    a: "초록빛",
+    b: "파란빛",
+    c: "붉은빛",
+    d: "흰빛",
+  });
+  const BRIEFING_ZONE_DESCRIPTIONS = Object.freeze({
+    E: "해오름역은 지상 환승광장과 지하 대합실, 승강장으로 이어진다.",
+  });
+  const BRIEFING_TUTORIAL_RULES = Object.freeze([
+    "일반 대화는 그대로 입력하고, 조사·이동·위험 대응처럼 시스템 판정이 필요한 행동은 앞에 ‘/’를 붙입니다.",
+    "한 메시지에는 한 가지 행동만 입력합니다. 한 행동이 여러 위험에 영향을 줄 수 있는지는 현재 상황과 행동 내용에 따라 시스템이 판정합니다.",
+    "이동은 현재 장소와 직접 연결된 통로로만 가능합니다. 길을 확인하려면 ‘/지도’를 입력합니다.",
+    "오브젝트를 조사해 물품을 발견해도 자동 획득되지 않습니다. 확인 후 별도의 ‘가져가기’를 눌러야 합니다.",
+    "오염이 심해질수록 이동이 느려지거나 실패할 수 있으며, 오염도 100%의 완전 용해 상태에서는 이동할 수 없습니다.",
+  ]);
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -667,6 +683,16 @@
     go(`briefing/${sessionId}`);
   }
 
+  function briefingHeadline(session) {
+    const zoneId = String(DATA.meta?.zone?.id || session?.destination || "");
+    const variantId = String(session?.variant || "");
+    const light = SAFE_BRIEFING_LIGHT_NAMES[variantId] || "옅은빛";
+    const zoneName = String(DATA.meta?.zone?.name || "조사 구역");
+    const description = BRIEFING_ZONE_DESCRIPTIONS[zoneId]
+      || `${zoneName}은 여러 출입구와 내부 통로로 이어진다.`;
+    return `${light}의 ${description}`;
+  }
+
   function renderBriefing(sessionId) {
     if (!ensureAuth()) return;
     document.body.classList.add("retro-mode", "retro-page-mode");
@@ -678,14 +704,9 @@
       <main class="container narrow">
         <section class="hero"><div class="eyebrow">Investigation briefing</div><h1 style="font-size:54px">해오름역</h1><p class="lead">도착한 시간 상태의 내부 코드는 공개되지 않습니다. 빛, 안내 설비의 어긋남, 공간의 흔적을 직접 보고 판단하세요.</p></section>
         <section class="briefing card">
-          <div class="card-header"><div><span class="badge green">조사 가능</span><h2 style="margin:13px 0 0">${escapeHtml(v.light)}이 역 내부에서 희미하게 번진다.</h2></div><span class="badge">${session.memberIds.length}인 조사</span></div>
-          <p class="lead" style="font-size:14px">${escapeHtml(v.situation)} ${escapeHtml(v.space)}</p>
-          <div class="rule-list">
-            <div class="rule">이동은 현재 위치와 직접 이어진 통로로만 이동할 수 있습니다. 같은 층이어도 연결 경로가 없다면 이동할 수 없습니다.</div>
-            <div class="rule">한 메시지에는 한 가지 행동만 입력합니다. 한 행동이 여러 위험에 영향을 줄 수 있는지는 현재 상황과 행동 내용에 따라 시스템이 판정합니다.</div>
-            <div class="rule">오브젝트를 조사해도 물품은 자동으로 들어오지 않습니다. 발견 후 별도의 ‘가져가기’ 행동이 필요합니다.</div>
-            <div class="rule">성공·실패와 오염 변화는 조사 시스템이 현재 상황과 행동에 따라 확정합니다.</div>
-          </div>
+          <div class="card-header"><div><span class="badge green">조사 가능</span><h2 style="margin:13px 0 0">${escapeHtml(briefingHeadline(session))}</h2></div><span class="badge">${session.memberIds.length}인 조사</span></div>
+          <p class="lead" style="font-size:14px">구역 진입 후 장면, 시스템 로그, 조사 채팅을 함께 확인하세요. 아래 방식으로 대화와 행동을 구분하면 조사를 진행할 수 있습니다.</p>
+          <div class="rule-list">${BRIEFING_TUTORIAL_RULES.map((copy) => `<div class="rule">${escapeHtml(copy)}</div>`).join("")}</div>
           <div class="button-row" style="margin-top:22px"><button class="button" data-go="party/${session.partyId}">조사조 확인</button><button class="button primary" data-enter-investigation>구역 진입</button></div>
         </section>
       </main>`);
