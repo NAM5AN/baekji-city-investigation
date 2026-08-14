@@ -166,9 +166,9 @@ assert.match(adminUi, /busy\) return/);
 assert.match(cloudSource, /action === "INVENTORY_TRANSFER"/);
 const adminHtml = fs.readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-assert.match(adminHtml, /admin-control-mvp4\.css\?v=0\.4\.2&stage4-item-transfer=1&item-disposition=1/);
-assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.5&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1/);
-assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.3&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1/);
+assert.match(adminHtml, /admin-control-mvp4\.css\?v=0\.4\.3&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
+assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.6&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1&field-item-management=1/);
+assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.4&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
 
 const Storage = class { getItem() { return null; } setItem() {} removeItem() {} };
 const cloudContext = { console, window: { addEventListener() {}, dispatchEvent() {} }, document: { hidden: false, documentElement: { dataset: {} }, addEventListener() {} }, Storage, localStorage: new Storage(), sessionStorage: new Storage(), CustomEvent: class {}, Event: class {}, StorageEvent: class {}, AbortController, setTimeout: () => 0, clearTimeout() {}, fetch: async () => ({ ok: true, status: 200, json: async () => [] }), Math, Date, JSON, Object, Array, Number, String, Boolean, Set, Map };
@@ -184,7 +184,13 @@ assert.equal(Object.keys(replay.characters.b.inventory).length, 1, "replaying th
 
 class FakeElement {
   constructor(dataset = {}) { this.dataset = dataset; this.isConnected = true; this.disabled = false; this.childElementCount = 1; this.selectedOptions = []; this.value = ""; }
-  closest(selector) { return selector === "[data-admin-control-open]" && this.dataset.adminControlOpen ? this : selector === "[data-control-inventory-transfer]" && this.dataset.controlInventoryTransfer ? this : null; }
+  closest(selector) {
+    if (selector === "[data-admin-control-open]" && this.dataset.adminControlOpen) return this;
+    if (selector === "[data-control-inventory-transfer]" && this.dataset.controlInventoryTransfer) return this;
+    if (selector === "[data-control-field-recall]" && this.dataset.controlFieldRecall) return this;
+    if (selector === "[data-control-field-manage-confirm]" && this.dataset.controlFieldManageConfirm) return this;
+    return null;
+  }
   matches() { return false; }
   querySelectorAll() { return []; }
   replaceChildren() {}
@@ -204,8 +210,9 @@ const fakeDocument = {
   addEventListener(type, handler) { if (type === "click") capturedClick = handler; },
 };
 const uiCalls = [];
+let uiRequestCount = 0;
 const uiWindow = { DAY1_DATA: { places: {}, variants: {}, itemCatalog: {}, objectItems: {} }, addEventListener(type, handler, capture = false) { if (type === "click" && capture === true) capturedClick = handler; }, dispatchEvent() {} };
-const uiContext = { window: uiWindow, document: fakeDocument, Element: FakeElement, MutationObserver: class { observe() {} }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } }, crypto: { randomUUID: () => "ui-request" }, fetch: async (url, options = {}) => { uiCalls.push({ url, options }); return { ok: true, status: 200, json: async () => String(url) === "/api/admin-snapshot" ? { ok: true, revision: 1, state: { characters: { b: { id: "b", inventory: {} } }, itemClaimsByVariant: { a: {} } }, directory: [] } : { ok: true, revision: 2, summary: "ok" } }; }, setTimeout: () => 0, queueMicrotask, console, Date, Math, JSON, Object, Array, Number, String, Boolean, Set, Map };
+const uiContext = { window: uiWindow, document: fakeDocument, Element: FakeElement, MutationObserver: class { observe() {} }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } }, crypto: { randomUUID: () => `ui-request${uiRequestCount++ ? "-2" : ""}` }, fetch: async (url, options = {}) => { uiCalls.push({ url, options }); return { ok: true, status: 200, json: async () => String(url) === "/api/admin-snapshot" ? { ok: true, revision: 1, state: { characters: { b: { id: "b", inventory: {} } }, itemClaimsByVariant: { a: {} }, fieldItemPlacementsByVariant: { a: { field_1: { id: "field_1", variant: "a", objectId: "E_OBJ_002", sourceCharacterId: "b", sourceInventoryKey: "pen", item: { itemId: "pen", name: "볼펜", quantity: 1, state: "USED" }, placedAt: 1 } }, b: {}, c: {}, d: {} }, fieldItemPlacementClaimsByVariant: { a: {}, b: {}, c: {}, d: {} } }, directory: [{ id: "b", name: "테스트B" }] } : { ok: true, revision: 2, summary: "ok" } }; }, setTimeout: () => 0, queueMicrotask, console, Date, Math, JSON, Object, Array, Number, String, Boolean, Set, Map };
 uiContext.globalThis = uiContext;
 vm.createContext(uiContext);
 vm.runInContext(adminUi, uiContext, { filename: "admin-control-mvp4.js" });
@@ -221,5 +228,12 @@ await new Promise((resolve) => setImmediate(resolve));
 const uiPosts = uiCalls.filter((call) => call.url === "/api/admin-control");
 assert.equal(uiPosts.length, 1, "capture handler and busy guard must issue exactly one POST for duplicate move clicks");
 assert.deepEqual(JSON.parse(uiPosts[0].options.body), { requestId: "ui-request", operation: "INVENTORY_TRANSFER", mode: "CHARACTER_MOVE", targetCharacterId: "b", sourceCharacterId: "a", sourceInventoryKey: "lamp" });
+
+capturedClick({ target: new FakeElement({ controlFieldRecall: "field_1", fieldVariant: "a" }), preventDefault() {}, stopPropagation() {} });
+capturedClick({ target: new FakeElement({ controlFieldManageConfirm: "FIELD_RECALL", placementId: "field_1", fieldVariant: "a" }), preventDefault() {}, stopPropagation() {} });
+await new Promise((resolve) => setImmediate(resolve));
+const recallPosts = uiCalls.filter((call) => call.url === "/api/admin-control");
+assert.equal(recallPosts.length, 2, "field recall confirmation issues one additional POST");
+assert.deepEqual(JSON.parse(recallPosts[1].options.body), { requestId: "ui-request-2", operation: "INVENTORY_TRANSFER", mode: "FIELD_RECALL", variant: "a", placementId: "field_1" });
 
 console.log("PASS: admin world claim, character move/copy, auth, cloud replay, and UI wiring contracts");

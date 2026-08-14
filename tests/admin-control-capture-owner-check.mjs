@@ -83,5 +83,5 @@ const transfer = new Element({ controlInventoryTransfer: "CHARACTER_MOVE" });
 await Promise.all([dispatch(transfer), dispatch(transfer)]);
 assert.equal(calls.filter((call) => call.url === "/api/admin-control").length, 1, "capture owner and busy guard issue one transfer mutation for duplicate clicks");
 
-assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.5&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1/);
+assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.6&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1&field-item-management=1/);
 console.log("PASS: capture-phase admin control survives dashboard bubble ownership and preserves one mutation path");

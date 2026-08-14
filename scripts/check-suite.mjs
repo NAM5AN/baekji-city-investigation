@@ -73,6 +73,7 @@ const GROUPS = Object.freeze({
     "admin-control-capture-owner-check.mjs",
     "admin-item-transfer-check.mjs",
     "admin-item-disposition-check.mjs",
+    "admin-field-item-management-check.mjs",
     "admin-control-cloud-conflict-check.mjs",
     "admin-session-ops-mvp5-check.mjs",
   ],

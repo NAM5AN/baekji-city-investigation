@@ -513,6 +513,18 @@
           else placements[placementId] = JSON.parse(JSON.stringify(fieldPlacementChange.placement));
         }
       }
+      const fieldPlacementClaimChange = data.fieldPlacementClaimChange;
+      if (fieldPlacementClaimChange && typeof fieldPlacementClaimChange === "object") {
+        const variant = String(fieldPlacementClaimChange.variant || "");
+        const placementId = String(fieldPlacementClaimChange.placementId || "");
+        if (variant && placementId) {
+          state.fieldItemPlacementClaimsByVariant ||= {};
+          const claims = state.fieldItemPlacementClaimsByVariant[variant]
+            || (state.fieldItemPlacementClaimsByVariant[variant] = {});
+          if (fieldPlacementClaimChange.claim == null) delete claims[placementId];
+          else claims[placementId] = JSON.parse(JSON.stringify(fieldPlacementClaimChange.claim));
+        }
+      }
       return state;
     }
 
@@ -581,14 +593,21 @@
           if (item?._fieldPlacementId === placementId) delete inventory[candidate.targetInventoryKey];
         });
         const placement = placements[placementId];
+        if (winner.adminDeleted === true) return;
         const character = merged.characters?.[winner.characterId];
         const targetKey = String(winner.targetInventoryKey || placement?.sourceInventoryKey || "");
         if (!character || !targetKey || !placement?.item) return;
         character.inventory ||= {};
-        if (!character.inventory[targetKey]) {
+        if (winner.adminRecalled === true && character.inventory[targetKey]?._fieldPlacementId === placementId) {
           const item = JSON.parse(JSON.stringify(placement.item));
           if (targetKey !== String(placement.sourceInventoryKey || "")) item.itemId = targetKey;
-          item._fieldPlacementId = placementId;
+          delete item._fieldPlacementId;
+          character.inventory[targetKey] = item;
+        } else if (!character.inventory[targetKey]) {
+          const item = JSON.parse(JSON.stringify(placement.item));
+          if (targetKey !== String(placement.sourceInventoryKey || "")) item.itemId = targetKey;
+          if (winner.adminRecalled === true) delete item._fieldPlacementId;
+          else item._fieldPlacementId = placementId;
           character.inventory[targetKey] = item;
         }
       });

@@ -234,22 +234,79 @@ function inventoryChange(characterId, inventoryKey, item) {
 export function inventoryTransferMutation(sourceState, body, requestId, now = Date.now()) {
   const state = clone(sourceState);
   const mode = cleanText(body.mode, 32).toUpperCase();
-  if (!new Set(["WORLD_CLAIM", "CHARACTER_MOVE", "CHARACTER_COPY", "CHARACTER_REMOVE", "CHARACTER_PLACE"]).has(mode)) {
+  const fieldManagementMode = mode === "FIELD_RECALL" || mode === "FIELD_DELETE";
+  if (!new Set(["WORLD_CLAIM", "CHARACTER_MOVE", "CHARACTER_COPY", "CHARACTER_REMOVE", "CHARACTER_PLACE", "FIELD_RECALL", "FIELD_DELETE"]).has(mode)) {
     throw Object.assign(new Error("ADMIN_ITEM_TRANSFER_MODE_INVALID"), { statusCode: 400 });
   }
-  const targetCharacterId = cleanText(body.targetCharacterId, 180);
+  const fieldVariant = fieldManagementMode ? cleanText(body.variant, 8).toLowerCase() : "";
+  const fieldPlacementId = fieldManagementMode ? cleanText(body.placementId, 120) : "";
+  if (fieldManagementMode && !ALLOWED_VARIANTS.has(fieldVariant)) throw Object.assign(new Error("INVALID_ITEM_VARIANT"), { statusCode: 400 });
+  const fieldPlacement = fieldManagementMode ? state.fieldItemPlacementsByVariant?.[fieldVariant]?.[fieldPlacementId] : null;
+  if (fieldManagementMode && !fieldPlacement) throw Object.assign(new Error("ADMIN_FIELD_ITEM_PLACEMENT_NOT_FOUND"), { statusCode: 404 });
+  let targetCharacterId = fieldManagementMode ? cleanText(fieldPlacement?.sourceCharacterId, 180) : cleanText(body.targetCharacterId, 180);
   const target = state.characters?.[targetCharacterId];
-  if (!target) throw Object.assign(new Error("ADMIN_TARGET_CHARACTER_NOT_FOUND"), { statusCode: 404 });
-  if (!target.inventory || typeof target.inventory !== "object") target.inventory = {};
+  if (!target && mode !== "FIELD_DELETE") throw Object.assign(new Error("ADMIN_TARGET_CHARACTER_NOT_FOUND"), { statusCode: 404 });
+  if (target && (!target.inventory || typeof target.inventory !== "object")) target.inventory = {};
 
   const before = { mode, source: null, target: null, claim: null };
   const after = { mode, source: null, target: null, claim: null };
   const inventoryChanges = [];
   let claimChange = null;
   let fieldPlacementChange = null;
+  let fieldPlacementClaimChange = null;
   let metadata = { mode, targetCharacterId };
 
-  if (mode === "WORLD_CLAIM") {
+  if (fieldManagementMode) {
+    state.fieldItemPlacementClaimsByVariant ||= { a: {}, b: {}, c: {}, d: {} };
+    const fieldClaims = state.fieldItemPlacementClaimsByVariant[fieldVariant]
+      || (state.fieldItemPlacementClaimsByVariant[fieldVariant] = {});
+    if (fieldClaims[fieldPlacementId]) throw Object.assign(new Error("ADMIN_FIELD_ITEM_ALREADY_CLAIMED"), { statusCode: 409 });
+    let targetInventoryKey = null;
+    let recalledItem = null;
+    if (mode === "FIELD_RECALL") {
+      targetInventoryKey = inventoryTargetKey(
+        target.inventory,
+        cleanText(fieldPlacement.sourceInventoryKey, 120),
+        requestId,
+        "recall",
+        inventoryBaseId(fieldPlacement.sourceInventoryKey, fieldPlacement.item),
+      );
+      recalledItem = clone(fieldPlacement.item);
+      delete recalledItem._fieldPlacementId;
+      if (targetInventoryKey !== String(fieldPlacement.sourceInventoryKey || "")) recalledItem.itemId = targetInventoryKey;
+      target.inventory[targetInventoryKey] = recalledItem;
+      inventoryChanges.push(inventoryChange(targetCharacterId, targetInventoryKey, recalledItem));
+    }
+    const fieldClaim = {
+      placementId: fieldPlacementId,
+      characterId: mode === "FIELD_RECALL" ? targetCharacterId : null,
+      targetInventoryKey,
+      claimedAt: Number(now),
+      ...(mode === "FIELD_RECALL" ? { adminRecalled: true } : { adminDeleted: true }),
+    };
+    fieldClaims[fieldPlacementId] = fieldClaim;
+    fieldPlacementClaimChange = { variant: fieldVariant, placementId: fieldPlacementId, claim: clone(fieldClaim) };
+    before.source = { variant: fieldVariant, placementId: fieldPlacementId, placement: clone(fieldPlacement) };
+    before.target = mode === "FIELD_RECALL"
+      ? { characterId: targetCharacterId, inventoryKey: targetInventoryKey, item: null }
+      : null;
+    before.claim = { variant: fieldVariant, placementId: fieldPlacementId, claim: null };
+    after.source = clone(before.source);
+    after.target = mode === "FIELD_RECALL"
+      ? { characterId: targetCharacterId, inventoryKey: targetInventoryKey, item: clone(recalledItem) }
+      : null;
+    after.claim = clone(fieldPlacementClaimChange);
+    metadata = {
+      ...metadata,
+      variant: fieldVariant,
+      placementId: fieldPlacementId,
+      objectId: String(fieldPlacement.objectId || ""),
+      sourceCharacterId: String(fieldPlacement.sourceCharacterId || ""),
+      sourceInventoryKey: String(fieldPlacement.sourceInventoryKey || ""),
+      targetInventoryKey,
+      quantity: Number(fieldPlacement.item?.quantity || 0),
+    };
+  } else if (mode === "WORLD_CLAIM") {
     const variant = cleanText(body.variant, 8).toLowerCase();
     const objectId = cleanText(body.objectId, 80);
     const catalogItemId = cleanText(body.catalogItemId, 80);
@@ -371,13 +428,16 @@ export function inventoryTransferMutation(sourceState, body, requestId, now = Da
     inventoryChanges,
     ...(claimChange ? { claimChange } : {}),
     ...(fieldPlacementChange ? { fieldPlacementChange } : {}),
+    ...(fieldPlacementClaimChange ? { fieldPlacementClaimChange } : {}),
   });
   attachPatch(state, patch);
   const verb = mode === "WORLD_CLAIM" ? "월드 미습득 아이템 지급"
     : mode === "CHARACTER_MOVE" ? "캐릭터 소지품 이동"
       : mode === "CHARACTER_COPY" ? "캐릭터 소지품 복제 지급"
         : mode === "CHARACTER_PLACE" ? "캐릭터 소지품 현장 배치"
-          : "캐릭터 소지품 제거";
+          : mode === "CHARACTER_REMOVE" ? "캐릭터 소지품 제거"
+            : mode === "FIELD_RECALL" ? "현장 배치 물품 회수"
+              : "현장 배치 물품 삭제";
   return {
     state,
     patch,
@@ -549,6 +609,7 @@ export async function adminControlHandler(request, response, { env = process.env
       "ADMIN_WORLD_ITEM_SOURCE_NOT_FOUND", "ADMIN_WORLD_ITEM_ALREADY_CLAIMED", "ADMIN_SOURCE_CHARACTER_NOT_FOUND",
       "ADMIN_SOURCE_ITEM_NOT_FOUND", "ADMIN_ITEM_TRANSFER_SAME_CHARACTER", "ADMIN_ITEM_TRANSFER_RESERVED", "ADMIN_ITEM_TRANSFER_TARGET_COLLISION",
       "ADMIN_ITEM_DISPOSITION_TARGET_MISMATCH", "ADMIN_FIELD_OBJECT_NOT_FOUND", "ADMIN_FIELD_ITEM_PLACEMENT_COLLISION",
+      "ADMIN_FIELD_ITEM_PLACEMENT_NOT_FOUND", "ADMIN_FIELD_ITEM_ALREADY_CLAIMED",
     ]);
     const status = Number(error?.statusCode || (known.has(message) ? 400 : 502));
     return sendJson(response, status >= 400 && status < 600 ? status : 502, { ok: false, code: known.has(message) ? message : "ADMIN_CONTROL_UNAVAILABLE" });
