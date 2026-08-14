@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.67";
+  const VERSION = "0.3.68";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -51,14 +51,15 @@
     const draft = clone(snapshot);
     const party = draft.parties?.[partyId];
     const character = draft.characters?.[userId];
-    if (!party || !character || !["RECRUITING", "COMPOSITION_CONFIRMED"].includes(party.status) || character.currentPartyId) return draft;
+    if (!party || !character || !["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) || character.currentPartyId) return draft;
     if (!unique(party.invitedIds).includes(userId)) return draft;
     party.memberIds = unique([...(party.memberIds || []), userId]);
     party.invitedIds = unique(party.invitedIds).filter((id) => id !== userId);
     party.declinedIds = unique(party.declinedIds).filter((id) => id !== userId);
     party.readyBy = unique(party.readyBy).filter((id) => id !== userId && party.memberIds.includes(id));
     party.confirmedBy = unique(party.confirmedBy).filter((id) => party.memberIds.includes(id));
-    if (party.status === "COMPOSITION_CONFIRMED") {
+    if (["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) {
+      party.status = "COMPOSITION_CONFIRMED";
       party.confirmedBy = unique([...party.confirmedBy, userId]);
       party.readyStateBy = party.readyStateBy && typeof party.readyStateBy === "object" ? { ...party.readyStateBy } : {};
       party.readyStateBy[userId] = { ready: false, at: Date.now() };
@@ -80,7 +81,7 @@
     const draft = clone(snapshot);
     const party = draft.parties?.[partyId];
     if (!party || party.creatorId === userId || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) || !unique(party.memberIds).includes(userId)) return draft;
-    if (party.status === "COMPOSITION_CONFIRMED" && party.creatorId === userId) party.status = "READY_CHECK";
+    if (party.status === "READY_CHECK") party.status = "COMPOSITION_CONFIRMED";
     party.readyBy = unique([...(party.readyBy || []), userId]);
     return draft;
   }

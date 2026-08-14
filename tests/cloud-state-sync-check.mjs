@@ -21,7 +21,7 @@ assert.match(source, /window\.addEventListener\("online"/);
 assert.match(source, /document\.addEventListener\("visibilitychange"/);
 
 const cloudIndex = index.indexOf("cloud-state-sync.js?v=0.4.1&fix=0b1");
-const appIndex = index.indexOf("app.js?v=0.4.4&fix=0b1");
+const appIndex = index.indexOf("app.js?v=0.4.5&fix=0b1");
 assert.ok(cloudIndex >= 0, "cloud sync script must be loaded");
 assert.ok(cloudIndex < appIndex, "cloud sync must patch storage before the app starts");
 

@@ -19,11 +19,15 @@ assert.match(renderParty, /각 조원은 홈 화면에서 준비 상태를 바�
 assert.match(renderParty, /party-ready-count/, "ready count badge must render directly");
 assert.match(renderParty, /party-ready-state/, "member ready state must render directly");
 assert.match(renderParty, /data-party-flow-back-recruiting/, "composition back action must render directly");
-assert.match(renderParty, /data-party-preflight-back-confirmed/, "ready-step back action must render directly");
+assert.match(renderParty, /\["COMPOSITION_CONFIRMED", "READY_CHECK"\]\.includes\(party\.status\)/, "the shared back action must cover current confirmation and legacy ready-check records");
+assert.doesNotMatch(renderParty, /data-party-preflight-back-confirmed/, "the removed fourth ready-check step must not render a back action");
 assert.match(renderParty, /data-party-name-edit/, "party name editor action must render directly");
-assert.match(renderParty, /준비 완료 취소/, "leader ready toggle copy must render directly");
+assert.match(renderParty, /readyStage && !isCreator/, "only members must receive a readiness toggle in the collapsed confirmation stage");
+assert.match(renderParty, /준비 완료 취소/, "member readiness-toggle copy must render directly");
 assert.match(renderParty, /조사 출발/, "session start copy must render directly");
+assert.match(renderParty, /isCreator && allReady && readyStage/, "the leader session start must be gated by current all-ready state");
 assert.match(renderParty, /전원 준비가 완료되었습니다\./, "all-ready footer must render directly");
+assert.match(renderParty, /\["조원 구성", "구성 확정", "세션 생성"\]/, "the party stepper must render exactly three stages");
 assert.doesNotMatch(renderParty, /각 캐릭터가 자신의 탭에서 구성 확인과 준비 완료를 눌러야 합니다\./, "obsolete participant help must not flash before replacement");
 assert.doesNotMatch(renderParty, /조사 세션 시작/, "obsolete start copy must not flash before replacement");
 
@@ -32,8 +36,8 @@ assert.doesNotMatch(preflight, /function decorateLeaderParty/, "preflight runtim
 assert.doesNotMatch(stability, /function ensureReadyBackButton/, "paint guard must not recreate the back button");
 assert.doesNotMatch(stability, /function ensurePartyNameControl/, "paint guard must not recreate the name control");
 assert.match(index, /stage2-party-ui=1/, "direct party rendering must be cache-busted");
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.85/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.95/);
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.86/);
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
 assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
 
 console.log("PASS: party composition and ready-state UI render directly without party-page DOM post-processing");

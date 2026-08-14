@@ -47,7 +47,7 @@ assert.match(css, /@media\s*\(max-width:\s*[^)]*\)\s*\{[\s\S]*?\.retro-invite-gr
 assert.match(css, /@media\s*\(max-width:\s*[^)]*\)\s*\{[\s\S]*?\.retro-invite-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr/, "phone layout must reduce the invite grid to one column");
 assert.match(homeCss, /party-member-home-row \.member-avatar\{[^}]*border:1px solid currentColor[^}]*box-sizing:border-box[^}]*overflow:hidden/, "home avatar frame must remain square, clipped, and border-box sized");
 assert.match(homeCss, /party-member-home-avatar-image\{[^}]*object-fit:cover/, "home avatar image must crop rather than alter row dimensions");
-assert.match(index, /app\.js\?v=0\.4\.4[^"']*party-invite-grid-stability=1/, "app cache key must identify the first-paint invite grid implementation");
+assert.match(index, /app\.js\?v=0\.4\.5[^"']*party-invite-grid-stability=1/, "app cache key must identify the first-paint invite grid implementation");
 assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.52/);
 assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.53/);
 assert.match(index, /party-member-home-roster\.css\?v=0\.3\.94/);

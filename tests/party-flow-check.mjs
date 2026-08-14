@@ -116,7 +116,9 @@ assert.match(source, /baekji-cloud-sync/, "remote cloud updates should re-check 
 assert.doesNotMatch(source, /function enhanceBriefing/, "briefing must render in app.js instead of a later enhancement");
 assert.doesNotMatch(source, /if \(page !== "home"\)/, "invitation popup must no longer be home-only");
 assert.match(source, /stopImmediatePropagation\(\)/, "old unrestricted briefing entry must be guarded");
-assert.match(source, /조장의 세션 시작을 기다리는 중/);
+assert.doesNotMatch(source, /조장의 세션 시작을 기다리는 중/, "the removed waiting sidecar must not override the direct confirmed-ready departure flow");
+assert.match(app, /data-start-session/, "the initial party renderer must own the all-ready leader departure control");
+assert.match(app, /\["COMPOSITION_CONFIRMED", "READY_CHECK"\]\.includes\(party\.status\)/, "legacy READY_CHECK must stay compatible with the collapsed confirmed-ready renderer");
 assert.match(app, /모든 조원의 조사가 동시에 시작됩니다/);
 
 console.log("party flow sync checks passed");

@@ -1477,6 +1477,9 @@ body.retro-page-mode .stepper {
   gap: 7px;
   overflow: visible;
 }
+body.retro-page-mode .stepper.party-stepper {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 body.retro-page-mode .step {
   min-width: 0;
   padding: 10px 8px;

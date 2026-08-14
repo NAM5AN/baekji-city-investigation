@@ -28,6 +28,7 @@ assert.ok(api, "pending-invite flow must expose a test API");
   "declineInviteState",
   "acceptInviteState",
   "enterReadyCheckState",
+  "startSessionState",
 ].forEach((name) => assert.equal(typeof api[name], "function", `pending-invite test API needs ${name}`));
 
 function fixture(status = "RECRUITING") {
@@ -112,19 +113,21 @@ assert.ok(!staleCancelAfterAccept.parties.p1.invitedIds.includes("test_b"), "a s
 const readyFixture = fixture("COMPOSITION_CONFIRMED");
 readyFixture.parties.p1.invitedIds = ["test_b", "test_c", "test_b"];
 const enteredReady = api.enterReadyCheckState(readyFixture, "p1", "leader", 1700);
-assert.equal(enteredReady.snapshot.parties.p1.status, "READY_CHECK", "leader transition must enter the all-ready stage");
-assert.deepEqual(Array.from(enteredReady.cancelledIds), ["test_b", "test_c"], "leader transition must bulk-cancel each distinct pending invite");
-assert.equal(enteredReady.shouldNotify, true, "bulk cancellation must request exactly one leader notification");
-assert.deepEqual(Array.from(enteredReady.snapshot.parties.p1.invitedIds), [], "all pending invites must be removed atomically before READY_CHECK");
-assert.deepEqual(Array.from(enteredReady.snapshot.parties.p1.memberIds), ["leader", "member"], "pending invitees must never leak into READY_CHECK members");
+assert.equal(enteredReady.snapshot.parties.p1.status, "COMPOSITION_CONFIRMED", "leader readiness is automatic inside the collapsed confirmed state");
+assert.deepEqual(Array.from(enteredReady.cancelledIds), [], "confirmation must not pre-emptively cancel pending invitations");
+assert.equal(enteredReady.shouldNotify, false, "a collapsed ready state must not emit the retired cancellation notice");
+assert.deepEqual(Array.from(enteredReady.snapshot.parties.p1.invitedIds), ["test_b", "test_c", "test_b"], "pending invitations remain until the leader explicitly confirms departure");
+assert.equal(enteredReady.snapshot.parties.p1.readyStateBy.leader.ready, true, "composition confirmation must make the leader effectively ready");
+assert.ok(enteredReady.snapshot.parties.p1.readyBy.includes("leader"));
+assert.deepEqual(Array.from(enteredReady.snapshot.parties.p1.memberIds), ["leader", "member"], "pending invitees must never become members before accepting");
 assert.equal(enteredReady.snapshot.characters.test_b.currentPartyId, null);
 assert.equal(enteredReady.snapshot.characters.test_c.currentPartyId, null);
 
 const readyAgain = api.enterReadyCheckState(enteredReady.snapshot, "p1", "leader", 1800);
-assert.equal(readyAgain.shouldNotify, false, "READY_CHECK re-entry must not repeat the pending-invite notification");
-assert.deepEqual(Array.from(readyAgain.cancelledIds), [], "READY_CHECK re-entry must not repeat cancellation");
+assert.equal(readyAgain.snapshot.parties.p1.status, "COMPOSITION_CONFIRMED", "re-entering the legacy helper must retain the collapsed state");
+assert.deepEqual(Array.from(readyAgain.cancelledIds), [], "the legacy helper must not cancel invitations");
 const readyWithoutPending = api.enterReadyCheckState(fixture("COMPOSITION_CONFIRMED"), "p1", "leader", 1900);
-assert.equal(readyWithoutPending.shouldNotify, false, "no pending invite means no automatic-cancel alert");
+assert.equal(readyWithoutPending.shouldNotify, false, "automatic readiness has no invitation-cancellation alert");
 
 const renderPartyStart = app.indexOf("  function renderParty(partyId)");
 const renderPartyEnd = app.length;
@@ -142,11 +145,11 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.4[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1/, "app cache key must opt into the pending invite, member readiness, and stable invite grid implementations");
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.85/);
-assert.match(index, /party-leadership-flow\.js\?v=0\.3\.67/);
-assert.match(index, /party-flow-sync\.js\?v=0\.3\.66/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.95/);
+assert.match(index, /app\.js\?v=0\.4\.5[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1/, "app cache key must identify the collapsed confirmed-ready departure flow");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.86/);
+assert.match(index, /party-leadership-flow\.js\?v=0\.3\.68/);
+assert.match(index, /party-flow-sync\.js\?v=0\.3\.67/);
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
 
 const uxSource = fs.readFileSync(new URL("../party-flow-ux-fix.js", import.meta.url), "utf8");
 const UX_GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -228,23 +231,23 @@ const clickReadyFixture = fixture("COMPOSITION_CONFIRMED");
 clickReadyFixture.parties.p1.invitedIds = ["test_b", "test_c"];
 const readyRuntime = uxRuntime(clickReadyFixture, "leader");
 const readyClick = readyRuntime.click(new FakeElement({ "[data-ready]": true }));
-assert.equal(readyRuntime.writes(), 1, "leader ready capture click must atomically write the cancelled invites and READY_CHECK transition once");
-assert.equal(readyRuntime.alerts.length, 1, "leader must receive exactly one auto-cancel alert");
-assert.equal(readyRuntime.snapshot().parties.p1.status, "READY_CHECK");
-assert.deepEqual(Array.from(readyRuntime.snapshot().parties.p1.invitedIds), []);
+assert.equal(readyRuntime.writes(), 0, "the retired leader ready control must not mutate the collapsed confirmed state");
+assert.equal(readyRuntime.alerts.length, 0, "the retired leader ready control must not show the deleted auto-cancel alert");
+assert.equal(readyRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED");
+assert.deepEqual(Array.from(readyRuntime.snapshot().parties.p1.invitedIds), ["test_b", "test_c"], "the retired control must leave pending invitations for the explicit departure confirmation");
 assert.equal(readyClick.prevented, true);
 assert.equal(readyClick.stopped, true);
 readyRuntime.click(new FakeElement({ "[data-ready]": true }));
-assert.equal(readyRuntime.alerts.length, 1, "READY_CHECK repeat click must not show a second pending-invite alert");
-assert.equal(readyRuntime.writes(), 1, "READY_CHECK leader click must be a no-op instead of cancelling the leader readiness");
+assert.equal(readyRuntime.alerts.length, 0, "retired leader-ready clicks must never show a cancellation alert");
+assert.equal(readyRuntime.writes(), 0, "retired leader-ready clicks remain write-free");
 
 const alreadyReadyFixture = fixture("COMPOSITION_CONFIRMED");
 alreadyReadyFixture.parties.p1.readyStateBy = { leader: { ready: true, at: 1 } };
 alreadyReadyFixture.parties.p1.readyBy = ["leader"];
 const alreadyReadyRuntime = uxRuntime(alreadyReadyFixture, "leader");
 alreadyReadyRuntime.click(new FakeElement({ "[data-ready]": true }));
-assert.equal(alreadyReadyRuntime.snapshot().parties.p1.status, "READY_CHECK");
-assert.equal(alreadyReadyRuntime.snapshot().parties.p1.readyStateBy.leader.ready, true, "leader must remain ready when entering READY_CHECK from an already-ready state");
+assert.equal(alreadyReadyRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED");
+assert.equal(alreadyReadyRuntime.snapshot().parties.p1.readyStateBy.leader.ready, true, "leader remains automatically ready without a separate ready step");
 assert.ok(alreadyReadyRuntime.snapshot().parties.p1.readyBy.includes("leader"));
 
 const memberReadyFixture = fixture("COMPOSITION_CONFIRMED");
@@ -262,11 +265,11 @@ readyCheckMemberFixture.parties.p1.readyBy = ["leader"];
 const readyCheckMemberRuntime = uxRuntime(readyCheckMemberFixture, "member");
 readyCheckMemberRuntime.click(new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" }));
 assert.equal(readyCheckMemberRuntime.writes(), 1, "a nonleader must be able to become ready during READY_CHECK");
-assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "READY_CHECK", "member readiness must not leave READY_CHECK");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED", "the first legacy READY_CHECK member update must normalize into the collapsed state");
 assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.readyStateBy.member.ready, true);
 readyCheckMemberRuntime.click(new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" }));
 assert.equal(readyCheckMemberRuntime.writes(), 2, "a nonleader must be able to cancel readiness during READY_CHECK");
-assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "READY_CHECK");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED");
 assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.readyStateBy.member.ready, false);
 
-console.log("PASS: pending invite state, ordering, cancellation, confirmed-stage acceptance, ready-stage bulk cancellation, renderer, and capture-click contracts");
+console.log("PASS: pending invite state, ordering, cancellation, confirmed-stage acceptance, explicit departure cancellation, renderer, and capture-click contracts");
