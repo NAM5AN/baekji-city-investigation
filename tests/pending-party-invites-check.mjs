@@ -142,11 +142,11 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.2[^"']*pending-party-invites=1/, "app cache key must opt into the pending invite implementation");
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.84/);
+assert.match(index, /app\.js\?v=0\.4\.3[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1/, "app cache key must opt into the pending invite and member readiness implementations");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.85/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.67/);
 assert.match(index, /party-flow-sync\.js\?v=0\.3\.66/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.94/);
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.95/);
 
 const uxSource = fs.readFileSync(new URL("../party-flow-ux-fix.js", import.meta.url), "utf8");
 const UX_GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -236,6 +236,16 @@ assert.equal(readyClick.prevented, true);
 assert.equal(readyClick.stopped, true);
 readyRuntime.click(new FakeElement({ "[data-ready]": true }));
 assert.equal(readyRuntime.alerts.length, 1, "READY_CHECK repeat click must not show a second pending-invite alert");
+assert.equal(readyRuntime.writes(), 1, "READY_CHECK leader click must be a no-op instead of cancelling the leader readiness");
+
+const alreadyReadyFixture = fixture("COMPOSITION_CONFIRMED");
+alreadyReadyFixture.parties.p1.readyStateBy = { leader: { ready: true, at: 1 } };
+alreadyReadyFixture.parties.p1.readyBy = ["leader"];
+const alreadyReadyRuntime = uxRuntime(alreadyReadyFixture, "leader");
+alreadyReadyRuntime.click(new FakeElement({ "[data-ready]": true }));
+assert.equal(alreadyReadyRuntime.snapshot().parties.p1.status, "READY_CHECK");
+assert.equal(alreadyReadyRuntime.snapshot().parties.p1.readyStateBy.leader.ready, true, "leader must remain ready when entering READY_CHECK from an already-ready state");
+assert.ok(alreadyReadyRuntime.snapshot().parties.p1.readyBy.includes("leader"));
 
 const memberReadyFixture = fixture("COMPOSITION_CONFIRMED");
 const memberRuntime = uxRuntime(memberReadyFixture, "member");
@@ -245,5 +255,18 @@ assert.equal(memberRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED"
 assert.ok(memberRuntime.snapshot().parties.p1.readyBy.includes("member"));
 assert.equal(memberReadyClick.prevented, true);
 assert.equal(memberReadyClick.stopped, true);
+
+const readyCheckMemberFixture = fixture("READY_CHECK");
+readyCheckMemberFixture.parties.p1.readyStateBy = { leader: { ready: true, at: 1 }, member: { ready: false, at: 1 } };
+readyCheckMemberFixture.parties.p1.readyBy = ["leader"];
+const readyCheckMemberRuntime = uxRuntime(readyCheckMemberFixture, "member");
+readyCheckMemberRuntime.click(new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" }));
+assert.equal(readyCheckMemberRuntime.writes(), 1, "a nonleader must be able to become ready during READY_CHECK");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "READY_CHECK", "member readiness must not leave READY_CHECK");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.readyStateBy.member.ready, true);
+readyCheckMemberRuntime.click(new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" }));
+assert.equal(readyCheckMemberRuntime.writes(), 2, "a nonleader must be able to cancel readiness during READY_CHECK");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "READY_CHECK");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.readyStateBy.member.ready, false);
 
 console.log("PASS: pending invite state, ordering, cancellation, confirmed-stage acceptance, ready-stage bulk cancellation, renderer, and capture-click contracts");

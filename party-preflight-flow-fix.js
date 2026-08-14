@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.94";
+  const VERSION = "0.3.95";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -40,7 +40,7 @@
   function togglePreflightReadyState(snapshot, partyId, userId, at = Date.now()) {
     const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
-    if (!party || party.sessionId || !["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) return draft;
+    if (!party || party.sessionId || !["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) || (party.creatorId === userId && party.status === "READY_CHECK")) return draft;
     if (!unique(party.memberIds).includes(userId)) return draft;
 
     ensureReadyStateMap(party, at);
@@ -103,7 +103,7 @@
     const cancelledIds = unique(party.invitedIds).filter((id) => !members.includes(id) && !declined.has(id) && !draft.characters?.[id]?.currentPartyId);
     party.invitedIds = [];
     ensureReadyStateMap(party, at);
-    party.readyStateBy[leaderId] = { ready: !effectiveReady(party, leaderId), at };
+    party.readyStateBy[leaderId] = { ready: true, at };
     rebuildReadyBy(party);
     party.status = "READY_CHECK";
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
