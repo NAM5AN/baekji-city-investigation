@@ -382,6 +382,66 @@
     return protectedState;
   }
 
+  function reconcileCompletedPartyDisbands(remote, local, merged) {
+    if (!merged || merged.version !== 3) return merged;
+    const markerSessions = new Map();
+    [remote, local, merged].forEach((state) => {
+      Object.entries(state?.sessions || {}).forEach(([sessionId, session]) => {
+        if (session?.status !== "COMPLETED" || !session.partyDisbandedAt) return;
+        const known = markerSessions.get(sessionId);
+        if (!known || Number(session.partyDisbandedAt) > Number(known.partyDisbandedAt)) markerSessions.set(sessionId, session);
+      });
+    });
+    markerSessions.forEach((markerSession, sessionId) => {
+      merged.sessions ||= {};
+      if (!merged.sessions[sessionId]) merged.sessions[sessionId] = JSON.parse(JSON.stringify(markerSession));
+      const session = merged.sessions[sessionId];
+      session.status = "COMPLETED";
+      session.partyDisbandedAt = markerSession.partyDisbandedAt;
+      session.partyDisbandedBy = markerSession.partyDisbandedBy || null;
+      const partyId = markerSession.partyId;
+      const party = merged.parties?.[partyId];
+      if (party) {
+        party.status = "CLOSED";
+        party.archivedAt = markerSession.partyDisbandedAt;
+        party.archivedSessionId = sessionId;
+        party.memberIds = [];
+        party.invitedIds = [];
+        party.declinedIds = [];
+        party.confirmedBy = [];
+        party.readyBy = [];
+        party.readyStateBy = {};
+        party.sessionId = null;
+      }
+      [...new Set(markerSession.memberIds || [])].forEach((memberId) => {
+        const character = merged.characters?.[memberId];
+        if (!character) return;
+        if (character.currentPartyId === partyId) character.currentPartyId = null;
+        if (character.currentSessionId === sessionId) character.currentSessionId = null;
+      });
+    });
+    return merged;
+  }
+
+  function preserveAcceptedLocalPartyDisbands(remote, currentLocal) {
+    if (!remote || remote.version !== 3 || !currentLocal || currentLocal.version !== 3) return remote;
+    const localMarkers = Object.values(currentLocal.sessions || {}).filter((session) => session?.status === "COMPLETED" && session.partyDisbandedAt);
+    if (!localMarkers.length) return remote;
+    const protectedState = JSON.parse(JSON.stringify(remote));
+    localMarkers.forEach((markerSession) => {
+      const remoteMarker = remote.sessions?.[markerSession.id];
+      const preservesLocalCharacter = !remoteMarker?.partyDisbandedAt || Number(markerSession.partyDisbandedAt) > Number(remoteMarker.partyDisbandedAt);
+      if (!preservesLocalCharacter) return;
+      [...new Set(markerSession.memberIds || [])].forEach((memberId) => {
+        const localCharacter = currentLocal.characters?.[memberId];
+        if (!localCharacter) return;
+        protectedState.characters ||= {};
+        protectedState.characters[memberId] = JSON.parse(JSON.stringify(localCharacter));
+      });
+    });
+    return reconcileCompletedPartyDisbands(remote, currentLocal, protectedState);
+  }
+
   function hasOwn(object, key) {
     return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
   }
@@ -467,7 +527,7 @@
   function mergeCloudStates(remote, local) {
     // Legacy contract equivalent: reconcileAdminControl(result.state, localState, mergeValues(result.state, localState))
     const merged = reconcileMovementTransitions(remote, local, mergeValues(remote, local));
-    return reconcileAdminControl(remote, local, merged);
+    return reconcileCompletedPartyDisbands(remote, local, reconcileAdminControl(remote, local, merged));
   }
 
   function valuesEqual(left, right) {
@@ -548,7 +608,7 @@
   function rebaseUnsyncedOverlay(base, desired, latestRemote) {
     if (!base || !desired || !latestRemote) return desired || latestRemote;
     const rebased = rebaseUnsyncedValue(base, desired, latestRemote, []);
-    return reconcileAdminControl(latestRemote, desired, rebased);
+    return reconcileCompletedPartyDisbands(latestRemote, desired, reconcileAdminControl(latestRemote, desired, rebased));
   }
 
   function writerId() {
@@ -644,7 +704,7 @@
     if (!remote || remote.version !== 3) return false;
     const oldRaw = nativeGetItem.call(localStorage, GLOBAL_KEY);
     const currentLocal = safeParse(oldRaw);
-    const protectedRemote = preserveAcceptedLocalMovementTransitions(remote, currentLocal);
+    const protectedRemote = preserveAcceptedLocalPartyDisbands(preserveAcceptedLocalMovementTransitions(remote, currentLocal), currentLocal);
     const record = activeUnsyncedRecord();
     const base = safeParse(record?.baseRaw);
     const desired = safeParse(record?.stateRaw);
@@ -983,6 +1043,8 @@
     synthesizeLegacyMovementTransition,
     reconcileSessionMovement,
     reconcileMovementTransitions,
+    reconcileCompletedPartyDisbands,
+    preserveAcceptedLocalPartyDisbands,
     mergeCloudStates,
     valuesEqual,
     rebaseArrayDelta,

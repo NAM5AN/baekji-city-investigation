@@ -18,6 +18,7 @@ const GROUPS = Object.freeze({
   player: [
     "party-flow-check.mjs",
     "party-confirmed-ready-collapse-check.mjs",
+    "result-party-disband-check.mjs",
     "pending-party-invites-check.mjs",
     "party-leadership-flow-check.mjs",
     "party-leadership-runtime-check.mjs",
