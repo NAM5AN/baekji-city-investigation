@@ -328,7 +328,7 @@
     const account = partyAccount(memberId);
     const role = memberId === party.creatorId ? "조장" : "참가 조원";
     return `<div class="member party-member-home-row" data-party-home-member="${escapeHtml(memberId)}">
-      <div class="member-avatar">${partyAvatarMarkup(account, "party-member-home-avatar-image")}</div>
+      <div class="member-avatar ${account.profilePhoto ? "has-profile-photo" : ""}">${partyAvatarMarkup(account, "tester-member-avatar party-member-home-avatar-image")}</div>
       <div class="party-member-home-main"><div class="list-title">${escapeHtml(account.name)}</div><div class="list-sub">${role}</div></div>
       <div class="status-pills">${partyHomeReadyMarkup(party, memberId, currentId)}</div>
     </div>`;
@@ -769,8 +769,8 @@
         ${party.status === "RECRUITING" && isCreator ? `
           <section class="section card pad">
             <div class="card-header"><div><h2 class="card-title">조원 초대</h2><p class="muted small">현재 다른 조사조에 참여 중인 캐릭터는 초대할 수 없습니다.</p></div></div>
-            <div class="list">
-              ${inviteCandidates.length ? inviteCandidates.map((u) => `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${escapeHtml(u.note)}</div></div><button class="button small" data-invite="${u.id}">초대</button></div>`).join("") : `<div class="empty">추가로 초대할 수 있는 캐릭터가 없습니다.</div>`}
+            <div class="list retro-invite-grid">
+              ${inviteCandidates.length ? inviteCandidates.map((u) => `<div class="list-item retro-invite-card" data-tester-account-id="${escapeHtml(u.id)}"><img class="retro-invite-profile" src="${escapeHtml(u.profilePhoto || "assets/no-image-placeholder.svg?v=2")}" alt="${escapeHtml(u.name)} 프로필 사진"><div class="list-main"><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${escapeHtml(u.note)}</div></div><button class="button small" data-invite="${u.id}">초대</button></div>`).join("") : `<div class="empty">추가로 초대할 수 있는 캐릭터가 없습니다.</div>`}
             </div>
           </section>` : ""}
 
@@ -809,13 +809,13 @@
     const statusMarkup = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)
       ? `<span class="party-ready-state ${ready ? "is-ready" : "is-waiting"}">${ready ? "● 준비 완료" : "○ 준비 대기"}</span>`
       : `<span class="badge ${confirmed ? "green" : ""}">${confirmed ? "구성 확인" : "확인 대기"}</span><span class="badge ${ready ? "blue" : ""}">${ready ? "준비 완료" : "준비 대기"}</span>`;
-    return `<div class="member"><div class="member-avatar">${partyAvatarMarkup(u, "party-member-home-avatar-image")}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "조장" : "참가 조원"}</div></div><div class="status-pills">${statusMarkup}</div></div>`;
+    return `<div class="member"><div class="member-avatar ${u.profilePhoto ? "has-profile-photo" : ""}">${partyAvatarMarkup(u, "tester-member-avatar party-member-home-avatar-image")}</div><div><div class="list-title">${escapeHtml(u.name)}</div><div class="list-sub">${memberId === party.creatorId ? "조장" : "참가 조원"}</div></div><div class="status-pills">${statusMarkup}</div></div>`;
   }
 
   function pendingInviteRow(memberId, isCreator, pendingInviteLabel = "초대하는 중...") {
     const account = partyAccount(memberId);
     const cancelMarkup = isCreator ? `<button type="button" class="button small" data-party-invite-cancel="${escapeHtml(memberId)}">초대 취소</button>` : "";
-    return `<div class="member party-pending-invite-row" data-party-pending-invite="${escapeHtml(memberId)}"><div class="member-avatar">${partyAvatarMarkup(account, "party-member-home-avatar-image")}</div><div><div class="list-title">${escapeHtml(account.name)}</div><div class="list-sub">초대 수락 대기</div></div><div class="status-pills">${cancelMarkup}<span class="party-ready-state is-waiting">${escapeHtml(pendingInviteLabel)}</span></div></div>`;
+    return `<div class="member party-pending-invite-row" data-party-pending-invite="${escapeHtml(memberId)}"><div class="member-avatar ${account.profilePhoto ? "has-profile-photo" : ""}">${partyAvatarMarkup(account, "tester-member-avatar party-member-home-avatar-image")}</div><div><div class="list-title">${escapeHtml(account.name)}</div><div class="list-sub">초대 수락 대기</div></div><div class="status-pills">${cancelMarkup}<span class="party-ready-state is-waiting">${escapeHtml(pendingInviteLabel)}</span></div></div>`;
   }
 
   function inviteUser(partyId, userId) {

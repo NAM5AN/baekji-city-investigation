@@ -46,9 +46,20 @@ body[data-choice-motion-suppressed] .retro-scene-actions,
 
 .retro-invite-grid {
   display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+  grid-auto-rows: 104px;
+  max-height: calc(104px * 4 + 14px * 3);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #555 #d7d7d0;
 }
+
+.retro-invite-grid::-webkit-scrollbar{width:10px}
+.retro-invite-grid::-webkit-scrollbar-track{background:#d7d7d0;border-left:1px solid #111}
+.retro-invite-grid::-webkit-scrollbar-thumb{background:#555;border:2px solid #d7d7d0}
+.retro-invite-grid::-webkit-scrollbar-button{display:none;width:0;height:0}
 
 .retro-invite-card {
   min-width: 0;
@@ -58,6 +69,9 @@ body[data-choice-motion-suppressed] .retro-scene-actions,
   gap: 14px;
   margin: 0 !important;
   padding: 16px !important;
+  height:104px;
+  box-sizing:border-box;
+  overflow:hidden;
 }
 
 .retro-invite-profile {
@@ -73,11 +87,14 @@ body[data-choice-motion-suppressed] .retro-scene-actions,
 
 .retro-invite-card .list-main {
   min-width: 0;
+  overflow: hidden;
 }
 
 .retro-invite-card .list-title,
 .retro-invite-card .list-sub {
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @keyframes retro-channel-frame {
@@ -120,15 +137,23 @@ body[data-choice-motion-suppressed] .retro-scene-actions,
   100% { opacity: 1; }
 }
 
+@media (max-width: 1120px) {
+  .retro-invite-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 @media (max-width: 760px) {
   .retro-invite-grid {
+    grid-template-columns:1fr;
     gap: 9px;
+    grid-auto-rows:134px;
+    max-height:calc(134px * 4 + 9px * 3);
   }
 
   .retro-invite-card {
     grid-template-columns: 48px minmax(0, 1fr);
     gap: 9px;
     padding: 11px !important;
+    height:134px;
   }
 
   .retro-invite-profile {

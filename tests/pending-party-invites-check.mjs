@@ -142,7 +142,7 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.3[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1/, "app cache key must opt into the pending invite and member readiness implementations");
+assert.match(index, /app\.js\?v=0\.4\.4[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1/, "app cache key must opt into the pending invite, member readiness, and stable invite grid implementations");
 assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.85/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.67/);
 assert.match(index, /party-flow-sync\.js\?v=0\.3\.66/);

@@ -50,10 +50,10 @@ assert.equal(api.replaceAccountIds(`${testerId}의 확인을 기다리고 있습
 assert(app.includes("briefing-member-main"), "briefing member names should render directly");
 assert(app.includes('partyAvatarMarkup(account, "tester-briefing-avatar")'), "briefing member profile photos should render directly");
 assert(!source.includes("decorateBriefingMembers"), "profile sync must not rewrite direct briefing rows");
-assert(source.includes("decorateInviteCandidates"), "party invite candidates should be decorated with tester directory data");
-assert(source.includes(".retro-invite-card"), "invite grid cards should be scanned for tester accounts");
-assert(source.includes(".retro-invite-profile"), "generated invite placeholders should be replaced by stored tester photos");
-assert(source.includes("dataset.testerProfilePhoto"), "real tester photos should be marked after replacing placeholders");
+assert(source.includes("decorateInviteCandidates"), "party profile sync may hydrate a tester directory entry that arrived after app first paint");
+assert(!source.includes("document.createElement") && !source.includes(".prepend(") && !source.includes("replaceWith("), "party profile sync must not create or replace app-rendered invite DOM");
+assert(app.includes('data-tester-account-id="${escapeHtml(u.id)}"'), "app must own candidate tester ids directly");
+assert(app.includes('class="retro-invite-profile"'), "app must render candidate profile image markup directly");
 assert(css.includes("object-fit: cover"), "briefing profile photos should fill the avatar frame");
 assert(mobileCss.includes("body.mobile-investigation-active .topbar"), "mobile investigation topbar should be compacted");
 assert(mobileCss.includes("writing-mode: horizontal-tb"), "mobile topbar labels must remain horizontal");
