@@ -101,6 +101,31 @@
     })).filter((entry) => entry.objectId).sort((a, b) => a.label.localeCompare(b.label, "ko"));
   }
 
+  function fieldPlacementEntries(payload) {
+    const labels = new Map(fieldObjectEntries().map((entry) => [entry.objectId, entry.label]));
+    return ["a", "b", "c", "d"].flatMap((variant) => {
+      const placements = payload?.state?.fieldItemPlacementsByVariant?.[variant] || {};
+      const claims = payload?.state?.fieldItemPlacementClaimsByVariant?.[variant] || {};
+      return Object.entries(placements).flatMap(([placementId, placement]) => {
+        if (!placement || claims[placementId]) return [];
+        const owner = profileFor(payload, placement.sourceCharacterId);
+        return [{ placementId, variant, placement, owner, location: labels.get(String(placement.objectId || "")) || String(placement.objectId || "위치 미상") }];
+      });
+    }).sort((a, b) => Number(b.placement?.placedAt || 0) - Number(a.placement?.placedAt || 0));
+  }
+
+  function fieldPlacementMarkup(payload) {
+    const entries = fieldPlacementEntries(payload);
+    const rows = entries.map(({ placementId, variant, placement, owner, location }) => {
+      const item = placement.item || {};
+      return `<div class="admin-control-field-row" data-control-field-placement="${esc(placementId)}">
+        <div class="admin-control-field-copy"><strong>${esc(item.name || placement.sourceInventoryKey || "현장 물품")}</strong><small>${variant.toUpperCase()} 변주 · ${esc(location)}</small><small>원 소유자 ${esc(owner.name)} · ${esc(item.state || "CLEAN")} · ${Number(item.quantity || 0)}개</small></div>
+        <div class="admin-control-field-actions"><button type="button" data-control-field-recall="${esc(placementId)}" data-field-variant="${variant}">원 소유자에게 회수</button><button type="button" class="danger" data-control-field-delete="${esc(placementId)}" data-field-variant="${variant}">현장에서 삭제</button></div>
+      </div>`;
+    }).join("");
+    return `<section class="admin-control-section admin-control-field-items"><div class="admin-control-section-head"><div><strong>현장 배치 물품</strong><small>아직 습득되지 않은 관리자 배치 물품만 표시합니다.</small></div><span class="admin-control-revision">${entries.length}개</span></div>${rows || `<div class="admin-control-empty compact">현재 현장에 남아 있는 관리자 배치 물품이 없습니다.</div>`}</section>`;
+  }
+
   function transferMarkup(payload, characterId, worldVariant) {
     const world = worldItemEntries(payload, worldVariant);
     const moveSources = characterItemOptions(payload, characterId, "CHARACTER_MOVE");
@@ -192,9 +217,21 @@
         <label><span>상태</span><input maxlength="40" value="CLEAN" data-control-add-item-state /></label>
         <button type="button" data-control-add-item="${esc(characterId)}">추가/설정</button>
       </div>
-    </section>${transferMarkup(payload, characterId, worldVariant)}
+    </section>${transferMarkup(payload, characterId, worldVariant)}${fieldPlacementMarkup(payload)}
     <div class="admin-control-footnote">모든 변경은 관리자 계정·변경 전/후 값·세계 revision과 함께 감사 로그에 영구 기록됩니다.</div>`, "character-control");
     currentControl = { type: "character", id: characterId, payload, worldVariant };
+  }
+
+  function renderFieldPlacementConfirm(payload, characterId, variant, placementId, mode, worldVariant) {
+    const entry = fieldPlacementEntries(payload).find((candidate) => candidate.variant === variant && candidate.placementId === placementId);
+    if (!entry) {
+      toast("이미 습득되었거나 현장에서 사라진 물품입니다.", "error");
+      return renderCharacterControl(payload, characterId, worldVariant);
+    }
+    const deleting = mode === "FIELD_DELETE";
+    const itemName = String(entry.placement.item?.name || entry.placement.sourceInventoryKey || "현장 물품");
+    shell(deleting ? "현장 물품 삭제 확인" : "현장 물품 회수 확인", `${entry.variant.toUpperCase()} 변주 · ${entry.location}`, `<section class="admin-control-confirm"><strong>${esc(itemName)}</strong><p>${deleting ? "현장에서 영구 삭제합니다. 원 소유자의 소지품으로 돌아가지 않습니다." : `${esc(entry.owner.name)}의 소지품으로 상태 그대로 되돌립니다.`}</p><div class="admin-control-actions split"><button type="button" data-control-field-manage-back>돌아가기</button><button type="button" class="${deleting ? "danger" : "primary"}" data-control-field-manage-confirm="${mode}" data-placement-id="${esc(placementId)}" data-field-variant="${variant}">${deleting ? "현장에서 삭제" : "원 소유자에게 회수"}</button></div></section>`, "field-placement-confirm");
+    currentControl = { type: "field-placement-confirm", id: characterId, payload, worldVariant, variant, placementId, mode };
   }
 
   function renderPartyControl(payload, partyId, confirmDraft = null) {
@@ -264,7 +301,7 @@
     }
   }
 
-  async function sendControl(body, reopen) {
+  async function sendControl(body, reopen, refreshOnError = false) {
     if (busy) return;
     busy = true;
     ensureRoot().querySelectorAll("button,input,select,textarea").forEach((node) => { node.disabled = true; });
@@ -281,6 +318,10 @@
       window.dispatchEvent(new CustomEvent("baekji-admin-control-applied", { detail: result }));
     } catch (error) {
       toast(error?.data?.code || error?.message || "관리자 변경에 실패했습니다.", "error");
+      if (refreshOnError && typeof reopen === "function") {
+        try { reopen(await snapshot()); }
+        catch { /* keep the confirmation visible if refresh also fails */ }
+      }
       ensureRoot().querySelectorAll("button,input,select,textarea").forEach((node) => { node.disabled = false; });
     } finally {
       busy = false;
@@ -382,6 +423,29 @@
       const characterId = currentControl?.id;
       const itemId = removeItem.dataset.controlItemRemove;
       return void sendControl({ operation: "INVENTORY_TRANSFER", mode: "CHARACTER_REMOVE", targetCharacterId: characterId, sourceCharacterId: characterId, sourceInventoryKey: itemId }, (fresh) => renderCharacterControl(fresh, characterId));
+    }
+
+    const fieldRecall = target.closest("[data-control-field-recall]");
+    const fieldDelete = target.closest("[data-control-field-delete]");
+    const fieldManage = fieldRecall || fieldDelete;
+    if (fieldManage) {
+      const mode = fieldRecall ? "FIELD_RECALL" : "FIELD_DELETE";
+      const placementId = String(fieldRecall?.dataset.controlFieldRecall || fieldDelete?.dataset.controlFieldDelete || "");
+      return renderFieldPlacementConfirm(currentControl?.payload, currentControl?.id, String(fieldManage.dataset.fieldVariant || ""), placementId, mode, currentControl?.worldVariant || "a");
+    }
+
+    if (target.closest("[data-control-field-manage-back]")) {
+      return renderCharacterControl(currentControl?.payload, currentControl?.id, currentControl?.worldVariant || "a");
+    }
+
+    const fieldManageConfirm = target.closest("[data-control-field-manage-confirm]");
+    if (fieldManageConfirm) {
+      const characterId = currentControl?.id;
+      const worldVariant = currentControl?.worldVariant || "a";
+      const mode = String(fieldManageConfirm.dataset.controlFieldManageConfirm || "");
+      const variant = String(fieldManageConfirm.dataset.fieldVariant || "");
+      const placementId = String(fieldManageConfirm.dataset.placementId || "");
+      return void sendControl({ operation: "INVENTORY_TRANSFER", mode, variant, placementId }, (fresh) => renderCharacterControl(fresh, characterId, worldVariant), true);
     }
 
     const addItem = target.closest("[data-control-add-item]");
@@ -488,6 +552,7 @@
   window.__BAEKJI_ADMIN_CONTROL_MVP4__ = Object.freeze({
     requestId,
     itemCatalogEntries,
+    fieldPlacementEntries,
     nodeName,
     sessionForParty,
     augmentDetail,

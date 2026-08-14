@@ -135,8 +135,8 @@ const vercel = JSON.parse(vercelRaw);
 const cloud = await readFile(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
 
 assert.match(html, /OBSERVE · COMMUNICATION · CONTROL/);
-assert.match(html, /admin-control-mvp4\.css\?v=0\.4\.2&stage4-item-transfer=1&item-disposition=1/);
-assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.5&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1/);
+assert.match(html, /admin-control-mvp4\.css\?v=0\.4\.3&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
+assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.6&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1&field-item-management=1/);
 assert.match(html, /admin-control-status-mvp4\.js\?v=0\.4\.0/);
 assert.match(html, /admin-world-reset\.js\?v=0\.5\.1/);
 assert.match(ui, /감사 로그/);
