@@ -6,7 +6,7 @@
   const JOIN_INTENT_KEY = "baekji_city_party_join_intent_v1";
   const NOTICE_SEEN_KEY_PREFIX = "baekji_city_party_membership_notice_seen_v1:";
   const STYLE_ID = "baekji-party-membership-ux-style";
-  const VERSION = "0.3.85";
+  const VERSION = "0.3.86";
   const DEMO_NAMES = {
     test_a: "테스트 캐릭터 A",
     test_b: "테스트 캐릭터 B",
@@ -319,72 +319,6 @@
     return next;
   }
 
-  function invitationCard() {
-    return [...document.querySelectorAll("article.card")].find((card) =>
-      String(card.querySelector(".card-title")?.textContent || "").trim() === "받은 초대"
-    ) || null;
-  }
-
-  function decorateInviteVisibility(snapshot, userId) {
-    const [page] = routeParts();
-    if (page !== "home") return;
-    const partyId = snapshot.characters?.[userId]?.currentPartyId;
-    const party = partyId ? snapshot.parties?.[partyId] : null;
-    const card = invitationCard();
-    if (!card) return;
-    const grid = card.closest("section.grid.two");
-    card.hidden = Boolean(party);
-    if (grid) {
-      if (party) {
-        grid.dataset.partyMembershipSingle = "true";
-        grid.style.gridTemplateColumns = "1fr";
-      } else if (grid.dataset.partyMembershipSingle === "true") {
-        delete grid.dataset.partyMembershipSingle;
-        grid.style.removeProperty("grid-template-columns");
-      }
-    }
-    if (party) document.querySelector(".retro-invite-backdrop[data-party-flow-modal]")?.remove();
-  }
-
-  function normalizeMemberHomeButtons(snapshot, userId) {
-    const [page] = routeParts();
-    if (page !== "home") return;
-    const partyId = snapshot.characters?.[userId]?.currentPartyId;
-    const party = partyId ? snapshot.parties?.[partyId] : null;
-    if (!party || party.creatorId === userId || !unique(party.memberIds).includes(userId)) return;
-
-    const escaped = CSS.escape(partyId);
-    const controls = document.querySelector(`[data-member-party-controls="${escaped}"]`);
-    const anyRoster = document.querySelector(`[data-party-roster-open="${escaped}"]`);
-    const legacy = document.querySelector(`[data-open-party="${escaped}"]`);
-    const item = controls?.closest(".list-item") || anyRoster?.closest(".list-item") || legacy?.closest(".list-item");
-    if (!item) return;
-
-    item.querySelectorAll(`[data-open-party="${escaped}"]`).forEach((button) => button.remove());
-    let actionRoot = controls;
-    if (!actionRoot) {
-      actionRoot = document.createElement("div");
-      actionRoot.className = "button-row";
-      actionRoot.dataset.memberPartyControls = partyId;
-      item.appendChild(actionRoot);
-    }
-
-    const rosterButtons = [...item.querySelectorAll(`[data-party-roster-open="${escaped}"]`)];
-    let keep = rosterButtons.find((button) => actionRoot.contains(button)) || rosterButtons[0] || null;
-    rosterButtons.forEach((button) => { if (button !== keep) button.remove(); });
-    if (!keep) {
-      keep = document.createElement("button");
-      keep.type = "button";
-      keep.className = "button small";
-      keep.dataset.partyRosterOpen = partyId;
-      keep.textContent = "조원 보기";
-      actionRoot.prepend(keep);
-    } else if (!actionRoot.contains(keep)) {
-      actionRoot.prepend(keep);
-    }
-    if (keep.textContent !== "조원 보기") keep.textContent = "조원 보기";
-  }
-
   function decorateLeaderParticipants(snapshot, userId) {
     const [page, partyId] = routeParts();
     if (page !== "party" || !partyId) return;
@@ -595,8 +529,6 @@
     }
 
     ensureStyle();
-    decorateInviteVisibility(snapshot, userId);
-    normalizeMemberHomeButtons(snapshot, userId);
     decorateLeaderParticipants(snapshot, userId);
     decorateRosterModal(snapshot, userId);
     showPendingMembershipNotice(snapshot, userId);

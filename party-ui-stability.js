@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.92";
+  const VERSION = "0.3.93";
   const EDITABLE_STATUSES = new Set(["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"]);
   const DEFAULT_NAME_RE = /^해오름역 조사조\s+\d+$/;
   const DEMO_NAMES = {
@@ -57,8 +57,6 @@
   if (typeof window !== "undefined") window.__BAEKJI_PARTY_NAME_UI_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
 
-  let refreshQueued = false;
-  let observer = null;
   let editingPartyId = "";
 
   function readState(raw = null) {
@@ -72,10 +70,6 @@
 
   function currentUserId() {
     return String(sessionStorage.getItem(USER_KEY) || "");
-  }
-
-  function routeParts() {
-    return (location.hash.replace(/^#\/?/, "") || "login").split("/").filter(Boolean);
   }
 
   function testerName(userId) {
@@ -126,42 +120,8 @@
     return true;
   }
 
-  function homeInviteCard() {
-    return [...document.querySelectorAll("main section.card, main article.card")].find((card) =>
-      String(card.querySelector("h2")?.textContent || "").trim() === "받은 초대"
-    ) || null;
-  }
-
-  function hideImpossibleInviteCard(snapshot, userId) {
-    const [page] = routeParts();
-    if (page !== "home") return;
-    const partyId = snapshot?.characters?.[userId]?.currentPartyId;
-    const card = homeInviteCard();
-    if (!card) return;
-    if (partyId) {
-      card.hidden = true;
-      card.style.display = "none";
-      card.dataset.partyUiHiddenInvite = "true";
-    } else if (card.dataset.partyUiHiddenInvite === "true") {
-      card.hidden = false;
-      card.style.removeProperty("display");
-      delete card.dataset.partyUiHiddenInvite;
-    }
-  }
-
-  function stabilizePaint(snapshot = readState(), userId = currentUserId()) {
-    if (!snapshot || !userId) return;
-    hideImpossibleInviteCard(snapshot, userId);
+  function stabilizePaint() {
     document.documentElement.dataset.partyUiStabilityVersion = VERSION;
-  }
-
-  function schedulePaint() {
-    if (refreshQueued) return;
-    refreshQueued = true;
-    queueMicrotask(() => {
-      refreshQueued = false;
-      stabilizePaint();
-    });
   }
 
   function closeEditor() {
@@ -249,21 +209,6 @@
       saveEditor();
     }
   });
-
-  window.addEventListener("storage", (event) => {
-    if (event.key && event.key !== GLOBAL_KEY) return;
-    stabilizePaint(readState(event.newValue || null), currentUserId());
-  });
-  window.addEventListener("baekji-party-preflight-flow", schedulePaint);
-  window.addEventListener("baekji-party-flow-ux", schedulePaint);
-  window.addEventListener("baekji-party-membership", schedulePaint);
-  window.addEventListener("hashchange", schedulePaint);
-
-  const app = document.getElementById("app");
-  if (app) {
-    observer = new MutationObserver(schedulePaint);
-    observer.observe(app, { childList: true, subtree: true });
-  }
 
   window.__BAEKJI_PARTY_NAME_UI__ = Object.freeze({
     version: VERSION,

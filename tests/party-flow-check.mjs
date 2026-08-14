@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-flow-sync.js", import.meta.url), "utf8");
+const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const sandbox = {
   window: {
     __BAEKJI_TESTER_REGISTRY_GUARD__: {
@@ -27,13 +28,10 @@ assert.ok(api, "party flow test API must be exposed");
 const testerLabel = api.registeredUserLabel("tester-uuid-a");
 assert.equal(testerLabel.name, "테스트A", "briefing first paint must resolve the registered character name");
 assert.equal(testerLabel.profilePhoto, "data:image/jpeg;base64,AA==", "briefing first paint must resolve the registered profile photo");
-const testerMarkup = api.briefingMemberMarkup("tester-uuid-a", "tester-uuid-a", []);
-assert.match(testerMarkup, /data-tester-account-id="tester-uuid-a"/);
-assert.match(testerMarkup, /class="tester-briefing-avatar"/);
-assert.match(testerMarkup, />테스트A</);
-assert.doesNotMatch(testerMarkup, />\?</, "briefing first paint must not expose a question-mark avatar");
 assert.ok(!api.registeredUserLabel("unknown-uuid"), "unregistered UUIDs must wait instead of rendering internal IDs");
-assert.equal(api.briefingMemberMarkup("unknown-uuid", "unknown-uuid", []), "", "unregistered UUIDs must not create a fallback briefing row");
+assert.match(app, /function briefingMemberMarkup\(memberId, leaderId, confirmedIds\)/, "briefing member markup must be owned by the initial renderer");
+assert.match(app, /partyAvatarMarkup\(account, "tester-briefing-avatar"\)/, "briefing first paint must support stored profile photos");
+assert.match(app, /name: "참가 캐릭터", initial: "·"/, "unregistered profiles must use a neutral placeholder instead of internal IDs");
 
 const base = {
   version: 3,
@@ -106,10 +104,10 @@ assert.match(source, /data-party-flow-defer/);
 assert.match(source, /data-party-flow-decline/);
 assert.match(source, /data-party-flow-accept/);
 assert.match(source, /baekji-cloud-sync/, "remote cloud updates should re-check invitation visibility immediately");
-assert.match(source, /memberIds\.some\(\(memberId\) => !memberLabels\.get\(memberId\)\)\) return/, "briefing enhancement must wait until every member profile is registered");
+assert.doesNotMatch(source, /function enhanceBriefing/, "briefing must render in app.js instead of a later enhancement");
 assert.doesNotMatch(source, /if \(page !== "home"\)/, "invitation popup must no longer be home-only");
 assert.match(source, /stopImmediatePropagation\(\)/, "old unrestricted briefing entry must be guarded");
 assert.match(source, /조장의 세션 시작을 기다리는 중/);
-assert.match(source, /모든 조원의 조사가 동시에 시작됩니다/);
+assert.match(app, /모든 조원의 조사가 동시에 시작됩니다/);
 
 console.log("party flow sync checks passed");
