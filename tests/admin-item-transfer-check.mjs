@@ -167,7 +167,7 @@ assert.match(cloudSource, /action === "INVENTORY_TRANSFER"/);
 const adminHtml = fs.readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 assert.match(adminHtml, /admin-control-mvp4\.css\?v=0\.4\.1&stage4-item-transfer=1/);
-assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.1&stage4-item-transfer=1/);
+assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.2&stage4-item-transfer=1&lazy-entry=1/);
 assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.2&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1/);
 
 const Storage = class { getItem() { return null; } setItem() {} removeItem() {} };
