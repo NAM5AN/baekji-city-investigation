@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 const apiEnd = app.indexOf("  function renderParty(partyId)");
@@ -17,6 +18,7 @@ const sandbox = {
 sandbox.window = sandbox;
 sandbox.DAY1_DATA = {};
 vm.createContext(sandbox);
+vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
 vm.runInContext(helperSource, sandbox, { filename: "app-pending-invite-helpers.js" });
 const api = sandbox.window.__BAEKJI_PENDING_PARTY_INVITES_TEST__;
 assert.ok(api, "pending-invite flow must expose a test API");
@@ -145,8 +147,8 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.6[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1/, "app cache key must identify the collapsed confirmed-ready guarded-departure flow");
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1/);
+assert.match(index, /app\.js\?v=0\.4\.7[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1/, "app cache key must identify the collapsed confirmed-ready, guarded-departure, and Stage 3-A utility flow");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.68/);
 assert.match(index, /party-flow-sync\.js\?v=0\.3\.67/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
@@ -206,6 +208,7 @@ function uxRuntime(initialState, userId) {
   context.window = context;
   context.dispatchEvent = () => true;
   context.alert = (message) => alerts.push(String(message));
+  vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
   vm.runInContext(uxSource, context, { filename: "party-flow-ux-fix.js" });
   assert.equal(typeof clickHandler, "function", "party flow UX must register a capture click handler");
   return {

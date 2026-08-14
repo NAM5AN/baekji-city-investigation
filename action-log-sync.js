@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { clone, uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const NARRATION_PENDING_KEY = "actionNarrationPending";
@@ -11,15 +12,6 @@
     test_b: "테스트 캐릭터 B",
     test_c: "테스트 캐릭터 C",
   };
-
-  function clone(value) {
-    if (typeof structuredClone === "function") return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-  }
-
-  function unique(values) {
-    return [...new Set(Array.isArray(values) ? values : [])];
-  }
 
   function parseState(value) {
     try {

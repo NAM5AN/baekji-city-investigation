@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { escapeHtml } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const ROOT = typeof window !== "undefined" ? window : globalThis;
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -12,13 +13,6 @@
     test_b: "테스트 캐릭터 B",
     test_c: "테스트 캐릭터 C",
   });
-
-  const escapeHtml = (value) => String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 
   function stableChronologicalEntries(logs) {
     return (Array.isArray(logs) ? logs : [])

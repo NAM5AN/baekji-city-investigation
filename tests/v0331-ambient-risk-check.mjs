@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const gameplaySource = fs.readFileSync(new URL("../gameplay-variance.js", import.meta.url), "utf8");
+const runtimeUtilsSource = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const motionSource = fs.readFileSync(new URL("../retro-motion.js", import.meta.url), "utf8");
 const motionCss = fs.readFileSync(new URL("../retro-ambient-type.css", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -55,6 +56,7 @@ const sandbox = {
   Proxy,
   queueMicrotask,
 };
+vm.runInNewContext(runtimeUtilsSource, sandbox);
 vm.runInNewContext(gameplaySource, sandbox);
 
 const helpers = sandbox.window.__BAEKJI_GAMEPLAY_VARIANCE_TEST__;

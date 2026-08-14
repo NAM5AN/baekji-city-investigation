@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync("party-leadership-flow.js", "utf8");
+const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 
@@ -82,6 +83,7 @@ context.window = context;
 context.addEventListener = (type, handler) => listeners.set(type, handler);
 context.dispatchEvent = () => true;
 
+vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
 vm.runInContext(source, context, { filename: "party-leadership-flow.js" });
 assert.equal(typeof clickHandler, "function", "party leadership click handler must be registered");
 

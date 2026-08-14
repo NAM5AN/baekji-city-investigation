@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { escapeHtml } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -53,15 +54,6 @@
   const TEST_API = Object.freeze({ accountFromRow, buildRoster });
   if (typeof window !== "undefined") window.__BAEKJI_PARTY_ROSTER_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
 
   function readState() {
     try {

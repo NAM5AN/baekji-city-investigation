@@ -3,10 +3,12 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-leadership-flow.js", import.meta.url), "utf8");
+const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 const sandbox = { window: {}, console, structuredClone };
 vm.createContext(sandbox);
+vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
 vm.runInContext(source, sandbox, { filename: "party-leadership-flow.js" });
 const api = sandbox.window.__BAEKJI_PARTY_LEADERSHIP_TEST__;
 assert.ok(api, "party leadership test API must be exposed");

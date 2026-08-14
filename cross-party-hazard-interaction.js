@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const DATA = window.DAY1_DATA;
   if (!DATA || window.__BAEKJI_CROSS_PARTY_HAZARD__) return;
@@ -215,17 +216,6 @@
       if (timeout) clearTimeout(timeout);
     }
   }
-
-  function hashNumber(text) {
-    let hash = 2166136261;
-    for (const ch of String(text)) {
-      hash ^= ch.charCodeAt(0);
-      hash = Math.imul(hash, 16777619);
-    }
-    return Math.abs(hash >>> 0);
-  }
-
-  function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
   function contaminationStage(value) {
     if (value >= 100) return "완전 용해";

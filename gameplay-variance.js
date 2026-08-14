@@ -1,18 +1,10 @@
 (() => {
   "use strict";
+  const { hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const data = window.DAY1_DATA;
   if (!data?.riskProfiles || !Array.isArray(data.routes)) return;
-
-  function hashNumber(text) {
-    let hash = 2166136261;
-    for (const ch of String(text)) {
-      hash ^= ch.charCodeAt(0);
-      hash = Math.imul(hash, 16777619);
-    }
-    return Math.abs(hash >>> 0);
-  }
 
   function safeParse(raw) {
     try {
