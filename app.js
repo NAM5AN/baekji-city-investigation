@@ -174,14 +174,20 @@
       parties: {},
       sessions: {},
       itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
+      fieldItemPlacementsByVariant: { a: {}, b: {}, c: {}, d: {} },
+      fieldItemPlacementClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
     };
   }
 
   function normalizeStateShape(snapshot) {
     if (!snapshot || snapshot.version !== 3) return makeInitialState();
     if (!snapshot.itemClaimsByVariant) snapshot.itemClaimsByVariant = { a: {}, b: {}, c: {}, d: {} };
+    if (!snapshot.fieldItemPlacementsByVariant) snapshot.fieldItemPlacementsByVariant = { a: {}, b: {}, c: {}, d: {} };
+    if (!snapshot.fieldItemPlacementClaimsByVariant) snapshot.fieldItemPlacementClaimsByVariant = { a: {}, b: {}, c: {}, d: {} };
     for (const variant of ["a", "b", "c", "d"]) {
       if (!snapshot.itemClaimsByVariant[variant]) snapshot.itemClaimsByVariant[variant] = {};
+      if (!snapshot.fieldItemPlacementsByVariant[variant]) snapshot.fieldItemPlacementsByVariant[variant] = {};
+      if (!snapshot.fieldItemPlacementClaimsByVariant[variant]) snapshot.fieldItemPlacementClaimsByVariant[variant] = {};
     }
     Object.values(snapshot.sessions || {}).forEach((session) => {
       if (!Array.isArray(session.takenItemKeys)) session.takenItemKeys = [];
@@ -1758,15 +1764,71 @@
   function itemClaim(snapshot, session, objectId, itemId) {
     return variantItemClaims(snapshot, session)[itemClaimKey(objectId, itemId)] || null;
   }
+  function variantFieldPlacements(snapshot, sessionOrVariant) {
+    const variant = typeof sessionOrVariant === "string" ? sessionOrVariant : sessionOrVariant?.variant;
+    return snapshot.fieldItemPlacementsByVariant?.[variant] || {};
+  }
+  function variantFieldPlacementClaims(snapshot, sessionOrVariant) {
+    const variant = typeof sessionOrVariant === "string" ? sessionOrVariant : sessionOrVariant?.variant;
+    return snapshot.fieldItemPlacementClaimsByVariant?.[variant] || {};
+  }
+  function fieldPlacementToken(placementId) { return `FIELD:${placementId}`; }
+  function fieldObjectItems(snapshot, session, objectId, includeClaimed = false) {
+    const claims = variantFieldPlacementClaims(snapshot, session);
+    return Object.values(variantFieldPlacements(snapshot, session))
+      .filter((placement) => placement?.objectId === objectId && (includeClaimed || !claims[placement.id]))
+      .map((placement) => ({
+        itemId: fieldPlacementToken(placement.id),
+        name: String(placement.item?.name || placement.sourceInventoryKey || "현장 물품"),
+        default: Number(placement.item?.quantity || 1),
+        fieldPlacementId: placement.id,
+        placement,
+      }));
+  }
+  function objectMappedItems(snapshot, session, objectId) {
+    return [...(DATA.objectItems[objectId] || []), ...fieldObjectItems(snapshot, session, objectId, true)];
+  }
   function availableObjectItems(snapshot, session, objectId) {
-    return (DATA.objectItems[objectId] || []).filter((mapping) => !itemClaim(snapshot, session, objectId, mapping.itemId));
+    const staticItems = (DATA.objectItems[objectId] || []).filter((mapping) => !itemClaim(snapshot, session, objectId, mapping.itemId));
+    return [...staticItems, ...fieldObjectItems(snapshot, session, objectId)];
   }
   function objectItemFindingText(snapshot, session, objectId) {
-    const mappedItems = DATA.objectItems[objectId] || [];
+    const mappedItems = objectMappedItems(snapshot, session, objectId);
     if (!mappedItems.length) return "내부를 확인해도 아무것도 없다.";
     const availableItems = availableObjectItems(snapshot, session, objectId);
     if (!availableItems.length) return "누군가 먼저 가져간 듯 물품이 놓였던 자리만 남아 있다. 내부에는 아무것도 없다.";
     return `안쪽에서 ${availableItems.map((mapping) => mapping.name).join(", ")}을 발견했다. 조사와 별도로 가져가야 한다.`;
+  }
+  function takeFieldPlacementItemState(draft, { sessionId, objectId, placementId, characterId, at = Date.now() }) {
+    const session = draft.sessions?.[sessionId];
+    const placement = variantFieldPlacements(draft, session)[placementId];
+    if (!session || !placement || placement.objectId !== objectId || !session.inspectedObjectIds?.includes(objectId)) return { ok: false, error: "FIELD_ITEM_UNAVAILABLE" };
+    const mappingName = String(placement.item?.name || placement.sourceInventoryKey || "현장 물품");
+    const fieldClaims = variantFieldPlacementClaims(draft, session);
+    if (fieldClaims[placementId]) {
+      appendLog(session, "fail", `${DEMO_USERS[characterId]?.name || characterId}는 ${mappingName}을 챙기려고 손을 뻗는다. 그러나 이미 누군가 가져간 뒤라 빈 자리만 남아 있다.`);
+      return { ok: false, error: "FIELD_ITEM_ALREADY_CLAIMED" };
+    }
+    const character = draft.characters?.[characterId];
+    if (!character) return { ok: false, error: "FIELD_ITEM_CHARACTER_NOT_FOUND" };
+    character.inventory ||= {};
+    const inventory = character.inventory;
+    const preferredKey = String(placement.sourceInventoryKey || placement.item?.itemId || placementId);
+    const baseId = String(placement.item?.baseItemId || placement.item?.catalogItemId || placement.item?.itemId || preferredKey).split("::")[0];
+    const prefix = `${baseId || "ITEM"}::field_${hashNumber(placementId).toString(36)}`;
+    let targetKey = preferredKey;
+    let suffix = 2;
+    if (Object.prototype.hasOwnProperty.call(inventory, targetKey)) {
+      targetKey = prefix;
+      while (Object.prototype.hasOwnProperty.call(inventory, targetKey)) targetKey = `${prefix}_${suffix++}`;
+    }
+    const recovered = clone(placement.item);
+    if (targetKey !== preferredKey) recovered.itemId = targetKey;
+    recovered._fieldPlacementId = placementId;
+    inventory[targetKey] = recovered;
+    fieldClaims[placementId] = { placementId, objectId, characterId, sessionId, targetInventoryKey: targetKey, claimedAt: Number(at) };
+    appendLog(session, "item", `${DEMO_USERS[characterId]?.name || characterId}는 ${mappingName} ×${Number(recovered.quantity || 1)}을 챙겨 소지품에 넣었다.`);
+    return { ok: true, targetInventoryKey: targetKey, item: recovered };
   }
   function variantGlow(variant) {
     return { a: "rgba(143,224,177,.20)", b: "rgba(149,189,232,.20)", c: "rgba(223,158,155,.22)", d: "rgba(238,242,240,.25)" }[variant];
@@ -2357,7 +2419,7 @@
     const media = objectMediaFor(object);
     state = loadState();
     const session = getUserSession(currentUserId());
-    const mappedItems = DATA.objectItems[object.id] || [];
+    const mappedItems = session ? objectMappedItems(state, session, object.id) : DATA.objectItems[object.id] || [];
     const availableItems = session ? availableObjectItems(state, session, object.id) : mappedItems;
     root.innerHTML = `<div class="retro-modal-backdrop" data-close-modal>
       <section class="retro-modal retro-object-modal" role="dialog" aria-modal="true" aria-labelledby="object-modal-title">
@@ -3709,9 +3771,17 @@
     const uid = currentUserId();
     mutate("take-item", (draft) => {
       const session = draft.sessions[sessionId];
+      const fieldPlacementId = itemId.startsWith("FIELD:") ? itemId.slice("FIELD:".length) : "";
+      const placement = fieldPlacementId ? variantFieldPlacements(draft, session)[fieldPlacementId] : null;
       const key = itemClaimKey(objectId, itemId);
-      const mapping = (DATA.objectItems[objectId] || []).find((m) => m.itemId === itemId);
+      const mapping = placement && placement.objectId === objectId
+        ? { itemId, name: String(placement.item?.name || placement.sourceInventoryKey || "현장 물품"), default: Number(placement.item?.quantity || 1) }
+        : (DATA.objectItems[objectId] || []).find((m) => m.itemId === itemId);
       if (!session || !mapping || !session.inspectedObjectIds.includes(objectId)) return;
+      if (placement) {
+        takeFieldPlacementItemState(draft, { sessionId, objectId, placementId: fieldPlacementId, characterId: uid });
+        return;
+      }
       const claims = variantItemClaims(draft, session);
       if (claims[key]) {
         appendLog(session, "fail", `${DEMO_USERS[uid].name}는 ${mapping.name}을 챙기려고 곧바로 손을 뻗는다. 그러나 이미 누군가 가져가버렸다··· 남아 있는 것은 빈 자리뿐이라 획득할 수 없다.`);
@@ -3864,6 +3934,11 @@
     playerRouteProjection,
     consumeUnrelatedExternalRouteUpdate,
     renderExternalUpdate,
+  });
+  window.__BAEKJI_FIELD_ITEM_TEST__ = Object.freeze({
+    fieldObjectItems,
+    availableObjectItems,
+    takeFieldPlacementItemState,
   });
   setInterval(() => {
     document.querySelectorAll("[data-clock]").forEach((el) => { el.textContent = nowText(); });

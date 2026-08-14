@@ -84,6 +84,8 @@ function makeInitialStateForAdminReset() {
     parties: {},
     sessions: {},
     itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
+    fieldItemPlacementsByVariant: { a: {}, b: {}, c: {}, d: {} },
+    fieldItemPlacementClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
   };
 }
 
@@ -95,6 +97,8 @@ function worldSummary(state) {
     partyCount: Object.keys(state?.parties || {}).length,
     sessionCount: Object.keys(state?.sessions || {}).length,
     claimedItemCount: Object.values(state?.itemClaimsByVariant || {}).reduce((sum, claims) => sum + Object.keys(claims || {}).length, 0),
+    placedFieldItemCount: Object.values(state?.fieldItemPlacementsByVariant || {}).reduce((sum, placements) => sum + Object.keys(placements || {}).length, 0),
+    claimedFieldItemCount: Object.values(state?.fieldItemPlacementClaimsByVariant || {}).reduce((sum, claims) => sum + Object.keys(claims || {}).length, 0),
   };
 }
 

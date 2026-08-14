@@ -107,6 +107,8 @@ function movementWorld() {
     },
     parties: {},
     itemClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
+    fieldItemPlacementsByVariant: { a: {}, b: {}, c: {}, d: {} },
+    fieldItemPlacementClaimsByVariant: { a: {}, b: {}, c: {}, d: {} },
   };
 }
 

@@ -89,18 +89,35 @@
       .sort((a, b) => `${a.owner}:${a.name}`.localeCompare(`${b.owner}:${b.name}`, "ko"));
   }
 
+  function fieldObjectEntries() {
+    const detailContext = new Map();
+    values(DATA.places).forEach((place) => (place?.details || []).forEach((detail) => detailContext.set(String(detail?.id || ""), { place, detail })));
+    return Object.entries(DATA.objectsByDetail || {}).flatMap(([detailId, entries]) => (Array.isArray(entries) ? entries : [entries]).map((object) => {
+      const context = detailContext.get(String(detailId)) || {};
+      return {
+        objectId: String(object?.id || ""),
+        label: [context.place?.floor, context.place?.name, context.detail?.name, object?.name].filter(Boolean).join(" · "),
+      };
+    })).filter((entry) => entry.objectId).sort((a, b) => a.label.localeCompare(b.label, "ko"));
+  }
+
   function transferMarkup(payload, characterId, worldVariant) {
     const world = worldItemEntries(payload, worldVariant);
     const moveSources = characterItemOptions(payload, characterId, "CHARACTER_MOVE");
     const copySources = characterItemOptions(payload, characterId, "CHARACTER_COPY");
+    const fieldSources = inventoryEntries(payload?.state?.characters?.[characterId]);
+    const fieldObjects = fieldObjectEntries();
     const worldOptions = world.map((entry) => `<option value="${esc(entry.itemId)}" data-object-id="${esc(entry.objectId)}" data-catalog-item-id="${esc(entry.itemId)}">${esc(entry.name)} · ${esc(entry.objectName)} · ${entry.quantity}개</option>`).join("");
     const optionMarkup = (sources) => sources.map((entry) => `<option value="${esc(entry.inventoryKey)}" data-source-character-id="${esc(entry.characterId)}" data-source-inventory-key="${esc(entry.inventoryKey)}">${esc(entry.owner)} · ${esc(entry.name)} · ${esc(entry.state)} · ${entry.quantity}개</option>`).join("");
     const moveOptions = optionMarkup(moveSources);
     const copyOptions = optionMarkup(copySources);
-    return `<section class="admin-control-section admin-control-transfer"><div class="admin-control-section-head"><div><strong>아이템 이동·복제</strong><small>서버가 최신 상태를 다시 검증해 한 번에 기록합니다.</small></div></div><div class="admin-control-transfer-grid">
+    const fieldSourceOptions = fieldSources.map(({ inventoryKey, item }) => `<option value="${esc(inventoryKey)}" data-source-character-id="${esc(characterId)}" data-source-inventory-key="${esc(inventoryKey)}">${esc(item?.name || inventoryKey)} · ${esc(item?.state || "CLEAN")} · ${Number(item?.quantity || 0)}개</option>`).join("");
+    const fieldObjectOptions = fieldObjects.map((entry) => `<option value="${esc(entry.objectId)}" data-object-id="${esc(entry.objectId)}">${esc(entry.label)}</option>`).join("");
+    return `<section class="admin-control-section admin-control-transfer"><div class="admin-control-section-head"><div><strong>아이템 이동·복제·현장 배치</strong><small>서버가 최신 상태를 다시 검증해 한 번에 기록합니다.</small></div></div><div class="admin-control-transfer-grid">
       <article class="admin-control-transfer-card"><strong>미습득 아이템 지급</strong><small>선택한 시간 변주의 월드 획득권을 대상에게 옮깁니다.</small><label><span>시간 변주</span><select data-control-world-variant>${variantOptions(worldVariant)}</select></label><label><span>미습득 아이템</span><select data-control-world-source ${world.length ? "" : "disabled"}><option value="">${world.length ? "목록에서 선택" : "남은 미습득 아이템 없음"}</option>${worldOptions}</select></label><button type="button" data-control-inventory-transfer="WORLD_CLAIM" ${world.length ? "" : "disabled"}>대상에게 지급</button></article>
       <article class="admin-control-transfer-card"><strong>다른 캐릭터 소지품 이동</strong><small>출처의 전체 소지품 entry를 제거하고 상태 그대로 옮깁니다.</small><label><span>출처 소지품</span><select data-control-character-move-source ${moveSources.length ? "" : "disabled"}><option value="">${moveSources.length ? "출처 소지품 선택" : "이동 가능한 소지품 없음"}</option>${moveOptions}</select></label><button type="button" class="danger" data-control-inventory-transfer="CHARACTER_MOVE" ${moveSources.length ? "" : "disabled"}>대상에게 이동</button></article>
       <article class="admin-control-transfer-card"><strong>기존 소지품 복제 지급</strong><small>출처는 유지하고 상태가 같은 새 instance를 대상에게 지급합니다.</small><label><span>복제할 소지품</span><select data-control-character-copy-source ${copySources.length ? "" : "disabled"}><option value="">${copySources.length ? "출처 소지품 선택" : "복제 가능한 소지품 없음"}</option>${copyOptions}</select></label><button type="button" data-control-inventory-transfer="CHARACTER_COPY" ${copySources.length ? "" : "disabled"}>대상에게 복제 지급</button></article>
+      <article class="admin-control-transfer-card"><strong>소지품을 현장으로 이동</strong><small>캐릭터에게서 제거한 뒤 선택한 시간 변주·조사 오브젝트에 상태 그대로 놓습니다.</small><label><span>옮길 소지품</span><select data-control-field-source ${fieldSources.length ? "" : "disabled"}><option value="">${fieldSources.length ? "소지품 선택" : "이동 가능한 소지품 없음"}</option>${fieldSourceOptions}</select></label><label><span>시간 변주</span><select data-control-field-variant>${variantOptions(worldVariant)}</select></label><label><span>배치 장소</span><select data-control-field-object ${fieldObjects.length ? "" : "disabled"}><option value="">${fieldObjects.length ? "장소 선택" : "배치 가능한 장소 없음"}</option>${fieldObjectOptions}</select></label><button type="button" class="danger" data-control-inventory-transfer="CHARACTER_PLACE" ${fieldSources.length && fieldObjects.length ? "" : "disabled"}>선택 현장으로 이동</button></article>
     </div></section>`;
   }
 
@@ -217,7 +234,7 @@
   }
 
   function auditActionLabel(action) {
-    return ({ CHARACTER_STATUS: "캐릭터 상태", INVENTORY_SET: "소지품", INVENTORY_TRANSFER: "소지품 이동·복제", SESSION_CONTROL: "조사 세션" })[action] || action || "관리 조작";
+    return ({ CHARACTER_STATUS: "캐릭터 상태", INVENTORY_SET: "소지품", INVENTORY_TRANSFER: "소지품 이동·복제·배치", SESSION_CONTROL: "조사 세션" })[action] || action || "관리 조작";
   }
 
   function jsonCompact(value) {
@@ -364,9 +381,7 @@
     if (removeItem) {
       const characterId = currentControl?.id;
       const itemId = removeItem.dataset.controlItemRemove;
-      const row = removeItem.closest("[data-control-item-row]");
-      const currentName = row?.querySelector("strong")?.textContent || itemId;
-      return void sendControl({ operation: "INVENTORY_SET", characterId, itemId, quantity: 0, name: currentName }, (fresh) => renderCharacterControl(fresh, characterId));
+      return void sendControl({ operation: "INVENTORY_TRANSFER", mode: "CHARACTER_REMOVE", targetCharacterId: characterId, sourceCharacterId: characterId, sourceInventoryKey: itemId }, (fresh) => renderCharacterControl(fresh, characterId));
     }
 
     const addItem = target.closest("[data-control-add-item]");
@@ -394,6 +409,12 @@
         const option = ensureRoot().querySelector("[data-control-world-source]")?.selectedOptions?.[0];
         if (!option?.dataset.objectId || !option?.dataset.catalogItemId) return toast("지급할 미습득 아이템을 선택해 주세요.", "error");
         Object.assign(body, { variant, objectId: option.dataset.objectId, catalogItemId: option.dataset.catalogItemId });
+      } else if (mode === "CHARACTER_PLACE") {
+        const sourceOption = ensureRoot().querySelector("[data-control-field-source]")?.selectedOptions?.[0];
+        const objectOption = ensureRoot().querySelector("[data-control-field-object]")?.selectedOptions?.[0];
+        const variant = String(ensureRoot().querySelector("[data-control-field-variant]")?.value || "");
+        if (!sourceOption?.dataset.sourceInventoryKey || !objectOption?.dataset.objectId) return toast("옮길 소지품과 배치 장소를 선택해 주세요.", "error");
+        Object.assign(body, { sourceCharacterId: targetCharacterId, sourceInventoryKey: sourceOption.dataset.sourceInventoryKey, variant, objectId: objectOption.dataset.objectId });
       } else {
         const selector = mode === "CHARACTER_MOVE" ? "[data-control-character-move-source]" : "[data-control-character-copy-source]";
         const option = ensureRoot().querySelector(selector)?.selectedOptions?.[0];
