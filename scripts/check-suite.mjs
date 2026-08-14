@@ -13,6 +13,7 @@ const GROUPS = Object.freeze({
     "data-check.mjs",
     "runtime-utils-check.mjs",
     "runtime-domain-rules-check.mjs",
+    "runtime-caller-adoption-check.mjs",
     "ux-flow-check.mjs",
     "v037-behavior-check.mjs",
     "v0331-ambient-risk-check.mjs",

@@ -68,8 +68,8 @@ assert(!foundation.includes("MutationObserver"), "foundation movement rules must
 assert(!foundation.includes("[data-reset-demo]"), "foundation movement rules must no longer remove player UI after render");
 assert(!index.includes("briefing-tutorial.js"), "absorbed briefing UI must not load a DOM post-processor");
 assert(index.includes("foundation-rule-fixes.js?v=0.4.3"), "foundation movement rules must use the stage 2 cache key");
-assert.match(index, /app\.js\?v=0\.4\.8[^"']*stage3a=1[^"']*stage3b=1/);
-assert(index.indexOf("foundation-rule-fixes.js?v=0.4.3") < index.indexOf("app.js?v=0.4.8"), "movement storage guard must install before app.js starts");
+assert.match(index, /app\.js\?v=0\.4\.9[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/);
+assert(index.indexOf("foundation-rule-fixes.js?v=0.4.3") < index.indexOf("app.js?v=0.4.9"), "movement storage guard must install before app.js starts");
 assert(index.includes("tester-auth.js?v=0.3.88"), "tester auth cache key must be refreshed");
 assert(index.includes("tester-login-stable.js?v=0.3.95"), "stable tester login owner must be loaded");
 assert(!index.includes("tester-login-fastpath.js"), "legacy tester login fastpath must not compete with the stable login owner");
