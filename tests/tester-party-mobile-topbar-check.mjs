@@ -58,7 +58,7 @@ assert(mobileCss.includes("writing-mode: horizontal-tb"), "mobile topbar labels 
 assert(mobileCss.includes("content: \"지도\""), "mobile map action should use a short label");
 assert(mobileCss.includes("content: \"나가기\""), "mobile logout action should use a short label");
 assert(index.includes("tester-party-profile-sync.js?v=0.3.64"), "tester party profile sync cache key must include the invite photo fix");
-assert(index.includes("party-flow-sync.js?v=0.3.63"), "party flow cache key must include the global invite popup fix");
+assert(index.includes("party-flow-sync.js?v=0.3.64"), "party flow cache key must include the briefing first-paint profile fix");
 assert(index.includes("mobile-topbar-compact.css?v=0.3.56"), "mobile topbar fix must be loaded");
 
 console.log("PASS: tester briefing/invite photos and compact mobile topbar");

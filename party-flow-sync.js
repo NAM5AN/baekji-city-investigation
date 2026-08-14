@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const ENHANCEMENT_VERSION = "0.3.63";
+  const ENHANCEMENT_VERSION = "0.3.64";
   const USER_LABELS = {
     test_a: { name: "테스트 캐릭터 A", initial: "A" },
     test_b: { name: "테스트 캐릭터 B", initial: "B" },
@@ -18,6 +18,48 @@
 
   function unique(values) {
     return [...new Set(Array.isArray(values) ? values : [])];
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function registeredUserLabel(userId) {
+    const id = String(userId || "");
+    const legacy = USER_LABELS[id];
+    if (legacy) return { id, ...legacy, profilePhoto: "" };
+    const tester = window.__BAEKJI_TESTER_REGISTRY_GUARD__?.values?.()
+      ?.find((candidate) => String(candidate?.id || "") === id);
+    const name = String(tester?.name || tester?.loginId || "").trim();
+    if (!name) return null;
+    return {
+      id,
+      name,
+      initial: String(tester?.initial || Array.from(name)[0] || "?"),
+      profilePhoto: String(tester?.profilePhoto || ""),
+    };
+  }
+
+  function briefingMemberMarkup(memberId, leaderId, confirmedIds, member = registeredUserLabel(memberId)) {
+    if (!member) return "";
+    const isLeader = memberId === leaderId;
+    const confirmed = confirmedIds.includes(memberId);
+    const stateText = isLeader ? "전원 확인 후 구역 진입" : confirmed ? "확인 완료" : "확인 대기";
+    const stateClass = !isLeader && confirmed ? " complete" : "";
+    const photoClass = member.profilePhoto ? " has-profile-photo" : "";
+    const icon = member.profilePhoto
+      ? `<img class="tester-briefing-avatar" src="${escapeHtml(member.profilePhoto)}" alt="${escapeHtml(member.name)} 프로필 사진">`
+      : escapeHtml(member.initial);
+    return `<div class="briefing-member${stateClass}" data-tester-account-id="${escapeHtml(member.id)}">
+      <span class="briefing-member-icon${photoClass}" aria-hidden="true">${icon}</span>
+      <span class="briefing-member-main"><strong>${escapeHtml(member.name)}</strong><small>${isLeader ? "조장" : "조원"}</small></span>
+      <span class="briefing-member-state">${stateText}</span>
+    </div>`;
   }
 
   function pendingInvitationsFor(snapshot, userId) {
@@ -103,6 +145,8 @@
     acceptInviteState,
     declineInviteState,
     confirmBriefingState,
+    registeredUserLabel,
+    briefingMemberMarkup,
   });
   window.__BAEKJI_PARTY_FLOW_TEST__ = TEST_API;
 
@@ -110,15 +154,6 @@
 
   let enhancementQueued = false;
   let routeSyncing = false;
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
 
   function readState() {
     try {
@@ -139,7 +174,7 @@
   }
 
   function userLabel(userId) {
-    return USER_LABELS[userId] || { name: userId || "알 수 없는 조사자", initial: "?" };
+    return registeredUserLabel(userId) || { name: userId || "알 수 없는 조사자", initial: "?" };
   }
 
   function writeState(snapshot) {
@@ -255,19 +290,6 @@
     section.prepend(notice);
   }
 
-  function briefingMemberMarkup(memberId, leaderId, confirmedIds) {
-    const member = userLabel(memberId);
-    const isLeader = memberId === leaderId;
-    const confirmed = confirmedIds.includes(memberId);
-    const stateText = isLeader ? "전원 확인 후 구역 진입" : confirmed ? "확인 완료" : "확인 대기";
-    const stateClass = !isLeader && confirmed ? " complete" : "";
-    return `<div class="briefing-member${stateClass}">
-      <span class="briefing-member-icon" aria-hidden="true">${escapeHtml(member.initial)}</span>
-      <span class="briefing-member-main"><strong>${escapeHtml(member.name)}</strong><small>${isLeader ? "조장" : "조원"}</small></span>
-      <span class="briefing-member-state">${stateText}</span>
-    </div>`;
-  }
-
   function enhanceBriefing(snapshot, userId) {
     const [page, sessionId] = routeParts();
     if (page !== "briefing" || !sessionId) return;
@@ -295,8 +317,11 @@
       if (enterButton.textContent !== enterText) enterButton.textContent = enterText;
     }
 
+    const memberIds = unique(session.memberIds);
+    const memberLabels = new Map(memberIds.map((memberId) => [memberId, registeredUserLabel(memberId)]));
+    if (memberIds.some((memberId) => !memberLabels.get(memberId))) return;
     if (briefing.querySelector("[data-party-flow-briefing-confirmation]")) return;
-    const pendingNames = requiredIds.filter((memberId) => !confirmedIds.includes(memberId)).map((memberId) => userLabel(memberId).name);
+    const pendingNames = requiredIds.filter((memberId) => !confirmedIds.includes(memberId)).map((memberId) => memberLabels.get(memberId).name);
     const panel = document.createElement("section");
     panel.className = "briefing-confirmation";
     panel.dataset.partyFlowBriefingConfirmation = "";
@@ -306,7 +331,7 @@
         <span class="badge ${allConfirmed ? "green" : ""}">${confirmedIds.filter((id) => requiredIds.includes(id)).length}/${requiredIds.length}명 확인</span>
       </div>
       <p class="muted small">조원 전원이 내용을 확인하면 조장의 구역 진입 버튼이 활성화됩니다. 조장이 진입하면 모든 조원의 조사가 동시에 시작됩니다.</p>
-      <div class="briefing-member-list">${unique(session.memberIds).map((memberId) => briefingMemberMarkup(memberId, leaderId, confirmedIds)).join("")}</div>
+      <div class="briefing-member-list">${memberIds.map((memberId) => briefingMemberMarkup(memberId, leaderId, confirmedIds, memberLabels.get(memberId))).join("")}</div>
       ${isLeader ? `
         <div class="retro-flow-notice${allConfirmed ? " complete" : ""}">
           <strong>${allConfirmed ? "전원 브리핑 확인 완료" : "조원들의 브리핑 확인 중"}</strong>

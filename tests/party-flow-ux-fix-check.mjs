@@ -88,7 +88,7 @@ assert.match(css, /party-ready-count\.is-all-ready/);
 assert.match(index, /party-flow-ux-fix\.css\?v=0\.3\.81/);
 assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.81/);
 assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.81") < index.indexOf("party-leadership-flow.js?v=0.3.65"), "fixed invite interception must run before legacy leadership capture handlers");
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.81") < index.indexOf("party-flow-sync.js?v=0.3.63"), "fixed state flow must own invite/ready clicks before legacy flow sync");
+assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.81") < index.indexOf("party-flow-sync.js?v=0.3.64"), "fixed state flow must own invite/ready clicks before legacy flow sync");
 
 const preflightSandbox = { window: {}, console, structuredClone };
 vm.createContext(preflightSandbox);
