@@ -1,0 +1,39 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+const app = fs.readFileSync("app.js", "utf8");
+const flowUx = fs.readFileSync("party-flow-ux-fix.js", "utf8");
+const preflight = fs.readFileSync("party-preflight-flow-fix.js", "utf8");
+const stability = fs.readFileSync("party-ui-stability.js", "utf8");
+const index = fs.readFileSync("index.html", "utf8");
+
+const start = app.indexOf("  function renderParty(partyId)");
+const end = app.indexOf("  function inviteUser(", start);
+assert.ok(start >= 0 && end > start, "renderParty source must be discoverable");
+const renderParty = app.slice(start, end);
+
+assert.match(app, /function effectivePartyReady\(party, memberId\)/, "party readiness needs one direct-render source of truth");
+assert.match(app, /party\?\.readyStateBy\?\.\[memberId\]/, "authoritative readiness markers must beat stale ready arrays");
+assert.match(renderParty, /조원 구성을 확인한 뒤 조장이 구성을 확정합니다\./, "recruiting help must render directly");
+assert.match(renderParty, /각 조원은 홈 화면에서 준비 상태를 바꿀 수 있습니다\./, "ready-stage help must render directly");
+assert.match(renderParty, /party-ready-count/, "ready count badge must render directly");
+assert.match(renderParty, /party-ready-state/, "member ready state must render directly");
+assert.match(renderParty, /data-party-flow-back-recruiting/, "composition back action must render directly");
+assert.match(renderParty, /data-party-preflight-back-confirmed/, "ready-step back action must render directly");
+assert.match(renderParty, /data-party-name-edit/, "party name editor action must render directly");
+assert.match(renderParty, /준비 완료 취소/, "leader ready toggle copy must render directly");
+assert.match(renderParty, /조사 출발/, "session start copy must render directly");
+assert.match(renderParty, /전원 준비가 완료되었습니다\./, "all-ready footer must render directly");
+assert.doesNotMatch(renderParty, /각 캐릭터가 자신의 탭에서 구성 확인과 준비 완료를 눌러야 합니다\./, "obsolete participant help must not flash before replacement");
+assert.doesNotMatch(renderParty, /조사 세션 시작/, "obsolete start copy must not flash before replacement");
+
+assert.doesNotMatch(flowUx, /function decorateLeaderParty/, "flow runtime must not post-process the party page");
+assert.doesNotMatch(preflight, /function decorateLeaderParty/, "preflight runtime must not post-process the party page");
+assert.doesNotMatch(stability, /function ensureReadyBackButton/, "paint guard must not recreate the back button");
+assert.doesNotMatch(stability, /function ensurePartyNameControl/, "paint guard must not recreate the name control");
+assert.match(index, /stage2-party-ui=1/, "direct party rendering must be cache-busted");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.82/);
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.92/);
+assert.match(index, /party-ui-stability\.js\?v=0\.3\.92/);
+
+console.log("PASS: party composition and ready-state UI render directly without party-page DOM post-processing");

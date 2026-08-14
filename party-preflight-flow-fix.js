@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.90";
+  const VERSION = "0.3.92";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -266,35 +266,6 @@
     }
   }
 
-  function decorateLeaderParty(snapshot, userId) {
-    const [page, partyId] = routeParts();
-    if (page !== "party" || !partyId) return;
-    const party = snapshot.parties?.[partyId];
-    if (!party || party.creatorId !== userId) return;
-
-    const startButton = document.querySelector("[data-start-session]");
-    setText(startButton, "조사 출발");
-
-    const actionRow = document.querySelector("[data-ready]")?.closest(".button-row")
-      || document.querySelector("[data-start-session]")?.closest(".button-row")
-      || document.querySelector("[data-confirm-composition]")?.closest(".button-row");
-    if (!actionRow) return;
-
-    let back = actionRow.querySelector("[data-party-preflight-back-confirmed]");
-    if (party.status === "READY_CHECK") {
-      if (!back) {
-        back = document.createElement("button");
-        back.type = "button";
-        back.className = "button party-flow-back party-preflight-back";
-        back.dataset.partyPreflightBackConfirmed = partyId;
-        back.textContent = "← 이전 단계";
-        actionRow.prepend(back);
-      }
-    } else {
-      back?.remove();
-    }
-  }
-
   function decorateBriefing(snapshot, userId) {
     const [page, sessionId] = routeParts();
     if (page !== "briefing" || !sessionId) return;
@@ -331,7 +302,6 @@
     const userId = currentUserId();
     if (!snapshot || !userId) return;
     decorateMemberHome(snapshot, userId);
-    decorateLeaderParty(snapshot, userId);
     decorateBriefing(snapshot, userId);
     document.documentElement.dataset.partyPreflightFlowVersion = VERSION;
   }
