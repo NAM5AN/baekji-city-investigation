@@ -54,10 +54,10 @@
     return data.places?.[nodeId]?.name || String(nodeId || "다음 구역");
   }
 
-  function appendPresence(session, eventId, at, text) {
+  function appendPresence(session, eventId, at, text, extra = {}) {
     session.logs ||= [];
     if (session.logs.some((entry) => entry?.id === eventId)) return false;
-    session.logs.push({ id: eventId, type: "presence", at, actorId: null, text, entryPresenceFix: true });
+    session.logs.push({ id: eventId, type: "presence", at, actorId: null, text, entryPresenceFix: true, ...extra });
     return true;
   }
 
@@ -77,6 +77,10 @@
       String(entry.text || "").includes("해오름역 구역 입구") &&
       String(entry.text || "").includes("떠나")
     );
+  }
+
+  function hasDeparturePresenceToken(session, token) {
+    return (session?.logs || []).some((entry) => String(entry?.movementToken || "") === String(token || "") && entry?.movementEffect === "departure-presence");
   }
 
   function currentPairs(state) {
@@ -163,18 +167,22 @@
       const current = scopeKey(session);
       if (!previous || previous.scope !== `node:${ENTRY_NODE}` || current === `node:${ENTRY_NODE}` || !activeSession(session)) return;
       const movement = session.movement;
-      const departureAt = Number(movement?.startedAt || Date.now());
-      const token = String(movement?.token || `${sessionId}_${departureAt}`);
+      const transition = session.lastMovementTransition;
+      const transitionMatchesDeparture = transition?.fromNode === ENTRY_NODE
+        && (transition?.targetNode === session.currentNode || transition?.targetNode === session.activeEncounter?.targetNode);
+      const departureAt = Number(movement?.startedAt || (transitionMatchesDeparture && transition?.completedAt) || Date.now());
+      const token = String(movement?.token || (transitionMatchesDeparture && transition?.token) || `${sessionId}_${departureAt}`);
       sessions
         .filter((witness) => witness.id !== session.id && witness.variant === session.variant)
         .forEach((witness) => {
-          if (hasRecentDepartureLog(witness, departureAt)) return;
-          const targetNode = movement?.targetNode || session.currentNode;
+          if (hasDeparturePresenceToken(witness, token)) return;
+          const targetNode = movement?.targetNode || (transitionMatchesDeparture && transition?.targetNode) || session.currentNode;
           changed = appendPresence(
             witness,
-            `entry_depart_${token}_${witness.id}`,
+            `movement:${token}:${witness.id}:departure-presence`,
             departureAt,
             `${partyName(state, session)}가 해오름역 구역 입구를 떠나 ${nodeName(targetNode)} 방향으로 이동을 시작했다.`,
+            { movementToken: token, movementEffect: "departure-presence" },
           ) || changed;
         });
     });
@@ -206,6 +214,7 @@
     currentPairs,
     hasRecentMeetingLog,
     hasRecentDepartureLog,
+    hasDeparturePresenceToken,
   });
   reconcile();
 })();
