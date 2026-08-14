@@ -32,6 +32,7 @@ const GROUPS = Object.freeze({
     "item-transfer-timeout-stability-check.mjs",
     "item-transfer-check.mjs",
     "tester-profile-briefing-check.mjs",
+    "stage2-foundation-ui-render-check.mjs",
     "tester-auth-registry-check.mjs",
     "party-member-home-roster-check.mjs",
   ],
