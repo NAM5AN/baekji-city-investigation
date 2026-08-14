@@ -3,8 +3,10 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../action-log-sync.js", import.meta.url), "utf8");
+const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const sandbox = { window: {}, structuredClone, Date, JSON, Set, Map, console };
 vm.createContext(sandbox);
+vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
 vm.runInContext(source, sandbox, { filename: "action-log-sync.js" });
 const api = sandbox.window.__BAEKJI_ACTION_LOG_SYNC_TEST__;
 assert.ok(api, "action log sync test API must be exposed");

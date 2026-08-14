@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const DATA = window.DAY1_DATA || {};
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -18,10 +19,6 @@
   let directoryPromise = null;
   let resolving = false;
   let replaying = false;
-
-  function unique(values) {
-    return [...new Set(Array.isArray(values) ? values : [])];
-  }
 
   function normalize(value) {
     return String(value || "").normalize("NFKC").replace(/\s+/g, "").toLowerCase();

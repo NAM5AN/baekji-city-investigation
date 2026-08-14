@@ -201,6 +201,7 @@ const context = vm.createContext({
 });
 
 vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
+vm.runInContext(fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8"), context, { filename: "runtime-utils.js" });
 let source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const footer = source.indexOf('  window.addEventListener("hashchange", render);');
 assert.ok(footer > 0, "test harness must run before app startup rendering");

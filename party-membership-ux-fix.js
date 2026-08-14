@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { clone, uniqueArray: unique, escapeHtml } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -12,15 +13,6 @@
     test_b: "테스트 캐릭터 B",
     test_c: "테스트 캐릭터 C",
   };
-
-  function clone(value) {
-    if (typeof structuredClone === "function") return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-  }
-
-  function unique(values) {
-    return [...new Set(Array.isArray(values) ? values : [])];
-  }
 
   function effectiveReady(party, memberId) {
     const marker = party?.readyStateBy?.[memberId];
@@ -235,15 +227,6 @@
 
   function routeParts() {
     return (location.hash.replace(/^#\/?/, "") || "login").split("/").filter(Boolean);
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
   }
 
   function dispatchStateUpdate(oldRaw, newRaw, reason) {

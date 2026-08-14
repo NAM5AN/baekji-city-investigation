@@ -1,14 +1,11 @@
 (() => {
   "use strict";
+  const { uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SCROLL_SEEN_PREFIX = "baekji_city_party_creation_top_seen_v1:";
   const VERSION = "0.3.98";
-
-  function unique(values) {
-    return [...new Set(Array.isArray(values) ? values : [])];
-  }
 
   function effectiveReady(party, memberId) {
     const marker = party?.readyStateBy?.[memberId];

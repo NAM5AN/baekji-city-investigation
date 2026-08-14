@@ -3,9 +3,11 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-transfer-runtime-fix.js", import.meta.url), "utf8");
+const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
+vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
 vm.runInContext(source, sandbox, { filename: "party-transfer-runtime-fix.js" });
 const api = sandbox.window.__BAEKJI_PARTY_TRANSFER_RUNTIME_FIX_TEST__;
 assert.ok(api, "runtime transfer fix test API must exist");

@@ -3,11 +3,13 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-member-home-roster.js", import.meta.url), "utf8");
+const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../party-member-home-roster.css", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const sandbox = { window: {}, console, structuredClone };
 vm.createContext(sandbox);
+vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
 vm.runInContext(source, sandbox, { filename: "party-member-home-roster.js" });
 const api = sandbox.window.__BAEKJI_MEMBER_HOME_ROSTER_TEST__;
 assert.ok(api, "member home roster test API must be exposed");

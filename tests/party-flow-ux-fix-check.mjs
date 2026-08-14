@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-flow-ux-fix.js", import.meta.url), "utf8");
+const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../party-flow-ux-fix.css", import.meta.url), "utf8");
 const preflightSource = fs.readFileSync(new URL("../party-preflight-flow-fix.js", import.meta.url), "utf8");
 const preflightCss = fs.readFileSync(new URL("../party-preflight-flow-fix.css", import.meta.url), "utf8");
@@ -26,6 +27,7 @@ const renderBriefing = app.slice(renderBriefingStart, renderBriefingEnd);
 
 const sandbox = { window: {}, console, structuredClone };
 vm.createContext(sandbox);
+vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
 vm.runInContext(source, sandbox, { filename: "party-flow-ux-fix.js" });
 const api = sandbox.window.__BAEKJI_PARTY_FLOW_UX_TEST__;
 assert.ok(api, "party flow UX test API must be exposed");
@@ -123,8 +125,8 @@ assert.match(css, /party-ready-state\.is-ready/);
 assert.match(css, /party-ready-state\.is-waiting/);
 assert.match(css, /party-ready-count\.is-all-ready/);
 assert.match(index, /party-flow-ux-fix\.css\?v=0\.3\.81/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1/);
-const partyFlowUxIndex = index.indexOf("party-flow-ux-fix.js?v=0.3.87&departure-capture-guard=1");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1/);
+const partyFlowUxIndex = index.indexOf("party-flow-ux-fix.js?v=0.3.87&departure-capture-guard=1&stage3a=1");
 assert.ok(partyFlowUxIndex >= 0, "party flow UX guard script must be present before checking its load order");
 assert.ok(partyFlowUxIndex < index.indexOf("party-leadership-flow.js?v=0.3.68"), "fixed invite interception must run before legacy leadership capture handlers");
 assert.ok(partyFlowUxIndex < index.indexOf("party-flow-sync.js?v=0.3.67"), "fixed state flow must own invite/ready clicks before legacy flow sync");
@@ -133,6 +135,7 @@ assert.doesNotMatch(source, /function decorateMemberHome|function decorateBriefi
 
 const preflightSandbox = { window: {}, console, structuredClone };
 vm.createContext(preflightSandbox);
+vm.runInContext(runtimeUtils, preflightSandbox, { filename: "runtime-utils.js" });
 vm.runInContext(preflightSource, preflightSandbox, { filename: "party-preflight-flow-fix.js" });
 const preflightApi = preflightSandbox.window.__BAEKJI_PARTY_PREFLIGHT_FLOW_TEST__;
 assert.ok(preflightApi, "preflight party flow test API must be exposed");
@@ -208,6 +211,7 @@ assert.doesNotMatch(preflightSource, /function decorateMemberHome|function decor
 
 const stabilitySandbox = { window: {}, console, structuredClone };
 vm.createContext(stabilitySandbox);
+vm.runInContext(runtimeUtils, stabilitySandbox, { filename: "runtime-utils.js" });
 vm.runInContext(stabilitySource, stabilitySandbox, { filename: "party-ui-stability.js" });
 const namingApi = stabilitySandbox.window.__BAEKJI_PARTY_NAME_UI_TEST__;
 assert.ok(namingApi, "party naming and stability test API must be exposed");

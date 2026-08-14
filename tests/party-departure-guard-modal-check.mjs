@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const app = fs.readFileSync("app.js", "utf8");
+const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
 const membership = fs.readFileSync("party-membership-ux-fix.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -14,6 +15,7 @@ function json(value) { return JSON.parse(JSON.stringify(value)); }
 // pre-departure removal.  Rolling it back to recruiting makes the leader
 // restart an already-confirmed flow and used to hide the departure guard.
 const membershipContext = vm.createContext({ window: {}, console, structuredClone, Date });
+vm.runInContext(runtimeUtils, membershipContext, { filename: "runtime-utils.js" });
 vm.runInContext(membership, membershipContext, { filename: "party-membership-ux-fix.js" });
 const membershipApi = membershipContext.window.__BAEKJI_PARTY_MEMBERSHIP_UX_TEST__;
 assert.ok(membershipApi, "membership reducer seam must be available");
@@ -46,7 +48,7 @@ assert.doesNotMatch(renderPartySource, /isCreator\s*&&\s*allReady\s*&&\s*readySt
 assert.match(app, /초대 중인 캐릭터가 있습니다/, "pending-only departure guard copy must be rendered in-app");
 assert.match(app, /준비 중인 캐릭터가 있습니다/, "unready-only departure guard copy must be rendered in-app");
 assert.match(app, /초대 및 준비 중인 캐릭터가 있습니다/, "combined departure guard copy must be rendered in-app");
-assert.match(index, /app\.js\?v=0\.4\.6[^"']*departure-guards=1/, "app cache key must identify the departure guard release");
+assert.match(index, /app\.js\?v=0\.4\.7[^"']*departure-guards=1[^"']*stage3a=1/, "app cache key must identify the departure guard and Stage 3-A utility release");
 
 class Element {
   constructor(dataset = {}) { this.dataset = dataset; this.listeners = new Map(); }
@@ -94,6 +96,7 @@ function runtime(initial, userId = "test_a") {
   const context = vm.createContext({ window: {}, document, localStorage: { getItem(key) { return local.get(key) || null; }, setItem(key, value) { writes += 1; local.set(key, String(value)); } }, sessionStorage: { getItem(key) { return session.get(key) || null; }, setItem(key, value) { session.set(key, String(value)); } }, location: { hash: "#/party/p1" }, history: { pushState() {} }, navigator: {}, Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone, setTimeout() { return 0; }, clearTimeout() {}, setInterval() { return 0; }, requestAnimationFrame(callback) { callback(); return 1; }, console });
   context.window = context; context.addEventListener = () => {};
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
+  vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
   const footer = app.lastIndexOf("})();");
   vm.runInContext(`${app.slice(0, footer)}window.__DEPARTURE_GUARD_RUNTIME__ = { renderParty, startSession };\n})();`, context, { filename: "party-departure-guard-runtime.js" });
   return { render() { context.window.__DEPARTURE_GUARD_RUNTIME__.renderParty("p1"); }, clickStart() { assert.ok(start, "authorized confirmed leader must have a departure action"); start.click(); }, clickCancel() { assert.ok(modalElements.cancel, "modal must bind a back action"); modalElements.cancel.click(); }, clickConfirm() { assert.ok(modalElements.confirm, "modal must bind a confirmation action"); modalElements.confirm.click(); }, replace(next) { local.set(GLOBAL_KEY, JSON.stringify(next)); }, writes: () => writes, snapshot: () => JSON.parse(local.get(GLOBAL_KEY)), modal: () => modalMarkup, modalOpen: () => Boolean(modalRoot.childElementCount), hasStart: () => Boolean(start), toasts: () => toasts.length, markup: () => appRoot.innerHTML };

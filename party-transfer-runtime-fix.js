@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -14,10 +15,6 @@
     ["test_b", "테스트 캐릭터 B"],
     ["test_c", "테스트 캐릭터 C"],
   ]);
-
-  function unique(values) {
-    return [...new Set(Array.isArray(values) ? values : [])];
-  }
 
   function routeParts(hash = "") {
     return String(hash || "").replace(/^#\/?/, "").split("/").filter(Boolean);

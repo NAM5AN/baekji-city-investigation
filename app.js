@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const { escapeHtml, clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
 
   const DATA = window.DAY1_DATA;
   if (!DATA) throw new Error("day1-data.js를 불러오지 못했습니다.");
@@ -115,25 +116,7 @@
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
   function unique(arr) { return [...new Set(arr)]; }
-  function hashNumber(text) {
-    let hash = 2166136261;
-    for (const ch of String(text)) {
-      hash ^= ch.charCodeAt(0);
-      hash = Math.imul(hash, 16777619);
-    }
-    return Math.abs(hash >>> 0);
-  }
 
 
   function joinNames(ids) {

@@ -3,8 +3,11 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync("runtime-baseline-stability.js", "utf8");
-const context = vm.createContext({ console, globalThis: null });
+const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const context = vm.createContext({ console, globalThis: null, window: null });
 context.globalThis = context;
+context.window = context;
+vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
 vm.runInContext(source, context, { filename: "runtime-baseline-stability.js" });
 
 const api = context.__BAEKJI_RUNTIME_BASELINE_STABILITY_TEST__;
@@ -97,7 +100,7 @@ assert.equal(api.isFreshNarrationPending({ actionNarrationPending: false, action
 const html = fs.readFileSync("index.html", "utf8");
 assert.ok(html.includes("runtime-baseline-stability.js?v=0.4.4"));
 assert.ok(html.indexOf("action-log-sync.js") < html.indexOf("runtime-baseline-stability.js"), "stability guard must run after the action pending-marker layer");
-assert.ok(html.indexOf("runtime-baseline-stability.js") < html.indexOf("app.js?v=0.4.6"), "stability guard must observe the first investigation render");
+assert.ok(html.indexOf("runtime-baseline-stability.js") < html.indexOf("app.js?v=0.4.7"), "stability guard must observe the first investigation render");
 assert.match(source, /retro-action-result-pending\.retro-action-result-stale\{display:block!important\}/);
 assert.match(source, /needsChronologyRepair/);
 assert.match(source, /if \(!session \|\| !needsChronologyRepair\(session\)\) return;/);
