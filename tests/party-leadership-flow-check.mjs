@@ -74,6 +74,6 @@ assert.match(source, /currentPartyId\) card\.remove\(\)/, "busy invite candidate
 assert.match(source, /replaceChildren\(\)/, "warning modal must be fully cleared instead of leaving a click-blocking backdrop");
 assert.doesNotMatch(source, /new MutationObserver/, "leadership UI must not self-trigger through a DOM observer");
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.65/);
-assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.65") < index.indexOf("party-flow-sync.js?v=0.3.63"), "leadership interception must load before party-flow-sync");
+assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.65") < index.indexOf("party-flow-sync.js?v=0.3.64"), "leadership interception must load before party-flow-sync");
 
 console.log("PASS: leader warning, member confirmation/ready flow, stable navigation, and busy invite filtering");

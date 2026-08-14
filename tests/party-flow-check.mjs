@@ -4,7 +4,17 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-flow-sync.js", import.meta.url), "utf8");
 const sandbox = {
-  window: {},
+  window: {
+    __BAEKJI_TESTER_REGISTRY_GUARD__: {
+      values: () => [{
+        id: "tester-uuid-a",
+        loginId: "캐릭터A",
+        name: "테스트A",
+        initial: "테",
+        profilePhoto: "data:image/jpeg;base64,AA==",
+      }],
+    },
+  },
   structuredClone,
   console,
 };
@@ -13,6 +23,17 @@ vm.runInContext(source, sandbox, { filename: "party-flow-sync.js" });
 
 const api = sandbox.window.__BAEKJI_PARTY_FLOW_TEST__;
 assert.ok(api, "party flow test API must be exposed");
+
+const testerLabel = api.registeredUserLabel("tester-uuid-a");
+assert.equal(testerLabel.name, "테스트A", "briefing first paint must resolve the registered character name");
+assert.equal(testerLabel.profilePhoto, "data:image/jpeg;base64,AA==", "briefing first paint must resolve the registered profile photo");
+const testerMarkup = api.briefingMemberMarkup("tester-uuid-a", "tester-uuid-a", []);
+assert.match(testerMarkup, /data-tester-account-id="tester-uuid-a"/);
+assert.match(testerMarkup, /class="tester-briefing-avatar"/);
+assert.match(testerMarkup, />테스트A</);
+assert.doesNotMatch(testerMarkup, />\?</, "briefing first paint must not expose a question-mark avatar");
+assert.ok(!api.registeredUserLabel("unknown-uuid"), "unregistered UUIDs must wait instead of rendering internal IDs");
+assert.equal(api.briefingMemberMarkup("unknown-uuid", "unknown-uuid", []), "", "unregistered UUIDs must not create a fallback briefing row");
 
 const base = {
   version: 3,
@@ -85,6 +106,7 @@ assert.match(source, /data-party-flow-defer/);
 assert.match(source, /data-party-flow-decline/);
 assert.match(source, /data-party-flow-accept/);
 assert.match(source, /baekji-cloud-sync/, "remote cloud updates should re-check invitation visibility immediately");
+assert.match(source, /memberIds\.some\(\(memberId\) => !memberLabels\.get\(memberId\)\)\) return/, "briefing enhancement must wait until every member profile is registered");
 assert.doesNotMatch(source, /if \(page !== "home"\)/, "invitation popup must no longer be home-only");
 assert.match(source, /stopImmediatePropagation\(\)/, "old unrestricted briefing entry must be guarded");
 assert.match(source, /조장의 세션 시작을 기다리는 중/);
