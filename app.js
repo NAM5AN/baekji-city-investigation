@@ -734,7 +734,37 @@
     return { snapshot: draft, ok: true, pendingIds };
   }
 
-  window.__BAEKJI_PENDING_PARTY_INVITES_TEST__ = Object.freeze({ activePendingInviteIds, sameInviteeSet, inviteCandidateIds, inviteState, cancelInviteState, declineInviteState, acceptInviteState, enterReadyCheckState, startSessionState });
+  function disbandCompletedPartyState(snapshot, sessionId, actorId, at = Date.now()) {
+    const draft = clonePartyInviteSnapshot(snapshot);
+    const session = draft?.sessions?.[sessionId];
+    if (!session || session.status !== "COMPLETED" || session.partyDisbandedAt || !unique(session.memberIds || []).includes(actorId)) return { snapshot: draft, changed: false };
+    const memberIds = unique(session.memberIds || []);
+    session.partyDisbandedAt = at;
+    session.partyDisbandedBy = actorId || null;
+    const party = draft.parties?.[session.partyId];
+    if (party) {
+      party.status = "CLOSED";
+      party.archivedAt = at;
+      party.archivedSessionId = sessionId;
+      party.memberIds = [];
+      party.invitedIds = [];
+      party.declinedIds = [];
+      party.confirmedBy = [];
+      party.readyBy = [];
+      party.readyStateBy = {};
+      party.sessionId = null;
+    }
+    memberIds.forEach((memberId) => {
+      const character = draft.characters?.[memberId];
+      if (!character) return;
+      if (character.currentPartyId === session.partyId) character.currentPartyId = null;
+      if (character.currentSessionId === sessionId) character.currentSessionId = null;
+    });
+    return { snapshot: draft, changed: true };
+  }
+
+  window.__BAEKJI_PENDING_PARTY_INVITES_TEST__ = Object.freeze({ activePendingInviteIds, sameInviteeSet, inviteCandidateIds, inviteState, cancelInviteState, declineInviteState, acceptInviteState, enterReadyCheckState, startSessionState, disbandCompletedPartyState });
+  window.__BAEKJI_RESULT_PARTY_DISBAND_TEST__ = Object.freeze({ disbandCompletedPartyState });
 
   function renderParty(partyId) {
     if (!ensureAuth()) return;
@@ -939,6 +969,14 @@
     saveState("start-session");
     render();
     go(`briefing/${state.parties[partyId].sessionId}`);
+  }
+
+  function disbandCompletedPartyAndGoHome(sessionId) {
+    const next = disbandCompletedPartyState(loadState(), sessionId, currentUserId(), Date.now());
+    if (!next.changed) return go("home");
+    state = next.snapshot;
+    saveState("result-party-disband");
+    go("home");
   }
 
   function briefingHeadline(session) {
@@ -2169,7 +2207,7 @@
     }
     if (page === "result") {
       const session = snapshot?.sessions?.[param] || null;
-      if (!session || !session.memberIds?.includes(userId)) return null;
+      if (!session || session.partyDisbandedAt || !session.memberIds?.includes(userId)) return null;
       return {
         session: {
           id: session.id,
@@ -3706,7 +3744,7 @@
     document.body.classList.add("retro-mode", "retro-page-mode");
     document.body.classList.remove("retro-login-mode", "retro-home-mode");
     const session = state.sessions[sessionId];
-    if (!session || !session.memberIds.includes(currentUserId())) return go("home");
+    if (!session || session.partyDisbandedAt || !session.memberIds.includes(currentUserId())) return go("home");
     const inspected = session.inspectedObjectIds.map(findObject).filter(Boolean);
     shell(`
       <main class="container narrow">
@@ -3718,8 +3756,9 @@
         </section>
         <section class="section card pad"><div class="card-header"><div><h2 class="card-title">조원 상태</h2></div></div><div class="member-grid">${session.memberIds.map((memberId) => memberRow({ ...state.parties[session.partyId], confirmedBy: session.memberIds, readyBy: session.memberIds }, memberId)).join("")}</div></section>
         <section class="section card pad"><div class="card-header"><div><h2 class="card-title">확인된 조사 결과</h2></div></div><div class="list">${inspected.length ? inspected.map((o) => `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(o.name)}</div><div class="list-sub">${escapeHtml(o.result)}</div></div></div>`).join("") : `<div class="empty">확인한 오브젝트가 없습니다.</div>`}</div></section>
-        <section class="section"><div class="button-row"><button class="button" data-go="home">홈으로</button></div></section>
+        <section class="section"><div class="button-row"><button class="button" data-result-disband-home="${escapeHtml(session.id)}">해산</button></div></section>
       </main>`);
+    document.querySelector("[data-result-disband-home]")?.addEventListener("click", (event) => disbandCompletedPartyAndGoHome(event.currentTarget.dataset.resultDisbandHome));
   }
 
   function render() {
