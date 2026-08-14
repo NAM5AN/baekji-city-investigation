@@ -7,8 +7,8 @@ const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8")
 const packageJson = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 assert.equal(packageJson.version, "0.4.0");
-assert.ok(index.includes('styles.css?v=0.3.18'));
-assert.ok(index.includes('app.js?v=0.4.4'));
+assert.ok(index.includes('styles.css?v=0.3.19'));
+assert.ok(index.includes('app.js?v=0.4.5'));
 assert.ok(index.includes('http-equiv="Cache-Control"'));
 assert.ok(index.includes('<body class="retro-mode">'));
 assert.ok(index.includes('rel="preload" href="assets/fonts/01-Ycomputer.otf?v=0.3.18"'));

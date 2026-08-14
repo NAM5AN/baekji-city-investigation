@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const ENHANCEMENT_VERSION = "0.3.66";
+  const ENHANCEMENT_VERSION = "0.3.67";
   const USER_LABELS = {
     test_a: { name: "테스트 캐릭터 A", initial: "A" },
     test_b: { name: "테스트 캐릭터 B", initial: "B" },
@@ -255,31 +255,6 @@
     return true;
   }
 
-  function enhanceReadyWaiting(snapshot, userId) {
-    const [page, partyId] = routeParts();
-    if (page !== "party" || !partyId) return;
-    const party = snapshot.parties?.[partyId];
-    if (!party || party.creatorId === userId || party.status !== "READY_CHECK" || party.sessionId) return;
-    const allReady = unique(party.memberIds).every((memberId) => unique(party.readyBy).includes(memberId));
-    if (!allReady) return;
-
-    const readyButton = document.querySelector("[data-ready]");
-    if (readyButton) {
-      readyButton.disabled = true;
-      if (readyButton.textContent !== "준비 완료됨") readyButton.textContent = "준비 완료됨";
-    }
-    const section = readyButton?.closest("section") || document.querySelector("main.container.narrow section:last-of-type");
-    if (!section || section.querySelector("[data-party-flow-ready-wait]")) return;
-    const notice = document.createElement("div");
-    notice.className = "retro-flow-notice";
-    notice.dataset.partyFlowReadyWait = "";
-    notice.innerHTML = `
-      <strong>전원 준비가 완료되었습니다.</strong>
-      <span>조장이 <b>조사 세션 시작</b>을 누르면 모든 조원의 화면에 브리핑이 동시에 열립니다.</span>
-      <button type="button" class="button" disabled>조장의 세션 시작을 기다리는 중</button>`;
-    section.prepend(notice);
-  }
-
   function enhance() {
     enhancementQueued = false;
     const snapshot = readState();
@@ -290,7 +265,6 @@
     }
     if (syncRoute(snapshot, userId)) return;
     showInvitationModal(snapshot, userId);
-    enhanceReadyWaiting(snapshot, userId);
     document.documentElement.dataset.partyFlowVersion = ENHANCEMENT_VERSION;
   }
 

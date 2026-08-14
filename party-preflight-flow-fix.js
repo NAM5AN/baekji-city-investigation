@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.95";
+  const VERSION = "0.3.96";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -15,6 +15,7 @@
   }
 
   function effectiveReady(party, memberId) {
+    if (memberId === party?.creatorId && ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party?.status)) return true;
     const marker = party?.readyStateBy?.[memberId];
     if (marker && typeof marker === "object" && typeof marker.ready === "boolean") return marker.ready;
     if (typeof marker === "boolean") return marker;
@@ -40,14 +41,14 @@
   function togglePreflightReadyState(snapshot, partyId, userId, at = Date.now()) {
     const draft = clone(snapshot);
     const party = draft?.parties?.[partyId];
-    if (!party || party.sessionId || !["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) || (party.creatorId === userId && party.status === "READY_CHECK")) return draft;
+    if (!party || party.sessionId || !["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) || party.creatorId === userId) return draft;
     if (!unique(party.memberIds).includes(userId)) return draft;
 
     ensureReadyStateMap(party, at);
     const nextReady = !effectiveReady(party, userId);
     party.readyStateBy[userId] = { ready: nextReady, at };
     rebuildReadyBy(party);
-    if (party.status === "COMPOSITION_CONFIRMED" && party.creatorId === userId) return enterReadyCheckState(snapshot, partyId, userId, at).snapshot;
+    if (party.status === "READY_CHECK") party.status = "COMPOSITION_CONFIRMED";
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
     return draft;
   }
@@ -59,6 +60,7 @@
 
     party.memberIds = unique(party.memberIds);
     ensureReadyStateMap(party, at);
+    party.readyStateBy[leaderId] = { ready: true, at };
     rebuildReadyBy(party);
     party.confirmedBy = [...party.memberIds];
     party.status = "COMPOSITION_CONFIRMED";
@@ -87,7 +89,7 @@
     if (!party || party.creatorId !== leaderId || party.status !== "READY_CHECK" || party.sessionId) return draft;
 
     ensureReadyStateMap(party, at);
-    party.readyStateBy[leaderId] = { ready: false, at };
+    party.readyStateBy[leaderId] = { ready: true, at };
     rebuildReadyBy(party);
     party.status = "COMPOSITION_CONFIRMED";
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
@@ -99,15 +101,12 @@
     const party = draft?.parties?.[partyId];
     if (!party || party.creatorId !== leaderId || party.sessionId || party.status !== "COMPOSITION_CONFIRMED") return { snapshot: draft, cancelledIds: [], shouldNotify: false };
     const members = unique(party.memberIds);
-    const declined = new Set(unique(party.declinedIds));
-    const cancelledIds = unique(party.invitedIds).filter((id) => !members.includes(id) && !declined.has(id) && !draft.characters?.[id]?.currentPartyId);
-    party.invitedIds = [];
     ensureReadyStateMap(party, at);
     party.readyStateBy[leaderId] = { ready: true, at };
     rebuildReadyBy(party);
-    party.status = "READY_CHECK";
+    party.status = "COMPOSITION_CONFIRMED";
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
-    return { snapshot: draft, cancelledIds, shouldNotify: cancelledIds.length > 0 };
+    return { snapshot: draft, cancelledIds: [], shouldNotify: false };
   }
 
   function rollbackBriefingState(snapshot, sessionId, leaderId, at = Date.now()) {
@@ -120,7 +119,7 @@
     const memberIds = unique(session.memberIds || party.memberIds);
     delete draft.sessions[sessionId];
     party.sessionId = null;
-    party.status = "READY_CHECK";
+    party.status = "COMPOSITION_CONFIRMED";
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
     memberIds.forEach((memberId) => {
       const character = draft.characters?.[memberId];

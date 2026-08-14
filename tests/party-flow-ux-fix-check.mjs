@@ -72,7 +72,8 @@ assert.ok(!api.effectiveReady(acceptedDuringConfirmation.parties.p1, "member"), 
 const locked = api.lockCompositionState(accepted, "p1", "leader", 1000);
 assert.equal(locked.parties.p1.status, "COMPOSITION_CONFIRMED", "leader alone locks composition");
 assert.deepEqual(Array.from(locked.parties.p1.confirmedBy), ["leader", "member2", "member"]);
-assert.equal(api.readyCount(locked.parties.p1), 0);
+assert.equal(api.readyCount(locked.parties.p1), 1, "the leader is automatically ready when composition is confirmed");
+assert.equal(api.effectiveReady(locked.parties.p1, "leader"), true);
 assert.equal(api.effectiveReady(locked.parties.p1, "member"), false);
 
 const memberReady = api.toggleReadyState(locked, "p1", "member", 1100);
@@ -84,12 +85,14 @@ const leaderAlreadyReady = structuredClone(locked);
 leaderAlreadyReady.parties.p1.readyStateBy.leader = { ready: true, at: 1105 };
 leaderAlreadyReady.parties.p1.readyBy = ["leader"];
 const leaderEnteredReady = api.enterReadyCheckState(leaderAlreadyReady, "p1", "leader", 1106);
-assert.equal(leaderEnteredReady.snapshot.parties.p1.status, "READY_CHECK", "leader must enter ready check from composition confirmation");
-assert.equal(api.effectiveReady(leaderEnteredReady.snapshot.parties.p1, "leader"), true, "leader entering ready check must end ready even if already ready beforehand");
+assert.equal(leaderEnteredReady.snapshot.parties.p1.status, "COMPOSITION_CONFIRMED", "the removed ready-check transition must leave the party in composition confirmation");
+assert.deepEqual(Array.from(leaderEnteredReady.cancelledIds), [], "composition confirmation must retain pending invitations until the explicit departure decision");
+assert.equal(leaderEnteredReady.shouldNotify, false);
+assert.equal(api.effectiveReady(leaderEnteredReady.snapshot.parties.p1, "leader"), true, "leader remains automatically ready in the collapsed confirmation stage");
 assert.ok(leaderEnteredReady.snapshot.parties.p1.readyBy.includes("leader"));
 
 const leaderReadyNoop = api.toggleReadyState(leaderEnteredReady.snapshot, "p1", "leader", 1107);
-assert.deepEqual(JSON.parse(JSON.stringify(leaderReadyNoop)), JSON.parse(JSON.stringify(leaderEnteredReady.snapshot)), "leader readiness must be locked once READY_CHECK is active");
+assert.deepEqual(JSON.parse(JSON.stringify(leaderReadyNoop)), JSON.parse(JSON.stringify(leaderEnteredReady.snapshot)), "the leader must not get a readiness toggle in the collapsed confirmation stage");
 
 const memberWaitingAgain = api.toggleReadyState(memberReady, "p1", "member", 1200);
 assert.equal(api.effectiveReady(memberWaitingAgain.parties.p1, "member"), false, "ready button must toggle back to waiting");
@@ -120,9 +123,9 @@ assert.match(css, /party-ready-state\.is-ready/);
 assert.match(css, /party-ready-state\.is-waiting/);
 assert.match(css, /party-ready-count\.is-all-ready/);
 assert.match(index, /party-flow-ux-fix\.css\?v=0\.3\.81/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.85/);
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.85") < index.indexOf("party-leadership-flow.js?v=0.3.67"), "fixed invite interception must run before legacy leadership capture handlers");
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.85") < index.indexOf("party-flow-sync.js?v=0.3.66"), "fixed state flow must own invite/ready clicks before legacy flow sync");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.86/);
+assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.86") < index.indexOf("party-leadership-flow.js?v=0.3.68"), "fixed invite interception must run before legacy leadership capture handlers");
+assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.86") < index.indexOf("party-flow-sync.js?v=0.3.67"), "fixed state flow must own invite/ready clicks before legacy flow sync");
 assert.doesNotMatch(source, /function decorateLeaderParty/, "party UI must render directly instead of being decorated after paint");
 assert.doesNotMatch(source, /function decorateMemberHome|function decorateBriefingRoster/, "home and briefing must render directly instead of being decorated after paint");
 
@@ -155,8 +158,8 @@ readyStage.parties.p1.status = "READY_CHECK";
 readyStage.parties.p1.readyStateBy.leader = { ready: true, at: 3300 };
 readyStage.parties.p1.readyBy = ["leader", "member2"];
 const backComposition = preflightApi.backToCompositionState(readyStage, "p1", "leader", 3400);
-assert.equal(backComposition.parties.p1.status, "COMPOSITION_CONFIRMED", "step 3 must be able to return to step 2");
-assert.equal(preflightApi.effectiveReady(backComposition.parties.p1, "leader"), false, "back to composition should reopen the leader ready action");
+assert.equal(backComposition.parties.p1.status, "COMPOSITION_CONFIRMED", "a legacy ready-check record must normalize into the collapsed confirmation stage");
+assert.equal(preflightApi.effectiveReady(backComposition.parties.p1, "leader"), true, "legacy normalization must preserve the leader's automatic readiness");
 assert.equal(preflightApi.effectiveReady(backComposition.parties.p1, "member2"), true, "other members keep their pre-ready state");
 
 const briefingWorld = structuredClone(readyStage);
@@ -174,7 +177,7 @@ briefingWorld.sessions.s1 = {
 const briefingBack = preflightApi.rollbackBriefingState(briefingWorld, "s1", "leader", 3500);
 assert.equal(briefingBack.sessions.s1, undefined, "briefing back must remove the not-yet-started session");
 assert.equal(briefingBack.parties.p1.sessionId, null);
-assert.equal(briefingBack.parties.p1.status, "READY_CHECK", "briefing back returns the leader to all-ready step");
+assert.equal(briefingBack.parties.p1.status, "COMPOSITION_CONFIRMED", "briefing rollback must return to the collapsed confirmed-ready stage");
 assert.equal(briefingBack.characters.leader.currentSessionId, null);
 assert.equal(briefingBack.characters.member2.currentSessionId, null);
 assert.deepEqual(Array.from(briefingBack.parties.p1.readyBy), ["leader", "member2"], "briefing back preserves readiness so departure can be retried");
@@ -189,16 +192,15 @@ assert.match(preflightSource, /data-preflight-member-ready/, "recruiting members
 assert.match(app, /● 준비 완료/);
 assert.match(app, /○ 준비 대기/);
 assert.match(renderParty, /조사 출발/, "leader start button copy must render directly");
-assert.match(preflightSource, /data-party-preflight-back-confirmed/, "ready step needs a back button");
-assert.match(renderParty, /data-party-preflight-back-confirmed/, "ready-step back button must render directly");
+assert.doesNotMatch(renderParty, /data-party-preflight-back-confirmed/, "the removed ready-check step must not render a previous-step control");
 assert.match(preflightSource, /data-party-preflight-briefing-back/, "briefing needs a leader-only back button");
 assert.match(renderBriefing, /data-party-preflight-briefing-back/, "briefing back button must render directly");
 assert.doesNotMatch(renderBriefing, /조사조 확인/, "redundant briefing roster button must never render");
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-ready/);
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-waiting/);
 assert.match(index, /party-preflight-flow-fix\.css\?v=0\.3\.90/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.95/);
-assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.86") < index.indexOf("party-preflight-flow-fix.js?v=0.3.95"), "preflight behavior must run after membership UI normalization");
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
+assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.86") < index.indexOf("party-preflight-flow-fix.js?v=0.3.96"), "preflight behavior must run after membership UI normalization");
 assert.doesNotMatch(preflightSource, /function decorateLeaderParty/, "preflight party UI must not patch the rendered party page");
 assert.doesNotMatch(preflightSource, /function decorateMemberHome|function decorateBriefing/, "preflight runtime must not patch home or briefing");
 
@@ -225,7 +227,7 @@ lockedRename.parties.p1.sessionId = "s1";
 assert.equal(namingApi.renamePartyState(lockedRename, "p1", "leader", "변경 금지", 4100).parties.p1.name, "해오름역 조사조 1", "party name edits must stop after session creation");
 
 assert.match(renderHome, /!party \? `<article class="card pad">/, "joined member home must omit the impossible invitation box on first paint");
-assert.match(renderParty, /data-party-preflight-back-confirmed/, "ready-step previous button must exist in the original party markup");
+assert.doesNotMatch(renderParty, /data-party-preflight-back-confirmed/, "the original party markup must expose only the collapsed three-stage flow");
 assert.match(stabilitySource, /data-party-name-edit/, "leader hero must expose a party rename control");
 assert.match(renderParty, /data-party-name-edit/, "party name control must render directly");
 assert.match(stabilitySource, /RECRUITING.*COMPOSITION_CONFIRMED.*READY_CHECK/s, "party rename must stay available through all three preflight steps");
@@ -236,7 +238,7 @@ assert.match(presenceLabelSource, /PARTY_NAME_UI/, "presence labels must reuse t
 assert.match(index, /party-ui-stability\.css\?v=0\.3\.91/);
 assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
 assert.match(index, /entry-presence-party-label-fix\.js\?v=0\.3\.91/);
-assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.95") < index.indexOf("party-ui-stability.js?v=0.3.93"), "preflight behavior must load before the party naming runtime");
+assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.96") < index.indexOf("party-ui-stability.js?v=0.3.93"), "preflight behavior must load before the party naming runtime");
 assert.ok(index.indexOf("party-ui-stability.js?v=0.3.93") < index.indexOf("entry-presence-party-label-fix.js?v=0.3.91"), "presence label normalizer must consume the party display-name API");
 assert.doesNotMatch(stabilitySource, /function ensureReadyBackButton/, "the stability layer must not recreate the party back button");
 assert.doesNotMatch(stabilitySource, /function ensurePartyNameControl/, "the stability layer must not recreate the party name control");
