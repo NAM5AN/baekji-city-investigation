@@ -78,6 +78,7 @@ const GROUPS = Object.freeze({
     "render-motion-stability-check.mjs",
     "investigation-feedback-ui-check.mjs",
     "investigation-visual-polish-check.mjs",
+    "party-invite-grid-stability-check.mjs",
     "retro-motion-contract-check.mjs",
     "retro-sound-check.mjs",
     "retro-sound-boost-check.mjs",

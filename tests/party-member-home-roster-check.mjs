@@ -36,7 +36,7 @@ assert.doesNotMatch(source, /function decorateMemberHome|new MutationObserver/, 
 assert.match(source, /requestAnimationFrame\(scrollTop\)/);
 assert.match(css, /party-member-home-row/);
 assert.match(css, /party-member-inline-ready/);
-assert.match(css, /party-member-home-row \.member-avatar\{[^}]*aspect-ratio:1\/1[^}]*border-radius:0/, "member roster avatars must be square rather than inheriting the rounded global avatar");
+assert.match(css, /body\.retro-home-mode \.party-member-home-row \.member-avatar,body\.retro-page-mode \.party-member-home-row \.member-avatar\{border:1px solid currentColor;border-radius:0;box-sizing:border-box;overflow:hidden;aspect-ratio:1\/1\}/, "member roster avatars must use the exact scoped square, clipped border-box frame");
 assert.match(css, /party-member-home-avatar-image\{[^}]*aspect-ratio:1\/1;object-fit:cover/, "member roster profile images must crop inside the scoped square avatar");
 assert.match(app, /party-member-home-header-meta/, "member home must own its header layout directly");
 assert.ok(app.includes("\uC900\uBE44 \uB300\uAE30 \uBC84\uD2BC\uC744 \uB20C\uB7EC\uC8FC\uC138\uC694"), "unready member home must use the exact readiness guidance");
@@ -50,6 +50,6 @@ const partyHomeMarkup = app.slice(partyHomeMarkupStart, partyHomeMarkupEnd);
 assert.match(partyHomeMarkup, /data-party-self-leave/, "nonleader member home row must expose a self-leave action");
 assert.match(partyHomeMarkup, /party-member-home-actions">\$\{leaveMarkup\}<button[^>]*data-(?:preflight-)?member-ready/, "self-leave must render to the left of the ready action");
 assert.match(partyHomeMarkup, /memberId !== party\.creatorId[^\n]*!party\.sessionId/, "leader and session members must not receive the self-leave action");
-assert.match(index, /party-member-home-roster\.css\?v=0\.3\.93/);
+assert.match(index, /party-member-home-roster\.css\?v=0\.3\.94/);
 assert.match(index, /party-member-home-roster\.js\?v=0\.3\.98/);
 console.log("PASS: member home roster stays inline without MutationObserver feedback loops and newly created leader party starts at the top");

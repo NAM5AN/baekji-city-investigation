@@ -3,7 +3,7 @@
 .party-member-home-guidance{font-size:12px;line-height:1.35;text-align:right;color:var(--muted,#666)}
 .party-member-home-grid{margin-top:18px}
 .party-member-home-row{grid-template-columns:56px minmax(0,1fr) auto;align-items:center}
-.party-member-home-row .member-avatar{overflow:hidden;aspect-ratio:1/1;border-radius:0}
+body.retro-home-mode .party-member-home-row .member-avatar,body.retro-page-mode .party-member-home-row .member-avatar{border:1px solid currentColor;border-radius:0;box-sizing:border-box;overflow:hidden;aspect-ratio:1/1}
 .party-member-home-row .party-member-home-avatar-image{display:block;width:100%;height:100%;aspect-ratio:1/1;object-fit:cover}
 .party-member-home-main{min-width:0}
 .party-member-home-actions{display:flex;align-items:stretch;gap:8px;min-width:0}
