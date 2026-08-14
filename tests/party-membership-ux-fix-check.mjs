@@ -181,4 +181,83 @@ assert.match(reinviteSource, /rejoin-invariant-repair/, "post-join cloud merge r
 assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.89/, "reinvite runtime fix must be loaded with a fresh cache key");
 assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.89") < index.indexOf("party-membership-ux-fix.js?v=0.3.86"), "atomic reinvite capture must run before the legacy membership sidecar capture listener");
 
+class MembershipClickTarget {
+  constructor(matches = {}, dataset = {}) { this.matches = matches; this.dataset = dataset; }
+  closest(selector) { return this.matches[selector] ? this : null; }
+  remove() { this.removed = true; }
+}
+
+const runtimeLocal = new Map([["baekji_city_mvp_state_v3", JSON.stringify(world())]]);
+const runtimeSession = new Map([["baekji_city_mvp_current_user_v034", "member_b"]]);
+const runtimeHandlers = new Map();
+let membershipClickHandler = null;
+let membershipWrites = 0;
+const membershipModal = {
+  children: [],
+  _html: "",
+  get innerHTML() { return this._html; },
+  set innerHTML(value) { this._html = String(value || ""); this.children = this._html ? [{}] : []; },
+  querySelector() { return null; },
+  replaceChildren() { this._html = ""; this.children = []; },
+};
+const membershipDocument = {
+  documentElement: { dataset: {} },
+  getElementById(id) { return id === "modal-root" ? membershipModal : null; },
+  querySelector() { return null; },
+  querySelectorAll() { return []; },
+  addEventListener(type, handler) { if (type === "click") membershipClickHandler = handler; },
+};
+const membershipRuntime = vm.createContext({
+  console,
+  structuredClone,
+  Element: MembershipClickTarget,
+  document: membershipDocument,
+  location: { hash: "#/home", href: "https://example.test/#/home" },
+  localStorage: {
+    getItem(key) { return runtimeLocal.has(key) ? runtimeLocal.get(key) : null; },
+    setItem(key, value) { membershipWrites += 1; runtimeLocal.set(key, String(value)); },
+  },
+  sessionStorage: {
+    getItem(key) { return runtimeSession.has(key) ? runtimeSession.get(key) : null; },
+    setItem(key, value) { runtimeSession.set(key, String(value)); },
+  },
+  Event: class Event { constructor(type) { this.type = type; } },
+  CustomEvent: class CustomEvent { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } },
+  StorageEvent: class StorageEvent { constructor(type, init = {}) { this.type = type; Object.assign(this, init); } },
+  setTimeout() { return 1; },
+  setInterval() { return 1; },
+  clearTimeout() {},
+});
+membershipRuntime.window = membershipRuntime;
+membershipRuntime.addEventListener = (type, handler) => runtimeHandlers.set(type, handler);
+membershipRuntime.dispatchEvent = () => true;
+vm.runInContext(source, membershipRuntime, { filename: "party-membership-ux-fix-runtime.js" });
+assert.equal(typeof membershipClickHandler, "function", "membership UX must own an executable click capture handler");
+
+function membershipClick(target) {
+  const event = {
+    target,
+    prevented: false,
+    stopped: false,
+    preventDefault() { this.prevented = true; },
+    stopImmediatePropagation() { this.stopped = true; },
+  };
+  membershipClickHandler(event);
+  return event;
+}
+
+const leaveClick = membershipClick(new MembershipClickTarget({ "[data-party-self-leave]": true }, { partySelfLeave: "p1" }));
+assert.equal(membershipWrites, 0, "self-leave click must wait for its in-site confirmation before writing");
+assert.ok(membershipModal.children.length, "self-leave must open the existing confirmation modal");
+assert.equal(leaveClick.prevented, true);
+assert.equal(leaveClick.stopped, true);
+const leaveConfirm = membershipClick(new MembershipClickTarget({ "[data-party-membership-confirm-ok]": true }));
+const runtimeAfterLeave = JSON.parse(runtimeLocal.get("baekji_city_mvp_state_v3"));
+assert.equal(membershipWrites, 1, "confirmed self-leave must commit exactly one state write");
+assert.equal(runtimeAfterLeave.characters.member_b.currentPartyId, null);
+assert.ok(!runtimeAfterLeave.parties.p1.memberIds.includes("member_b"));
+assert.deepEqual(runtimeAfterLeave.parties.p1.readyBy, [], "self-leave must clean stale ready state with membership cleanup");
+assert.equal(leaveConfirm.prevented, true);
+assert.equal(leaveConfirm.stopped, true);
+
 console.log("PASS: polished leave controls, in-site confirmation/notices, atomic same-party reinvite acceptance, stale merge repair, readiness layout, and observer-loop guard");

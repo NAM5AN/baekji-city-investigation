@@ -435,6 +435,25 @@ localStorage.setItem(GLOBAL_KEY, JSON.stringify(homeInvite));
 window.dispatchEvent({ type: "storage", key: GLOBAL_KEY });
 assert.equal(app.writes, 1, "a relevant home invitation must trigger exactly one full route render");
 
+const inviteRecipientHome = structuredClone(homeInvite);
+inviteRecipientHome.characters.test_b.currentPartyId = null;
+inviteRecipientHome.characters.test_b.currentSessionId = null;
+inviteRecipientHome.parties.pInvite = party("pInvite", ["test_a", "test_c"], ["test_b"]);
+api.setState(inviteRecipientHome);
+app.writes = 0;
+const inviteProjectionBefore = api.playerRouteProjection(inviteRecipientHome, "home", "", "test_b");
+assert.equal(inviteProjectionBefore.invitations.find((entry) => entry.id === "pInvite")?.memberCount, 2, "an open invite recipient must project the current joined-member count");
+
+const inviteMemberJoined = structuredClone(inviteRecipientHome);
+inviteMemberJoined.parties.pInvite.memberIds.push("test_new_member");
+const inviteProjectionAfter = api.playerRouteProjection(inviteMemberJoined, "home", "", "test_b");
+assert.equal(inviteProjectionAfter.invitations.find((entry) => entry.id === "pInvite")?.memberCount, 3, "the home route projection must include externally changed invitation member counts");
+localStorage.setItem(GLOBAL_KEY, JSON.stringify(inviteMemberJoined));
+assert.equal(api.consumeUnrelatedExternalRouteUpdate(), false, "an invited party member-count change is relevant and must not be consumed as unrelated");
+window.dispatchEvent({ type: "storage", key: GLOBAL_KEY });
+assert.equal(app.writes, 1, "a relevant invite member-count change must repaint the recipient home once");
+assert.ok(app.innerHTML.includes("\uD604\uC7AC \uC870\uC6D0 3\uBA85"), "the re-rendered invite card must display the externally updated joined-member count");
+
 context.location.hash = "#/party/pA";
 api.setState(homeInvite);
 app.writes = 0;

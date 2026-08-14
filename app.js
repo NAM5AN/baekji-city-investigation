@@ -313,11 +313,13 @@
     const copy = ready ? "● 준비 완료" : "○ 준비 대기";
     const stateClass = ready ? "is-ready" : "is-waiting";
     const isSelf = memberId === currentId;
+    const canLeave = isSelf && memberId !== party.creatorId && !party.sessionId && !["SESSION_CREATED", "LOCKED", "CLOSED"].includes(String(party.status || ""));
+    const leaveMarkup = canLeave ? `<button type="button" class="button danger small party-member-home-self-leave" data-party-self-leave="${escapeHtml(party.id)}">탈퇴</button>` : "";
     if (isSelf && party.status === "RECRUITING" && !party.sessionId) {
-      return `<button type="button" class="party-member-inline-ready ${stateClass}" data-preflight-member-ready="${escapeHtml(party.id)}" aria-pressed="${ready}">${copy}</button>`;
+      return `<div class="party-member-home-actions">${leaveMarkup}<button type="button" class="party-member-inline-ready ${stateClass}" data-preflight-member-ready="${escapeHtml(party.id)}" aria-pressed="${ready}">${copy}</button></div>`;
     }
-    if (isSelf && ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(String(party.status || "")) && !party.sessionId) {
-      return `<button type="button" class="party-member-inline-ready ${stateClass}" data-member-ready="${escapeHtml(party.id)}" aria-pressed="${ready}">${copy}</button>`;
+    if (isSelf && ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(String(party.status || "")) && !party.sessionId && !(memberId === party.creatorId && party.status === "READY_CHECK")) {
+      return `<div class="party-member-home-actions">${leaveMarkup}<button type="button" class="party-member-inline-ready ${stateClass}" data-member-ready="${escapeHtml(party.id)}" aria-pressed="${ready}">${copy}</button></div>`;
     }
     return `<span class="party-ready-state ${stateClass}">${copy}</span>`;
   }
@@ -502,6 +504,15 @@
     const partyCardBadge = party
       ? memberPartyHome ? `${partyMembers.length}명` : "편성 중"
       : "";
+    const canToggleMemberReady = memberPartyHome && !party?.sessionId && ["RECRUITING", "COMPOSITION_CONFIRMED", "READY_CHECK"].includes(String(party?.status || ""));
+    const memberReadyGuidance = canToggleMemberReady
+      ? effectivePartyReady(party, uid) ? "준비를 취소하고 싶으면 준비 완료 버튼을 눌러주세요" : "준비 대기 버튼을 눌러주세요"
+      : "";
+    const partyCardHeaderMeta = party
+      ? memberPartyHome
+        ? `<div class="party-member-home-header-meta">${memberReadyGuidance ? `<span class="party-member-home-guidance">${memberReadyGuidance}</span>` : ""}<span class="badge green">${partyCardBadge}</span></div>`
+        : `<span class="badge green">${partyCardBadge}</span>`
+      : "";
     const partyCardBody = party
       ? memberPartyHome
         ? `<div class="member-grid party-member-home-grid" data-party-member-roster="${escapeHtml(party.id)}">${partyMembers.map((memberId) => partyHomeMemberMarkup(party, memberId, uid)).join("")}</div>`
@@ -528,13 +539,13 @@
 
         <section class="section grid ${party ? "" : "two"}">
           <article class="card pad ${memberPartyHome ? "party-member-home-card" : ""}">
-            <div class="card-header"><div><h2 class="card-title">${partyCardTitle}</h2><p class="muted small">${partyCardHelp}</p></div>${party ? `<span class="badge green">${partyCardBadge}</span>` : ""}</div>
+            <div class="card-header"><div><h2 class="card-title">${partyCardTitle}</h2><p class="muted small">${partyCardHelp}</p></div>${partyCardHeaderMeta}</div>
             ${partyCardBody}
           </article>
           ${!party ? `<article class="card pad">
             <div class="card-header"><div><h2 class="card-title">받은 초대</h2><p class="muted small">초대를 수락한 뒤 직접 구성을 확인해야 합니다.</p></div><span class="badge">${invitations.length}</span></div>
             <div class="list">
-              ${invitations.length ? invitations.map((p) => `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(p.name)}</div><div class="list-sub">초대한 캐릭터: ${escapeHtml(DEMO_USERS[p.creatorId].name)}</div></div><div class="button-row"><button class="button small" data-decline="${p.id}">거절</button><button class="button primary small" data-accept="${p.id}">수락</button></div></div>`).join("") : `<div class="empty">새로운 초대가 없습니다.</div>`}
+              ${invitations.length ? invitations.map((p) => `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(p.name)}</div><div class="list-sub">초대한 캐릭터: ${escapeHtml(partyAccount(p.creatorId).name)} · 현재 조원 ${unique(p.memberIds).length}명</div></div><div class="button-row"><button class="button small" data-decline="${p.id}">거절</button><button class="button primary small" data-accept="${p.id}">수락</button></div></div>`).join("") : `<div class="empty">새로운 초대가 없습니다.</div>`}
             </div>
           </article>` : ""}
         </section>
@@ -693,7 +704,7 @@
     const cancelledIds = activePendingInviteIds(draft, partyId);
     party.invitedIds = [];
     party.readyStateBy = party.readyStateBy && typeof party.readyStateBy === "object" ? { ...party.readyStateBy } : {};
-    party.readyStateBy[leaderId] = { ready: !effectivePartyReady(party, leaderId), at };
+    party.readyStateBy[leaderId] = { ready: true, at };
     party.readyBy = [...new Set(party.memberIds || [])].filter((id) => effectivePartyReady(party, id));
     party.status = "READY_CHECK";
     party.flowRevision = Math.max(0, Number(party.flowRevision || 0)) + 1;
@@ -773,7 +784,7 @@
             ${party.status === "COMPOSITION_CONFIRMED" ? `<button type="button" class="button party-flow-back" data-party-flow-back-recruiting="${escapeHtml(party.id)}">← 이전 단계</button>` : ""}
             ${party.status === "READY_CHECK" ? `<button type="button" class="button party-flow-back party-preflight-back" data-party-preflight-back-confirmed="${escapeHtml(party.id)}">← 이전 단계</button>` : ""}
             ${party.status === "RECRUITING" ? `<button class="button primary" data-confirm-composition>${party.confirmedBy.includes(uid) ? "구성 확인 완료" : "이 구성으로 확정"}</button>` : ""}
-            ${readyStage ? `<button class="button primary ${ownReady ? "party-ready-button-active" : ""}" data-ready>${ownReady ? "준비 완료 취소" : "조사 준비 완료"}</button>` : ""}
+            ${readyStage && !(isCreator && party.status === "READY_CHECK") ? `<button class="button primary ${ownReady ? "party-ready-button-active" : ""}" data-ready>${ownReady ? "준비 완료 취소" : "조사 준비 완료"}</button>` : ""}
             ${isCreator && allReady && party.status === "READY_CHECK" ? `<button class="button primary" data-start-session>조사 출발</button>` : ""}
             ${party.sessionId ? `<button class="button primary" data-open-session>브리핑으로 이동</button>` : ""}
             ${party.status === "RECRUITING" ? `<button class="button danger" data-leave-party>${isCreator ? "조사조 해산" : "조사조 나가기"}</button>` : ""}
@@ -834,6 +845,7 @@
   function setReady(partyId) {
     const uid = currentUserId();
     const current = loadState();
+    if (current.parties?.[partyId]?.creatorId === uid && current.parties?.[partyId]?.status === "READY_CHECK") return;
     const transition = enterReadyCheckState(current, partyId, uid, Date.now());
     if (transition.snapshot.parties?.[partyId]?.status === "READY_CHECK" && current.parties?.[partyId]?.status === "COMPOSITION_CONFIRMED" && current.parties?.[partyId]?.creatorId === uid) {
       if (transition.shouldNotify) window.alert("초대 중인 캐릭터의 초대가 자동으로 취소됩니다.");
@@ -2100,7 +2112,7 @@
       const session = character.currentSessionId ? snapshot.sessions?.[character.currentSessionId] || null : null;
       const invitations = Object.values(snapshot.parties || {})
         .filter((candidate) => candidate.invitedIds?.includes(userId) && !candidate.memberIds?.includes(userId) && !candidate.declinedIds?.includes(userId) && PARTY_INVITE_ACCEPT_STATUSES.includes(candidate.status))
-        .map((candidate) => ({ id: candidate.id, name: candidate.name, creatorId: candidate.creatorId, status: candidate.status }))
+        .map((candidate) => ({ id: candidate.id, name: candidate.name, creatorId: candidate.creatorId, status: candidate.status, memberCount: unique(candidate.memberIds).length }))
         .sort((left, right) => String(left.id).localeCompare(String(right.id)));
       return {
         character: {
