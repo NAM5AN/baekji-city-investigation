@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const { escapeHtml, clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
+  const { spatialScopeKey, contaminationStage, effectivePartyReady } = window.__BAEKJI_DOMAIN_RULES__;
 
   const DATA = window.DAY1_DATA;
   if (!DATA) throw new Error("day1-data.js를 불러오지 못했습니다.");
@@ -125,14 +126,6 @@
     if (names.length === 1) return names[0];
     if (names.length === 2) return `${names[0]}와 ${names[1]}`;
     return `${names.slice(0, -1).join(", ")}, ${names.at(-1)}`;
-  }
-
-  function spatialScopeKey(session) {
-    if (!session) return "";
-    if (session.movement) return `route:${session.movement.fromNode}:${session.movement.targetNode}`;
-    if (session.activeEncounter) return `route:${session.activeEncounter.fromNode}:${session.activeEncounter.targetNode}`;
-    if (session.currentDetailId) return `detail:${session.currentNode}:${session.currentDetailId}`;
-    return `node:${session.currentNode}`;
   }
 
   function normalizeFieldScope(scopeOrNode, session) {
@@ -597,14 +590,6 @@
     if (["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) return 2;
     if (party.status === "LOCKED" || party.status === "SESSION_CREATED") return 3;
     return 1;
-  }
-
-  function effectivePartyReady(party, memberId) {
-    if (memberId === party?.creatorId && ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party?.status)) return true;
-    const marker = party?.readyStateBy?.[memberId];
-    if (marker && typeof marker === "object" && typeof marker.ready === "boolean") return marker.ready;
-    if (typeof marker === "boolean") return marker;
-    return Array.isArray(party?.readyBy) && party.readyBy.includes(memberId);
   }
 
   function partyReadyIds(party) {
@@ -2333,15 +2318,6 @@
     const activeSession = getUserSession(currentUserId());
     const presentIds = activeSession ? fieldCharacterIds(state, activeSession).filter((memberId) => memberId !== currentUserId()) : [];
     return `<section class="retro-menu-panel"><div class="retro-menu-head"><strong>소지품</strong><small>가져가기 행동을 완료한 물품</small></div>${inventory.length ? inventory.map((item) => `<button class="retro-menu-row" data-item-modal="${item.itemId}"><span>▶ ${escapeHtml(item.name)}</span><b>×${item.quantity}</b></button>`).join("") : `<div class="retro-empty-box">아직 획득한 물품이 없습니다.</div>`}${presentIds.length && inventory.length ? `<div class="retro-transfer-box"><strong>소지품 건네기</strong><select data-transfer-target><option value="">받을 인물</option>${presentIds.map((memberId) => `<option value="${memberId}">${escapeHtml(DEMO_USERS[memberId]?.name)}</option>`).join("")}</select><select data-transfer-item><option value="">전달할 물품</option>${inventory.map((item) => `<option value="${item.itemId}">${escapeHtml(item.name)} ×${item.quantity}</option>`).join("")}</select><button class="retro-choice" data-transfer-item-button>1개 건네기</button></div>` : ""}</section>`;
-  }
-
-  function contaminationStage(value) {
-    if (value >= 100) return "완전 용해";
-    if (value >= 80) return "붕락";
-    if (value >= 60) return "용해";
-    if (value >= 40) return "유화";
-    if (value >= 20) return "번짐";
-    return "안정";
   }
 
   function statusPanel(character) {

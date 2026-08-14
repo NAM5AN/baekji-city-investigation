@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const { escapeHtml } = window.__BAEKJI_RUNTIME_UTILS__;
+  const { spatialScopeKey } = window.__BAEKJI_DOMAIN_RULES__;
 
   const ROOT = typeof window !== "undefined" ? window : globalThis;
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -39,14 +40,6 @@
       previousAt = at;
     }
     return false;
-  }
-
-  function spatialScopeKey(session) {
-    if (!session) return "";
-    if (session.movement) return `route:${session.movement.fromNode}:${session.movement.targetNode}`;
-    if (session.activeEncounter) return `route:${session.activeEncounter.fromNode}:${session.activeEncounter.targetNode}`;
-    if (session.currentDetailId) return `detail:${session.currentNode}:${session.currentDetailId}`;
-    return `node:${session.currentNode}`;
   }
 
   function chatTimelineEntries(session) {

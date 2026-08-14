@@ -1,20 +1,15 @@
 (() => {
   "use strict";
   const { clone, uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
+  const {
+    partyMembershipChangeAllowed: membershipChangeAllowed,
+    partyMembershipRemovalKey: removalKey,
+  } = window.__BAEKJI_DOMAIN_RULES__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const JOIN_INTENT_KEY = "baekji_city_party_join_intent_v1";
   const VERSION = "0.3.89";
-
-  function removalKey(partyId, memberId) {
-    return `${String(partyId || "")}:${String(memberId || "")}`;
-  }
-
-  function membershipChangeAllowed(party) {
-    if (!party || party.sessionId) return false;
-    return !["SESSION_CREATED", "LOCKED", "CLOSED"].includes(String(party.status || ""));
-  }
 
   function reinviteState(snapshot, partyId, memberId, actorId, at = Date.now()) {
     const draft = clone(snapshot);

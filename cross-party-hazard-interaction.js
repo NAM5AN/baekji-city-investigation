@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const { clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
+  const { spatialScopeKey, contaminationStage } = window.__BAEKJI_DOMAIN_RULES__;
 
   const DATA = window.DAY1_DATA;
   if (!DATA || window.__BAEKJI_CROSS_PARTY_HAZARD__) return;
@@ -69,14 +70,6 @@
     const route = location.hash.replace(/^#\/?/, "").split("/");
     if (route[0] === "investigate" && route[1] && snapshot?.sessions?.[route[1]]) return snapshot.sessions[route[1]];
     return Object.values(snapshot?.sessions || {}).find((session) => session?.status === "ACTIVE" && session?.memberIds?.includes(uid)) || null;
-  }
-
-  function spatialScopeKey(session) {
-    if (!session) return "";
-    if (session.movement) return `route:${session.movement.fromNode}:${session.movement.targetNode}`;
-    if (session.activeEncounter) return `route:${session.activeEncounter.fromNode}:${session.activeEncounter.targetNode}`;
-    if (session.currentDetailId) return `detail:${session.currentNode}:${session.currentDetailId}`;
-    return `node:${session.currentNode}`;
   }
 
   function fieldSessions(snapshot, session) {
@@ -215,15 +208,6 @@
     } finally {
       if (timeout) clearTimeout(timeout);
     }
-  }
-
-  function contaminationStage(value) {
-    if (value >= 100) return "완전 용해";
-    if (value >= 80) return "붕락";
-    if (value >= 60) return "용해";
-    if (value >= 40) return "유화";
-    if (value >= 20) return "번짐";
-    return "안정";
   }
 
   function ruleForExposure(level) {

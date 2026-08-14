@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 
 const source = fs.readFileSync("party-transfer-flow.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const context = vm.createContext({ console, structuredClone, window: null });
 context.window = context;
 vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, context, { filename: "party-transfer-flow.js" });
 const api = context.__BAEKJI_PARTY_TRANSFER_TEST__;
 assert(api, "party transfer test API should be exposed");

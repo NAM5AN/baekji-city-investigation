@@ -5,11 +5,12 @@ import vm from "node:vm";
 const app = fs.readFileSync("app.js", "utf8");
 const ux = fs.readFileSync("party-flow-ux-fix.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1/, "capture guard must retain its exact Stage 3-A cache key");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1&stage3b=1/, "capture guard must retain its exact Stage 3-B cache key");
 
 class Element {
   constructor(dataset = {}) { this.dataset = dataset; this.listeners = new Map(); }
@@ -33,6 +34,7 @@ function runtime(initial) {
   context.window = context; context.addEventListener = () => {}; context.dispatchEvent = () => true;
   vm.runInContext(fs.readFileSync("data/day1-data.js", "utf8"), context);
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   const footer = app.lastIndexOf("})();");
   vm.runInContext(`${app.slice(0, footer)}window.__CAPTURE_TEST__ = { renderParty };\n})();`, context, { filename: "app-capture-order.js" });
   vm.runInContext(ux, context, { filename: "party-flow-ux-capture.js" });
