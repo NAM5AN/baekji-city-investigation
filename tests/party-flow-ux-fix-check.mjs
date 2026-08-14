@@ -11,10 +11,18 @@ const stabilityCss = fs.readFileSync(new URL("../party-ui-stability.css", import
 const presenceLabelSource = fs.readFileSync(new URL("../entry-presence-party-label-fix.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const renderHomeStart = app.indexOf("  function renderHome()");
+const renderHomeEnd = app.indexOf("  function createParty()", renderHomeStart);
 const renderPartyStart = app.indexOf("  function renderParty(partyId)");
 const renderPartyEnd = app.indexOf("  function inviteUser(", renderPartyStart);
+const renderBriefingStart = app.indexOf("  function renderBriefing(sessionId)");
+const renderBriefingEnd = app.indexOf("  function appendLog(", renderBriefingStart);
+assert.ok(renderHomeStart >= 0 && renderHomeEnd > renderHomeStart, "home renderer must be discoverable");
 assert.ok(renderPartyStart >= 0 && renderPartyEnd > renderPartyStart, "party renderer must be discoverable");
+assert.ok(renderBriefingStart >= 0 && renderBriefingEnd > renderBriefingStart, "briefing renderer must be discoverable");
+const renderHome = app.slice(renderHomeStart, renderHomeEnd);
 const renderParty = app.slice(renderPartyStart, renderPartyEnd);
+const renderBriefing = app.slice(renderBriefingStart, renderBriefingEnd);
 
 const sandbox = { window: {}, console, structuredClone };
 vm.createContext(sandbox);
@@ -81,8 +89,8 @@ assert.equal(reopened.parties.p1.confirmedBy.length, 0);
 assert.match(source, /data-party-flow-back-recruiting/);
 assert.match(renderParty, /data-party-flow-back-recruiting/);
 assert.match(renderParty, /← 이전 단계/);
-assert.match(source, /data-party-roster-open/);
-assert.match(source, /partyFlowBriefingRosterFixed/);
+assert.match(renderHome, /data-party-member-roster/, "member roster must render directly on home");
+assert.doesNotMatch(source, /partyFlowBriefingRosterFixed/, "briefing roster conversion must be absorbed into the renderer");
 assert.match(renderParty, /● 준비 완료/);
 assert.match(renderParty, /○ 준비 대기/);
 assert.match(source, /readyStateBy/);
@@ -92,10 +100,11 @@ assert.match(css, /party-ready-state\.is-ready/);
 assert.match(css, /party-ready-state\.is-waiting/);
 assert.match(css, /party-ready-count\.is-all-ready/);
 assert.match(index, /party-flow-ux-fix\.css\?v=0\.3\.81/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.82/);
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.82") < index.indexOf("party-leadership-flow.js?v=0.3.65"), "fixed invite interception must run before legacy leadership capture handlers");
-assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.82") < index.indexOf("party-flow-sync.js?v=0.3.64"), "fixed state flow must own invite/ready clicks before legacy flow sync");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.83/);
+assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.83") < index.indexOf("party-leadership-flow.js?v=0.3.66"), "fixed invite interception must run before legacy leadership capture handlers");
+assert.ok(index.indexOf("party-flow-ux-fix.js?v=0.3.83") < index.indexOf("party-flow-sync.js?v=0.3.65"), "fixed state flow must own invite/ready clicks before legacy flow sync");
 assert.doesNotMatch(source, /function decorateLeaderParty/, "party UI must render directly instead of being decorated after paint");
+assert.doesNotMatch(source, /function decorateMemberHome|function decorateBriefingRoster/, "home and briefing must render directly instead of being decorated after paint");
 
 const preflightSandbox = { window: {}, console, structuredClone };
 vm.createContext(preflightSandbox);
@@ -157,19 +166,21 @@ assert.ok(cannotBackAfterEntry.sessions.s1, "back navigation must be blocked aft
 assert.equal(cannotBackAfterEntry.parties.p1.sessionId, "s1");
 
 assert.match(preflightSource, /data-preflight-member-ready/, "recruiting members need an early ready button");
-assert.match(preflightSource, /● 준비 완료/);
-assert.match(preflightSource, /○ 준비 대기/);
+assert.match(app, /● 준비 완료/);
+assert.match(app, /○ 준비 대기/);
 assert.match(renderParty, /조사 출발/, "leader start button copy must render directly");
 assert.match(preflightSource, /data-party-preflight-back-confirmed/, "ready step needs a back button");
 assert.match(renderParty, /data-party-preflight-back-confirmed/, "ready-step back button must render directly");
 assert.match(preflightSource, /data-party-preflight-briefing-back/, "briefing needs a leader-only back button");
-assert.match(preflightSource, /textContent \|\| ""\)\.trim\(\) === "조사조 확인"/, "redundant briefing roster button must be removed");
+assert.match(renderBriefing, /data-party-preflight-briefing-back/, "briefing back button must render directly");
+assert.doesNotMatch(renderBriefing, /조사조 확인/, "redundant briefing roster button must never render");
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-ready/);
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-waiting/);
 assert.match(index, /party-preflight-flow-fix\.css\?v=0\.3\.90/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.92/);
-assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.85") < index.indexOf("party-preflight-flow-fix.js?v=0.3.92"), "preflight behavior must run after membership UI normalization");
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.93/);
+assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.86") < index.indexOf("party-preflight-flow-fix.js?v=0.3.93"), "preflight behavior must run after membership UI normalization");
 assert.doesNotMatch(preflightSource, /function decorateLeaderParty/, "preflight party UI must not patch the rendered party page");
+assert.doesNotMatch(preflightSource, /function decorateMemberHome|function decorateBriefing/, "preflight runtime must not patch home or briefing");
 
 const stabilitySandbox = { window: {}, console, structuredClone };
 vm.createContext(stabilitySandbox);
@@ -193,7 +204,7 @@ lockedRename.parties.p1.status = "SESSION_CREATED";
 lockedRename.parties.p1.sessionId = "s1";
 assert.equal(namingApi.renamePartyState(lockedRename, "p1", "leader", "변경 금지", 4100).parties.p1.name, "해오름역 조사조 1", "party name edits must stop after session creation");
 
-assert.match(stabilitySource, /받은 초대/, "joined member home must immediately hide the impossible invitation box");
+assert.match(renderHome, /!party \? `<article class="card pad">/, "joined member home must omit the impossible invitation box on first paint");
 assert.match(renderParty, /data-party-preflight-back-confirmed/, "ready-step previous button must exist in the original party markup");
 assert.match(stabilitySource, /data-party-name-edit/, "leader hero must expose a party rename control");
 assert.match(renderParty, /data-party-name-edit/, "party name control must render directly");
@@ -203,10 +214,10 @@ assert.match(stabilityCss, /party-name-edit-modal/, "party rename editor needs a
 assert.match(presenceLabelSource, /entryPresenceFix/, "special entry presence logs must be normalized");
 assert.match(presenceLabelSource, /PARTY_NAME_UI/, "presence labels must reuse the party display-name contract");
 assert.match(index, /party-ui-stability\.css\?v=0\.3\.91/);
-assert.match(index, /party-ui-stability\.js\?v=0\.3\.92/);
+assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
 assert.match(index, /entry-presence-party-label-fix\.js\?v=0\.3\.91/);
-assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.92") < index.indexOf("party-ui-stability.js?v=0.3.92"), "preflight behavior must load before the party naming runtime");
-assert.ok(index.indexOf("party-ui-stability.js?v=0.3.92") < index.indexOf("entry-presence-party-label-fix.js?v=0.3.91"), "presence label normalizer must consume the party display-name API");
+assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.93") < index.indexOf("party-ui-stability.js?v=0.3.93"), "preflight behavior must load before the party naming runtime");
+assert.ok(index.indexOf("party-ui-stability.js?v=0.3.93") < index.indexOf("entry-presence-party-label-fix.js?v=0.3.91"), "presence label normalizer must consume the party display-name API");
 assert.doesNotMatch(stabilitySource, /function ensureReadyBackButton/, "the stability layer must not recreate the party back button");
 assert.doesNotMatch(stabilitySource, /function ensurePartyNameControl/, "the stability layer must not recreate the party name control");
 

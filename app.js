@@ -27,6 +27,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
+  const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
   const LAYOUT_KEY = "baekji_city_mvp_investigation_layout_v1";
   const DEFAULT_LAYOUT = { leftPercent: 68, scenePercent: 68 };
   const app = document.getElementById("app");
@@ -266,6 +267,71 @@
   function currentUser() { return DEMO_USERS[currentUserId()] || null; }
   function currentCharacter() { return state.characters[currentUserId()] || null; }
 
+  function partyAccount(userId) {
+    const id = String(userId || "");
+    const registered = window.__BAEKJI_TESTER_REGISTRY_GUARD__?.values?.()
+      ?.find((candidate) => String(candidate?.id || "") === id);
+    const known = registered || DEMO_USERS[id] || null;
+    if (known) {
+      const name = String(known.name || known.loginId || "").trim();
+      if (name) {
+        return {
+          id,
+          name,
+          initial: String(known.initial || Array.from(name)[0] || "·"),
+          profilePhoto: String(known.profilePhoto || ""),
+          pending: false,
+        };
+      }
+    }
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_PROFILE_KEY) || "null");
+      if (String(saved?.id || "") === id) {
+        const name = String(saved.name || saved.loginId || "").trim();
+        if (name) {
+          return {
+            id,
+            name,
+            initial: String(saved.initial || Array.from(name)[0] || "·"),
+            profilePhoto: String(saved.profilePhoto || ""),
+            pending: false,
+          };
+        }
+      }
+    } catch { /* ignore unavailable session profile */ }
+    return { id, name: "참가 캐릭터", initial: "·", profilePhoto: "", pending: true };
+  }
+
+  function partyAvatarMarkup(account, imageClass) {
+    return account.profilePhoto
+      ? `<img class="${imageClass}" src="${escapeHtml(account.profilePhoto)}" alt="${escapeHtml(account.name)} 프로필 사진">`
+      : escapeHtml(account.initial || "·");
+  }
+
+  function partyHomeReadyMarkup(party, memberId, currentId) {
+    const ready = effectivePartyReady(party, memberId);
+    const copy = ready ? "● 준비 완료" : "○ 준비 대기";
+    const stateClass = ready ? "is-ready" : "is-waiting";
+    const isSelf = memberId === currentId;
+    if (isSelf && party.status === "RECRUITING" && !party.sessionId) {
+      return `<button type="button" class="party-member-inline-ready ${stateClass}" data-preflight-member-ready="${escapeHtml(party.id)}" aria-pressed="${ready}">${copy}</button>`;
+    }
+    if (isSelf && ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(String(party.status || "")) && !party.sessionId) {
+      return `<button type="button" class="party-member-inline-ready ${stateClass}" data-member-ready="${escapeHtml(party.id)}" aria-pressed="${ready}">${copy}</button>`;
+    }
+    return `<span class="party-ready-state ${stateClass}">${copy}</span>`;
+  }
+
+  function partyHomeMemberMarkup(party, memberId, currentId) {
+    const account = partyAccount(memberId);
+    const role = memberId === party.creatorId ? "조장" : "참가 조원";
+    return `<div class="member party-member-home-row" data-party-home-member="${escapeHtml(memberId)}">
+      <div class="member-avatar">${partyAvatarMarkup(account, "party-member-home-avatar-image")}</div>
+      <div class="party-member-home-main"><div class="list-title">${escapeHtml(account.name)}</div><div class="list-sub">${role}</div></div>
+      <div class="status-pills">${partyHomeReadyMarkup(party, memberId, currentId)}</div>
+    </div>`;
+  }
+
   function setCurrentUser(userId) {
     sessionStorage.setItem(USER_KEY, userId);
     mutate("login", (draft) => { draft.characters[userId].onlineAt = Date.now(); });
@@ -427,6 +493,20 @@
     const session = getUserSession(uid);
     const invitations = Object.values(state.parties).filter((p) => p.invitedIds.includes(uid) && !p.memberIds.includes(uid) && p.status !== "CLOSED");
     const inventoryCount = Object.values(character.inventory || {}).reduce((sum, item) => sum + item.quantity, 0);
+    const memberPartyHome = Boolean(party && party.creatorId !== uid && unique(party.memberIds).includes(uid));
+    const partyMembers = party ? unique(party.memberIds) : [];
+    const partyCardTitle = memberPartyHome ? escapeHtml(party.name || "조사조") : "조사조";
+    const partyCardHelp = memberPartyHome
+      ? "참가 캐릭터와 준비 상태를 이 화면에서 바로 확인합니다."
+      : "조사조를 생성한 캐릭터가 조장을 맡으며, 조장은 조원 관리와 세션 시작을 담당합니다.";
+    const partyCardBadge = party
+      ? memberPartyHome ? `${partyMembers.length}명` : "편성 중"
+      : "";
+    const partyCardBody = party
+      ? memberPartyHome
+        ? `<div class="member-grid party-member-home-grid" data-party-member-roster="${escapeHtml(party.id)}">${partyMembers.map((memberId) => partyHomeMemberMarkup(party, memberId, uid)).join("")}</div>`
+        : `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(party.name)}</div><div class="list-sub">${partyMembers.length}명 참여 · ${escapeHtml(party.status)}</div></div><button class="button" data-open-party="${party.id}">열기</button></div>`
+      : `<div class="empty">현재 참여 중인 조사조가 없습니다.</div><div style="height:12px"></div><button class="button primary block" data-create-party>새 조사조 구성</button>`;
     shell(`
       <main class="container">
         <section class="hero">
@@ -446,17 +526,17 @@
             <div class="list-item"><div class="list-main"><div class="list-title">해오름역 조사 세션</div><div class="list-sub">현재 위치: ${escapeHtml(nodeDisplayName(session.currentNode))}</div></div><button class="button primary" data-resume-session="${session.id}">조사 복귀</button></div>
           </section>` : ""}
 
-        <section class="section grid two">
-          <article class="card pad">
-            <div class="card-header"><div><h2 class="card-title">조사조</h2><p class="muted small">조사조를 생성한 캐릭터가 조장을 맡으며, 조장은 조원 관리와 세션 시작을 담당합니다.</p></div>${party ? `<span class="badge green">편성 중</span>` : ""}</div>
-            ${party ? `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(party.name)}</div><div class="list-sub">${party.memberIds.length}명 참여 · ${escapeHtml(party.status)}</div></div><button class="button" data-open-party="${party.id}">열기</button></div>` : `<div class="empty">현재 참여 중인 조사조가 없습니다.</div><div style="height:12px"></div><button class="button primary block" data-create-party>새 조사조 구성</button>`}
+        <section class="section grid ${party ? "" : "two"}">
+          <article class="card pad ${memberPartyHome ? "party-member-home-card" : ""}">
+            <div class="card-header"><div><h2 class="card-title">${partyCardTitle}</h2><p class="muted small">${partyCardHelp}</p></div>${party ? `<span class="badge green">${partyCardBadge}</span>` : ""}</div>
+            ${partyCardBody}
           </article>
-          <article class="card pad">
+          ${!party ? `<article class="card pad">
             <div class="card-header"><div><h2 class="card-title">받은 초대</h2><p class="muted small">초대를 수락한 뒤 직접 구성을 확인해야 합니다.</p></div><span class="badge">${invitations.length}</span></div>
             <div class="list">
               ${invitations.length ? invitations.map((p) => `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(p.name)}</div><div class="list-sub">초대한 캐릭터: ${escapeHtml(DEMO_USERS[p.creatorId].name)}</div></div><div class="button-row"><button class="button small" data-decline="${p.id}">거절</button><button class="button primary small" data-accept="${p.id}">수락</button></div></div>`).join("") : `<div class="empty">새로운 초대가 없습니다.</div>`}
             </div>
-          </article>
+          </article>` : ""}
         </section>
 
         <section class="section card pad">
@@ -729,12 +809,54 @@
     return `${light}의 ${description}`;
   }
 
+  function briefingMemberMarkup(memberId, leaderId, confirmedIds) {
+    const account = partyAccount(memberId);
+    const isLeader = memberId === leaderId;
+    const confirmed = confirmedIds.includes(memberId);
+    const stateText = isLeader ? "전원 확인 후 구역 진입" : confirmed ? "확인 완료" : "확인 대기";
+    const stateClass = !isLeader && confirmed ? " complete" : "";
+    const photoClass = account.profilePhoto ? " has-profile-photo" : "";
+    return `<div class="briefing-member${stateClass}" data-tester-account-id="${escapeHtml(memberId)}">
+      <span class="briefing-member-icon${photoClass}" aria-hidden="true">${partyAvatarMarkup(account, "tester-briefing-avatar")}</span>
+      <span class="briefing-member-main"><strong>${escapeHtml(account.name)}</strong><small>${isLeader ? "조장" : "조원"}</small></span>
+      <span class="briefing-member-state">${stateText}</span>
+    </div>`;
+  }
+
   function renderBriefing(sessionId) {
     if (!ensureAuth()) return;
     document.body.classList.add("retro-mode", "retro-page-mode");
     document.body.classList.remove("retro-login-mode", "retro-home-mode");
     const session = state.sessions[sessionId];
     if (!session || !session.memberIds.includes(currentUserId())) return go("home");
+    const party = state.parties[session.partyId];
+    if (!party) return go("home");
+    const uid = currentUserId();
+    const isLeader = party.creatorId === uid;
+    const memberIds = unique(session.memberIds);
+    const confirmedIds = unique(session.briefingConfirmedBy || []);
+    const requiredIds = memberIds.filter((memberId) => memberId !== party.creatorId);
+    const allConfirmed = requiredIds.every((memberId) => confirmedIds.includes(memberId));
+    const ownConfirmed = confirmedIds.includes(uid);
+    const pendingNames = requiredIds
+      .filter((memberId) => !confirmedIds.includes(memberId))
+      .map((memberId) => partyAccount(memberId).name);
+    const briefingConfirmation = session.status === "BRIEFING" ? `
+      <section class="briefing-confirmation" data-party-flow-briefing-confirmation>
+        <div class="briefing-confirmation-header">
+          <div><span class="retro-invite-kicker">PARTY SYNC</span><h3>브리핑 확인</h3></div>
+          <span class="badge ${allConfirmed ? "green" : ""}">${confirmedIds.filter((id) => requiredIds.includes(id)).length}/${requiredIds.length}명 확인</span>
+        </div>
+        <p class="muted small">조원 전원이 내용을 확인하면 조장의 구역 진입 버튼이 활성화됩니다. 조장이 진입하면 모든 조원의 조사가 동시에 시작됩니다.</p>
+        <div class="briefing-member-list">${memberIds.map((memberId) => briefingMemberMarkup(memberId, party.creatorId, confirmedIds)).join("")}</div>
+        ${isLeader ? `
+          <div class="retro-flow-notice${allConfirmed ? " complete" : ""}">
+            <strong>${allConfirmed ? "전원 브리핑 확인 완료" : "조원들의 브리핑 확인 중"}</strong>
+            <span>${allConfirmed ? "구역 진입 버튼이 활성화되었습니다." : `${escapeHtml(pendingNames.join(", ") || "조원")}의 확인을 기다리고 있습니다.`}</span>
+          </div>` : `
+          <button type="button" class="button primary block" data-party-flow-confirm-briefing="${escapeHtml(sessionId)}" ${ownConfirmed ? "disabled" : ""}>${ownConfirmed ? "브리핑 확인 완료됨" : "브리핑 확인 완료"}</button>
+          <p class="muted small briefing-member-help">확인 후 조장이 구역에 진입할 때까지 이 화면에서 기다려 주세요.</p>`}
+      </section>` : "";
     const v = DATA.variants[session.variant];
     shell(`
       <main class="container narrow">
@@ -743,7 +865,8 @@
           <div class="card-header"><div><span class="badge green">조사 가능</span><h2 style="margin:13px 0 0">${escapeHtml(briefingHeadline(session))}</h2></div><span class="badge">${session.memberIds.length}인 조사</span></div>
           <p class="lead" style="font-size:14px">구역 진입 후 장면, 시스템 로그, 조사 채팅을 함께 확인하세요. 아래 방식으로 대화와 행동을 구분하면 조사를 진행할 수 있습니다.</p>
           <div class="rule-list">${BRIEFING_TUTORIAL_RULES.map((copy) => `<div class="rule">${escapeHtml(copy)}</div>`).join("")}</div>
-          <div class="button-row" style="margin-top:22px"><button class="button" data-go="party/${session.partyId}">조사조 확인</button><button class="button primary" data-enter-investigation>구역 진입</button></div>
+          ${briefingConfirmation}
+          <div class="button-row" style="margin-top:22px">${isLeader && session.status === "BRIEFING" ? `<button type="button" class="button party-flow-back party-preflight-back" data-party-preflight-briefing-back="${escapeHtml(sessionId)}">← 이전 단계</button>` : ""}<button class="button primary" data-enter-investigation ${!isLeader || !allConfirmed ? "disabled" : ""} aria-disabled="${!isLeader || !allConfirmed}" title="${isLeader ? allConfirmed ? "전원 확인 완료 · 구역에 진입합니다." : "조원들의 브리핑 확인을 기다리고 있습니다." : "구역 진입은 조장이 진행합니다."}">${isLeader ? "구역 진입" : "조장 진입 대기"}</button></div>
         </section>
       </main>`);
     document.querySelector("[data-enter-investigation]").addEventListener("click", () => {
@@ -1892,7 +2015,15 @@
     if (page === "briefing") {
       const session = snapshot?.sessions?.[param] || null;
       if (!session || !session.memberIds?.includes(userId)) return null;
-      return { id: session.id, partyId: session.partyId, memberIds: session.memberIds, status: session.status, variant: session.variant };
+      return {
+        id: session.id,
+        partyId: session.partyId,
+        memberIds: session.memberIds,
+        status: session.status,
+        variant: session.variant,
+        briefingConfirmedBy: session.briefingConfirmedBy,
+        partyCreatorId: snapshot.parties?.[session.partyId]?.creatorId || null,
+      };
     }
     if (page === "result") {
       const session = snapshot?.sessions?.[param] || null;

@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.65";
+  const VERSION = "0.3.66";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -265,68 +265,12 @@
     if (participantHelp && participantHelp.textContent !== helpCopy) participantHelp.textContent = helpCopy;
   }
 
-  function decorateMemberHome(snapshot, userId) {
-    const [page] = routeParts();
-    if (page !== "home") return;
-    const controls = memberControlState(snapshot, userId);
-    if (!controls) return;
-    const party = snapshot.parties?.[controls.partyId];
-    const openButton = document.querySelector(`[data-open-party="${CSS.escape(controls.partyId)}"]`);
-    const existingControls = document.querySelector(`[data-member-party-controls="${CSS.escape(controls.partyId)}"]`);
-    if (existingControls) {
-      openButton?.remove();
-      return;
-    }
-    const item = openButton?.closest(".list-item");
-    if (!item) return;
-    openButton.remove();
-
-    const actions = document.createElement("div");
-    actions.className = "button-row";
-    actions.dataset.memberPartyControls = controls.partyId;
-
-    if (controls.status === "RECRUITING") {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `button ${controls.confirmed ? "" : "primary"} small`;
-      button.dataset.memberConfirmComposition = controls.partyId;
-      button.disabled = controls.confirmed;
-      button.textContent = controls.confirmed ? "구성 확인 완료" : "구성 확인";
-      actions.appendChild(button);
-    } else if (["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(controls.status)) {
-      const confirmed = document.createElement("span");
-      confirmed.className = "badge green";
-      confirmed.textContent = "구성 확인 완료";
-      actions.appendChild(confirmed);
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `button ${controls.ready ? "" : "primary"} small`;
-      button.dataset.memberReady = controls.partyId;
-      button.disabled = controls.ready;
-      button.textContent = controls.ready ? "준비 완료됨" : "준비 완료";
-      actions.appendChild(button);
-    } else {
-      const status = document.createElement("span");
-      status.className = "badge";
-      status.textContent = party?.sessionId ? "세션 생성됨" : "조사조 참여 중";
-      actions.appendChild(status);
-    }
-    item.appendChild(actions);
-
-    const card = item.closest("article.card");
-    const help = card?.querySelector(".card-header .muted.small");
-    const helpCopy = "조원은 이곳에서 구성 확인과 준비 완료만 진행합니다.";
-    if (help && help.textContent !== helpCopy) help.textContent = helpCopy;
-  }
-
   function refresh() {
     const snapshot = readState();
     const userId = currentUserId();
     if (!snapshot || !userId) return;
     hideBusyInviteCandidates(snapshot);
     decorateLeaderPage(snapshot, userId);
-    decorateMemberHome(snapshot, userId);
     document.documentElement.dataset.partyLeadershipVersion = VERSION;
   }
 

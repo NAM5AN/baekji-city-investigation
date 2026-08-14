@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-membership-ux-fix.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const sandbox = { window: {}, console, structuredClone };
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox, { filename: "party-membership-ux-fix.js" });
@@ -113,14 +114,13 @@ assert.match(source, /data-party-member-id=.*>탈퇴<\/button>/, "leader remove-
 assert.match(source, /button\.textContent = "탈퇴"/, "roster self-leave action should be labeled simply as 탈퇴");
 assert.match(source, /const markup = `\$\{kick\}\$\{readyMarkup\}`/, "leader row should place 탈퇴 before the readiness indicator");
 assert.match(source, /membershipReinvitedAtBy/, "reinvites need a post-removal timestamp so tombstone repair can distinguish them from stale invites");
-assert.match(source, /card\.hidden = Boolean\(party\)/, "received invitations must hide while the user belongs to a party");
-assert.match(source, /rosterButtons\.forEach/, "member home must deduplicate roster buttons");
+assert.match(app, /\$\{!party \? `<article class="card pad">/, "received invitations must not render while the user belongs to a party");
+assert.match(app, /party-member-home-grid/, "member roster must render directly without button normalization");
 assert.match(source, /party-membership-ready-only/, "leader participant status must be reduced to readiness only");
-assert.match(source, /if \(keep\.textContent !== "조원 보기"\) keep\.textContent = "조원 보기";/, "member-home decoration must not rewrite identical text on every MutationObserver pass");
-assert.match(source, /if \(help && help\.textContent !== helpCopy\) help\.textContent = helpCopy;/, "leader decoration must only mutate help text when it actually changes");
+assert.doesNotMatch(source, /function decorateInviteVisibility|function normalizeMemberHomeButtons/, "membership runtime must not post-process home UI");
 assert.doesNotMatch(source, /queueMicrotask\(refresh\)/, "membership observer refresh must yield to the browser instead of creating an unbounded microtask chain");
 assert.match(source, /setTimeout\(refresh, 16\)/, "membership observer refresh should be frame-throttled");
-assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.85/, "membership UX fix must be cache-bumped after leave/reinvite repair");
+assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.86/, "membership UX fix must be cache-bumped after direct home rendering");
 
 const reinviteSource = fs.readFileSync(new URL("../party-reinvite-runtime-fix.js", import.meta.url), "utf8");
 const reinviteSandbox = { window: {}, console, structuredClone };
@@ -179,6 +179,6 @@ assert.match(reinviteSource, /reinvite-atomic/, "same-party invite click must be
 assert.match(reinviteSource, /reinvite-accept-atomic/, "same-party accept click must be owned by the atomic runtime path");
 assert.match(reinviteSource, /rejoin-invariant-repair/, "post-join cloud merge repair must stay wired");
 assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.89/, "reinvite runtime fix must be loaded with a fresh cache key");
-assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.89") < index.indexOf("party-membership-ux-fix.js?v=0.3.85"), "atomic reinvite capture must run before the legacy membership sidecar capture listener");
+assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.89") < index.indexOf("party-membership-ux-fix.js?v=0.3.86"), "atomic reinvite capture must run before the legacy membership sidecar capture listener");
 
 console.log("PASS: polished leave controls, in-site confirmation/notices, atomic same-party reinvite acceptance, stale merge repair, readiness layout, and observer-loop guard");

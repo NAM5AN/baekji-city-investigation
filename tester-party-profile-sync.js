@@ -32,41 +32,6 @@
     return output;
   }
 
-  function profileImage(account) {
-    const image = document.createElement("img");
-    image.className = "tester-briefing-avatar";
-    image.src = account.profilePhoto;
-    image.alt = `${account.name} 프로필 사진`;
-    return image;
-  }
-
-  function decorateBriefingMembers() {
-    document.querySelectorAll(".briefing-member").forEach((member) => {
-      const name = member.querySelector(".briefing-member-main strong");
-      const icon = member.querySelector(".briefing-member-icon");
-      if (!name || !icon) return;
-
-      const lookupLabel = member.dataset.testerAccountId || name.textContent;
-      const account = accountForLabel(lookupLabel);
-      if (!account) return;
-
-      member.dataset.testerAccountId = account.id;
-      if (name.textContent !== account.name) name.textContent = account.name;
-
-      if (account.profilePhoto) {
-        let image = icon.querySelector(".tester-briefing-avatar");
-        if (!image) {
-          icon.replaceChildren(profileImage(account));
-          icon.classList.add("has-profile-photo");
-        } else if (image.getAttribute("src") !== account.profilePhoto) {
-          image.src = account.profilePhoto;
-        }
-      } else if (!icon.textContent.trim()) {
-        icon.textContent = Array.from(account.name)[0] || "?";
-      }
-    });
-  }
-
   function decorateInviteCandidates() {
     document.querySelectorAll(".retro-invite-card").forEach((card) => {
       const name = card.querySelector(".list-title");
@@ -97,7 +62,6 @@
   function refresh() {
     refreshQueued = false;
     if (!accounts.size) return;
-    decorateBriefingMembers();
     decorateInviteCandidates();
     decorateRelatedCopy();
   }

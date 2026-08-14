@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const VERSION = "0.3.82";
+  const VERSION = "0.3.83";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -111,8 +111,6 @@
   if (typeof window !== "undefined") window.__BAEKJI_PARTY_FLOW_UX_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
 
-  let refreshQueued = false;
-
   function readState() {
     try {
       const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
@@ -128,19 +126,6 @@
 
   function routeParts() {
     return (location.hash.replace(/^#\/?/, "") || "login").split("/").filter(Boolean);
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function setText(node, text) {
-    if (node && node.textContent !== text) node.textContent = text;
   }
 
   function dispatchStateUpdate(oldRaw, newRaw) {
@@ -167,7 +152,6 @@
     if (oldRaw === newRaw) return false;
     localStorage.setItem(GLOBAL_KEY, newRaw);
     dispatchStateUpdate(oldRaw, newRaw);
-    scheduleRefresh();
     return true;
   }
 
@@ -197,7 +181,6 @@
     clearDeferredInvite(userId, partyId);
     writeState(next);
     if (location.hash !== "#/home") location.hash = "#/home";
-    else scheduleRefresh();
     return true;
   }
 
@@ -227,72 +210,6 @@
     const after = next.parties?.[partyId];
     if (!after || effectiveReady(after, userId) === effectiveReady(before, userId)) return false;
     return writeState(next);
-  }
-
-  function memberControlsMarkup(party, userId) {
-    const partyId = escapeHtml(party.id);
-    const roster = `<button type="button" class="button small" data-party-roster-open="${partyId}">조원 보기</button>`;
-    if (["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) {
-      const ready = effectiveReady(party, userId);
-      return `${roster}<button type="button" class="button small party-ready-toggle ${ready ? "is-ready" : "is-waiting"}" data-member-ready="${partyId}">${ready ? "준비 완료" : "준비 대기"}</button>`;
-    }
-    return roster;
-  }
-
-  function decorateMemberHome(snapshot, userId) {
-    const [page] = routeParts();
-    if (page !== "home") return;
-    const partyId = snapshot.characters?.[userId]?.currentPartyId;
-    const party = partyId ? snapshot.parties?.[partyId] : null;
-    if (!party || party.creatorId === userId || !unique(party.memberIds).includes(userId)) return;
-
-    const controls = document.querySelector(`[data-member-party-controls="${CSS.escape(partyId)}"]`);
-    if (!controls) return;
-    const signature = `${party.status}:${effectiveReady(party, userId) ? 1 : 0}:${party.sessionId || ""}`;
-    const desired = memberControlsMarkup(party, userId);
-    const hasLegacyConfirm = Boolean(controls.querySelector("[data-member-confirm-composition]"));
-    const rosterCount = controls.querySelectorAll("[data-party-roster-open]").length;
-    const readyCountInControls = controls.querySelectorAll("[data-member-ready]").length;
-    const expectedReadyCount = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) ? 1 : 0;
-    if (controls.dataset.partyFlowUxSignature !== signature || hasLegacyConfirm || rosterCount !== 1 || readyCountInControls !== expectedReadyCount) {
-      controls.innerHTML = desired;
-      controls.dataset.partyFlowUxSignature = signature;
-    }
-
-    const card = controls.closest("article.card");
-    const help = card?.querySelector(".card-header .muted.small");
-    const helpCopy = party.status === "RECRUITING"
-      ? "조원 명단을 확인하고 조장의 구성 확정을 기다립니다."
-      : "조원 명단을 확인하고 자신의 준비 상태를 변경할 수 있습니다.";
-    setText(help, helpCopy);
-  }
-
-  function decorateBriefingRoster(snapshot, userId) {
-    const [page, sessionId] = routeParts();
-    if (page !== "briefing" || !sessionId) return;
-    const session = snapshot.sessions?.[sessionId];
-    if (!session || !unique(session.memberIds).includes(userId)) return;
-    const button = [...document.querySelectorAll("button")].find((node) => String(node.textContent || "").trim() === "조사조 확인");
-    if (!button || button.dataset.partyFlowBriefingRosterFixed === "true") return;
-    button.dataset.partyRosterOpen = session.partyId;
-    button.removeAttribute("data-go");
-    button.dataset.partyFlowBriefingRosterFixed = "true";
-  }
-
-  function refresh() {
-    refreshQueued = false;
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !userId) return;
-    decorateMemberHome(snapshot, userId);
-    decorateBriefingRoster(snapshot, userId);
-    if (document.documentElement.dataset.partyFlowUxVersion !== VERSION) document.documentElement.dataset.partyFlowUxVersion = VERSION;
-  }
-
-  function scheduleRefresh() {
-    if (refreshQueued) return;
-    refreshQueued = true;
-    queueMicrotask(refresh);
   }
 
   document.addEventListener("click", (event) => {
@@ -371,19 +288,8 @@
       if (party && readyCount(party) !== unique(party.memberIds).length) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        scheduleRefresh();
       }
     }
   }, true);
-
-  const appRoot = document.getElementById("app");
-  if (appRoot && typeof MutationObserver === "function") {
-    new MutationObserver(scheduleRefresh).observe(appRoot, { childList: true, subtree: true });
-  }
-  window.addEventListener("hashchange", scheduleRefresh);
-  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) scheduleRefresh(); });
-  window.addEventListener("baekji-cloud-sync", scheduleRefresh);
-  window.addEventListener("baekji-party-leadership", scheduleRefresh);
-  window.addEventListener("baekji-party-flow-ux", scheduleRefresh);
-  requestAnimationFrame(() => requestAnimationFrame(scheduleRefresh));
+  document.documentElement.dataset.partyFlowUxVersion = VERSION;
 })();

@@ -4,7 +4,7 @@
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const DEFER_KEY_PREFIX = "baekji_city_mvp_deferred_invites_v1:";
-  const ENHANCEMENT_VERSION = "0.3.64";
+  const ENHANCEMENT_VERSION = "0.3.65";
   const USER_LABELS = {
     test_a: { name: "테스트 캐릭터 A", initial: "A" },
     test_b: { name: "테스트 캐릭터 B", initial: "B" },
@@ -43,23 +43,6 @@
       initial: String(tester?.initial || Array.from(name)[0] || "?"),
       profilePhoto: String(tester?.profilePhoto || ""),
     };
-  }
-
-  function briefingMemberMarkup(memberId, leaderId, confirmedIds, member = registeredUserLabel(memberId)) {
-    if (!member) return "";
-    const isLeader = memberId === leaderId;
-    const confirmed = confirmedIds.includes(memberId);
-    const stateText = isLeader ? "전원 확인 후 구역 진입" : confirmed ? "확인 완료" : "확인 대기";
-    const stateClass = !isLeader && confirmed ? " complete" : "";
-    const photoClass = member.profilePhoto ? " has-profile-photo" : "";
-    const icon = member.profilePhoto
-      ? `<img class="tester-briefing-avatar" src="${escapeHtml(member.profilePhoto)}" alt="${escapeHtml(member.name)} 프로필 사진">`
-      : escapeHtml(member.initial);
-    return `<div class="briefing-member${stateClass}" data-tester-account-id="${escapeHtml(member.id)}">
-      <span class="briefing-member-icon${photoClass}" aria-hidden="true">${icon}</span>
-      <span class="briefing-member-main"><strong>${escapeHtml(member.name)}</strong><small>${isLeader ? "조장" : "조원"}</small></span>
-      <span class="briefing-member-state">${stateText}</span>
-    </div>`;
   }
 
   function pendingInvitationsFor(snapshot, userId) {
@@ -146,7 +129,6 @@
     declineInviteState,
     confirmBriefingState,
     registeredUserLabel,
-    briefingMemberMarkup,
   });
   window.__BAEKJI_PARTY_FLOW_TEST__ = TEST_API;
 
@@ -290,60 +272,6 @@
     section.prepend(notice);
   }
 
-  function enhanceBriefing(snapshot, userId) {
-    const [page, sessionId] = routeParts();
-    if (page !== "briefing" || !sessionId) return;
-    const session = snapshot.sessions?.[sessionId];
-    const party = session ? snapshot.parties?.[session.partyId] : null;
-    if (!session || !party || session.status !== "BRIEFING" || !unique(session.memberIds).includes(userId)) return;
-
-    const leaderId = party.creatorId;
-    const isLeader = leaderId === userId;
-    const confirmedIds = unique(session.briefingConfirmedBy);
-    const requiredIds = briefingRequiredMemberIds(session, party);
-    const allConfirmed = allBriefingMembersConfirmed(session, party);
-    const ownConfirmed = confirmedIds.includes(userId);
-    const enterButton = document.querySelector("[data-enter-investigation]");
-    const briefing = enterButton?.closest(".briefing") || document.querySelector(".briefing.card");
-    if (!briefing) return;
-
-    if (enterButton) {
-      enterButton.disabled = !isLeader || !allConfirmed;
-      enterButton.setAttribute("aria-disabled", String(enterButton.disabled));
-      enterButton.title = isLeader
-        ? allConfirmed ? "전원 확인 완료 · 구역에 진입합니다." : "조원들의 브리핑 확인을 기다리고 있습니다."
-        : "구역 진입은 조장이 진행합니다.";
-      const enterText = isLeader ? "구역 진입" : "조장 진입 대기";
-      if (enterButton.textContent !== enterText) enterButton.textContent = enterText;
-    }
-
-    const memberIds = unique(session.memberIds);
-    const memberLabels = new Map(memberIds.map((memberId) => [memberId, registeredUserLabel(memberId)]));
-    if (memberIds.some((memberId) => !memberLabels.get(memberId))) return;
-    if (briefing.querySelector("[data-party-flow-briefing-confirmation]")) return;
-    const pendingNames = requiredIds.filter((memberId) => !confirmedIds.includes(memberId)).map((memberId) => memberLabels.get(memberId).name);
-    const panel = document.createElement("section");
-    panel.className = "briefing-confirmation";
-    panel.dataset.partyFlowBriefingConfirmation = "";
-    panel.innerHTML = `
-      <div class="briefing-confirmation-header">
-        <div><span class="retro-invite-kicker">PARTY SYNC</span><h3>브리핑 확인</h3></div>
-        <span class="badge ${allConfirmed ? "green" : ""}">${confirmedIds.filter((id) => requiredIds.includes(id)).length}/${requiredIds.length}명 확인</span>
-      </div>
-      <p class="muted small">조원 전원이 내용을 확인하면 조장의 구역 진입 버튼이 활성화됩니다. 조장이 진입하면 모든 조원의 조사가 동시에 시작됩니다.</p>
-      <div class="briefing-member-list">${memberIds.map((memberId) => briefingMemberMarkup(memberId, leaderId, confirmedIds, memberLabels.get(memberId))).join("")}</div>
-      ${isLeader ? `
-        <div class="retro-flow-notice${allConfirmed ? " complete" : ""}">
-          <strong>${allConfirmed ? "전원 브리핑 확인 완료" : "조원들의 브리핑 확인 중"}</strong>
-          <span>${allConfirmed ? "구역 진입 버튼이 활성화되었습니다." : `${escapeHtml(pendingNames.join(", ") || "조원")}의 확인을 기다리고 있습니다.`}</span>
-        </div>` : `
-        <button type="button" class="button primary block" data-party-flow-confirm-briefing="${escapeHtml(sessionId)}" ${ownConfirmed ? "disabled" : ""}>${ownConfirmed ? "브리핑 확인 완료됨" : "브리핑 확인 완료"}</button>
-        <p class="muted small briefing-member-help">확인 후 조장이 구역에 진입할 때까지 이 화면에서 기다려 주세요.</p>`}`;
-    const buttonRow = enterButton?.closest(".button-row");
-    if (buttonRow) briefing.insertBefore(panel, buttonRow);
-    else briefing.append(panel);
-  }
-
   function enhance() {
     enhancementQueued = false;
     const snapshot = readState();
@@ -355,7 +283,6 @@
     if (syncRoute(snapshot, userId)) return;
     showInvitationModal(snapshot, userId);
     enhanceReadyWaiting(snapshot, userId);
-    enhanceBriefing(snapshot, userId);
     document.documentElement.dataset.partyFlowVersion = ENHANCEMENT_VERSION;
   }
 

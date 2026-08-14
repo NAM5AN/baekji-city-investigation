@@ -3,7 +3,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const VERSION = "0.3.92";
+  const VERSION = "0.3.93";
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -124,8 +124,6 @@
   if (typeof window !== "undefined") window.__BAEKJI_PARTY_PREFLIGHT_FLOW_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
 
-  let refreshQueued = false;
-
   function readState() {
     try {
       const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
@@ -141,10 +139,6 @@
 
   function routeParts() {
     return (location.hash.replace(/^#\/?/, "") || "login").split("/").filter(Boolean);
-  }
-
-  function setText(node, text) {
-    if (node && node.textContent !== text) node.textContent = text;
   }
 
   function dispatchStateUpdate(oldRaw, newRaw, reason) {
@@ -171,7 +165,6 @@
     if (oldRaw === newRaw) return false;
     localStorage.setItem(GLOBAL_KEY, newRaw);
     dispatchStateUpdate(oldRaw, newRaw, reason);
-    scheduleRefresh();
     return true;
   }
 
@@ -226,92 +219,6 @@
     return true;
   }
 
-  function decorateMemberHome(snapshot, userId) {
-    const [page] = routeParts();
-    if (page !== "home") return;
-    const partyId = snapshot.characters?.[userId]?.currentPartyId;
-    const party = partyId ? snapshot.parties?.[partyId] : null;
-    if (!party || party.creatorId === userId || !unique(party.memberIds).includes(userId)) return;
-
-    const controls = document.querySelector(`[data-member-party-controls="${CSS.escape(partyId)}"]`);
-    if (!controls) return;
-    const ready = effectiveReady(party, userId);
-    const readyText = ready ? "● 준비 완료" : "○ 준비 대기";
-
-    if (party.status === "RECRUITING") {
-      controls.querySelectorAll("[data-member-ready]").forEach((button) => button.remove());
-      let button = controls.querySelector("[data-preflight-member-ready]");
-      if (!button) {
-        button = document.createElement("button");
-        button.type = "button";
-        button.className = "button small party-ready-toggle";
-        button.dataset.preflightMemberReady = partyId;
-        controls.appendChild(button);
-      }
-      button.classList.toggle("is-ready", ready);
-      button.classList.toggle("is-waiting", !ready);
-      setText(button, readyText);
-      button.setAttribute("aria-pressed", String(ready));
-      return;
-    }
-
-    controls.querySelector("[data-preflight-member-ready]")?.remove();
-    const button = controls.querySelector("[data-member-ready]");
-    if (button) {
-      button.classList.add("party-ready-toggle");
-      button.classList.toggle("is-ready", ready);
-      button.classList.toggle("is-waiting", !ready);
-      setText(button, readyText);
-      button.setAttribute("aria-pressed", String(ready));
-    }
-  }
-
-  function decorateBriefing(snapshot, userId) {
-    const [page, sessionId] = routeParts();
-    if (page !== "briefing" || !sessionId) return;
-    const session = snapshot.sessions?.[sessionId];
-    const party = session ? snapshot.parties?.[session.partyId] : null;
-    if (!session || !party || !unique(session.memberIds).includes(userId)) return;
-
-    [...document.querySelectorAll("button")]
-      .filter((button) => String(button.textContent || "").trim() === "조사조 확인")
-      .forEach((button) => button.remove());
-
-    const enterButton = document.querySelector("[data-enter-investigation]");
-    const row = enterButton?.closest(".button-row");
-    if (!row) return;
-
-    let back = row.querySelector("[data-party-preflight-briefing-back]");
-    if (party.creatorId === userId && session.status === "BRIEFING") {
-      if (!back) {
-        back = document.createElement("button");
-        back.type = "button";
-        back.className = "button party-flow-back party-preflight-back";
-        back.dataset.partyPreflightBriefingBack = sessionId;
-        back.textContent = "← 이전 단계";
-        row.prepend(back);
-      }
-    } else {
-      back?.remove();
-    }
-  }
-
-  function refresh() {
-    refreshQueued = false;
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !userId) return;
-    decorateMemberHome(snapshot, userId);
-    decorateBriefing(snapshot, userId);
-    document.documentElement.dataset.partyPreflightFlowVersion = VERSION;
-  }
-
-  function scheduleRefresh() {
-    if (refreshQueued) return;
-    refreshQueued = true;
-    setTimeout(refresh, 16);
-  }
-
   window.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
@@ -361,16 +268,5 @@
     }
   }, true);
 
-  const app = document.getElementById("app");
-  if (app && typeof MutationObserver === "function") {
-    new MutationObserver(scheduleRefresh).observe(app, { childList: true, subtree: true, characterData: true });
-  }
-  window.addEventListener("hashchange", scheduleRefresh);
-  window.addEventListener("storage", (event) => { if (!event.key || event.key === GLOBAL_KEY) scheduleRefresh(); });
-  window.addEventListener("baekji-cloud-sync", scheduleRefresh);
-  window.addEventListener("baekji-party-flow-ux", scheduleRefresh);
-  window.addEventListener("baekji-party-membership", scheduleRefresh);
-  window.addEventListener("baekji-party-preflight-flow", scheduleRefresh);
-  setInterval(scheduleRefresh, 1200);
-  scheduleRefresh();
+  document.documentElement.dataset.partyPreflightFlowVersion = VERSION;
 })();
