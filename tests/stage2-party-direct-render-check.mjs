@@ -25,7 +25,7 @@ assert.match(renderParty, /data-party-name-edit/, "party name editor action must
 assert.match(renderParty, /readyStage && !isCreator/, "only members must receive a readiness toggle in the collapsed confirmation stage");
 assert.match(renderParty, /준비 완료 취소/, "member readiness-toggle copy must render directly");
 assert.match(renderParty, /조사 출발/, "session start copy must render directly");
-assert.match(renderParty, /isCreator && allReady && readyStage/, "the leader session start must be gated by current all-ready state");
+assert.match(renderParty, /isCreator && readyStage/, "the leader session start must remain available through the confirmed stage for the in-site departure guard");
 assert.match(renderParty, /전원 준비가 완료되었습니다\./, "all-ready footer must render directly");
 assert.match(renderParty, /\["조원 구성", "구성 확정", "세션 생성"\]/, "the party stepper must render exactly three stages");
 assert.doesNotMatch(renderParty, /각 캐릭터가 자신의 탭에서 구성 확인과 준비 완료를 눌러야 합니다\./, "obsolete participant help must not flash before replacement");

@@ -200,7 +200,7 @@ assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-ready/);
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-waiting/);
 assert.match(index, /party-preflight-flow-fix\.css\?v=0\.3\.90/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
-assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.86") < index.indexOf("party-preflight-flow-fix.js?v=0.3.96"), "preflight behavior must run after membership UI normalization");
+assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.87") < index.indexOf("party-preflight-flow-fix.js?v=0.3.96"), "preflight behavior must run after guarded-departure membership UI normalization");
 assert.doesNotMatch(preflightSource, /function decorateLeaderParty/, "preflight party UI must not patch the rendered party page");
 assert.doesNotMatch(preflightSource, /function decorateMemberHome|function decorateBriefing/, "preflight runtime must not patch home or briefing");
 

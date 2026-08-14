@@ -649,6 +649,20 @@
     return a.size === b.size && [...a].every((id) => b.has(id));
   }
 
+  function departureBlockers(snapshot, partyId) {
+    const party = snapshot?.parties?.[partyId];
+    if (!party || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) return { pendingIds: [], unreadyIds: [] };
+    const memberIds = [...new Set(party.memberIds || [])];
+    return {
+      pendingIds: activePendingInviteIds(snapshot, partyId),
+      unreadyIds: memberIds.filter((memberId) => memberId !== party.creatorId && !effectivePartyReady(party, memberId)),
+    };
+  }
+
+  function sameDepartureBlockers(left, right) {
+    return sameInviteeSet(left?.pendingIds, right?.pendingIds) && sameInviteeSet(left?.unreadyIds, right?.unreadyIds);
+  }
+
   function inviteCandidateIds(snapshot, partyId, leaderId) {
     const party = snapshot?.parties?.[partyId];
     if (!party || party.creatorId !== leaderId) return [];
@@ -734,6 +748,51 @@
     return { snapshot: draft, ok: true, pendingIds };
   }
 
+  function departureMemberName(snapshot, memberId) {
+    return String(snapshot?.characters?.[memberId]?.name || DEMO_USERS?.[memberId]?.name || "조원");
+  }
+
+  function forcedDepartureState(snapshot, partyId, leaderId, sessionId, at = Date.now(), variant = "c", expectedBlockers = null) {
+    const current = departureBlockers(snapshot, partyId);
+    const draft = clonePartyInviteSnapshot(snapshot);
+    const party = draft?.parties?.[partyId];
+    if (!party || party.creatorId !== leaderId || party.sessionId || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) {
+      return { snapshot: draft, ok: false, changed: false, reason: "invalid", blockers: current, cancelledIds: [], removedIds: [] };
+    }
+    if (expectedBlockers && !sameDepartureBlockers(current, expectedBlockers)) {
+      return { snapshot: draft, ok: false, changed: false, reason: "stale", blockers: current, cancelledIds: [], removedIds: [] };
+    }
+    const pendingIds = current.pendingIds;
+    const removedIds = current.unreadyIds;
+    const remainingIds = [...new Set(party.memberIds || [])].filter((memberId) => !removedIds.includes(memberId));
+    if (!remainingIds.includes(leaderId)) return { snapshot: draft, ok: false, changed: false, reason: "invalid", blockers: current, cancelledIds: [], removedIds: [] };
+    party.status = "COMPOSITION_CONFIRMED";
+    party.invitedIds = [...new Set(party.invitedIds || [])].filter((memberId) => !pendingIds.includes(memberId));
+    party.memberIds = remainingIds;
+    party.confirmedBy = remainingIds;
+    party.readyStateBy = Object.fromEntries(remainingIds.map((memberId) => [memberId, { ready: true, at }]));
+    party.readyBy = remainingIds;
+    draft.partyMembershipRemovals ||= {};
+    draft.partyMembershipNotices ||= {};
+    removedIds.forEach((memberId) => {
+      const character = draft.characters?.[memberId];
+      if (character?.currentPartyId === partyId) character.currentPartyId = null;
+      if (character && (!party.sessionId || character.currentSessionId === party.sessionId)) character.currentSessionId = null;
+      if (party.membershipReinvitedAtBy && typeof party.membershipReinvitedAtBy === "object") delete party.membershipReinvitedAtBy[memberId];
+      const kind = "LEADER_KICK";
+      draft.partyMembershipRemovals[`${partyId}:${memberId}`] = { partyId, memberId, actorId: leaderId, kind, active: true, at };
+      const noticeId = `membership_${Number(at)}_${String(memberId)}_${kind}`;
+      draft.partyMembershipNotices[noticeId] = { id: noticeId, partyId: String(partyId), partyName: String(party.name || "조사조"), memberId: String(memberId), memberName: departureMemberName(snapshot, memberId), leaderId: String(leaderId), actorId: String(leaderId), kind, at: Number(at) };
+    });
+    Object.values(draft.partyMembershipNotices)
+      .filter(Boolean)
+      .sort((left, right) => Number(right?.at || 0) - Number(left?.at || 0))
+      .slice(100)
+      .forEach((notice) => { if (notice?.id) delete draft.partyMembershipNotices[notice.id]; });
+    const result = startSessionState(draft, partyId, leaderId, sessionId, at, variant, false);
+    return { ...result, changed: result.ok, reason: result.ok ? null : "invalid", blockers: current, cancelledIds: pendingIds, removedIds };
+  }
+
   function disbandCompletedPartyState(snapshot, sessionId, actorId, at = Date.now()) {
     const draft = clonePartyInviteSnapshot(snapshot);
     const session = draft?.sessions?.[sessionId];
@@ -763,7 +822,7 @@
     return { snapshot: draft, changed: true };
   }
 
-  window.__BAEKJI_PENDING_PARTY_INVITES_TEST__ = Object.freeze({ activePendingInviteIds, sameInviteeSet, inviteCandidateIds, inviteState, cancelInviteState, declineInviteState, acceptInviteState, enterReadyCheckState, startSessionState, disbandCompletedPartyState });
+  window.__BAEKJI_PENDING_PARTY_INVITES_TEST__ = Object.freeze({ activePendingInviteIds, sameInviteeSet, departureBlockers, sameDepartureBlockers, forcedDepartureState, inviteCandidateIds, inviteState, cancelInviteState, declineInviteState, acceptInviteState, enterReadyCheckState, startSessionState, disbandCompletedPartyState });
   window.__BAEKJI_RESULT_PARTY_DISBAND_TEST__ = Object.freeze({ disbandCompletedPartyState });
 
   function renderParty(partyId) {
@@ -837,7 +896,7 @@
             ${["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) ? `<button type="button" class="button party-flow-back" data-party-flow-back-recruiting="${escapeHtml(party.id)}">← 이전 단계</button>` : ""}
             ${party.status === "RECRUITING" ? `<button class="button primary" data-confirm-composition>${party.confirmedBy.includes(uid) ? "구성 확인 완료" : "이 구성으로 확정"}</button>` : ""}
             ${readyStage && !isCreator ? `<button class="button primary ${ownReady ? "party-ready-button-active" : ""}" data-ready>${ownReady ? "준비 완료 취소" : "조사 준비 완료"}</button>` : ""}
-            ${isCreator && allReady && readyStage ? `<button class="button primary" data-start-session>조사 출발</button>` : ""}
+            ${isCreator && readyStage ? `<button class="button primary" data-start-session>조사 출발</button>` : ""}
             ${party.sessionId ? `<button class="button primary" data-open-session>브리핑으로 이동</button>` : ""}
             ${party.status === "RECRUITING" ? `<button class="button danger" data-leave-party>${isCreator ? "조사조 해산" : "조사조 나가기"}</button>` : ""}
           </div>
@@ -936,34 +995,53 @@
     const uid = currentUserId();
     const snapshot = loadState();
     const party = snapshot.parties?.[partyId];
-    if (!party || party.creatorId !== uid || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status) || !party.memberIds.every((memberId) => effectivePartyReady(party, memberId))) return;
-    const pending = activePendingInviteIds(snapshot, partyId);
-    if (pending.length) return showPendingDepartureModal(partyId, pending);
-    return commitSessionStart(snapshot, partyId, uid, false);
+    if (!party || party.creatorId !== uid || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) return;
+    const blockers = departureBlockers(snapshot, partyId);
+    if (blockers.pendingIds.length || blockers.unreadyIds.length) return showDepartureModal(partyId, blockers);
+    return commitForcedDeparture(snapshot, partyId, uid, blockers);
   }
 
-  function closePendingDepartureModal() { document.getElementById("modal-root")?.replaceChildren(); }
+  function closeDepartureModal() { document.getElementById("modal-root")?.replaceChildren(); }
 
-  function showPendingDepartureModal(partyId, pendingIds) {
+  function departureModalContent(blockers) {
+    const pendingCount = blockers.pendingIds.length;
+    const unreadyCount = blockers.unreadyIds.length;
+    if (pendingCount && unreadyCount) return {
+      title: "초대 및 준비 중인 캐릭터가 있습니다",
+      action: "탈퇴·초대 취소 후 조사 출발",
+      copy: `초대 수락 대기 중인 ${pendingCount}명과 준비 대기 중인 ${unreadyCount}명을 정리하고 조사를 출발합니다.`,
+    };
+    if (pendingCount) return {
+      title: "초대 중인 캐릭터가 있습니다",
+      action: "초대 취소 후 조사 출발",
+      copy: `초대 수락 대기 중인 ${pendingCount}명을 취소하고 조사를 출발합니다.`,
+    };
+    return {
+      title: "준비 중인 캐릭터가 있습니다",
+      action: "탈퇴 후 조사 출발",
+      copy: `준비 대기 중인 ${unreadyCount}명을 탈퇴 처리하고 조사를 출발합니다.`,
+    };
+  }
+
+  function showDepartureModal(partyId, blockers) {
     const root = document.getElementById("modal-root");
-    if (!root || root.childElementCount || root.querySelector("[data-party-start-pending-modal]")) return;
-    root.innerHTML = `<div class="retro-invite-backdrop" data-party-start-pending-modal><section class="retro-invite-modal" role="dialog" aria-modal="true" aria-label="초대 취소 후 조사 출발 확인"><div class="retro-invite-emblem" aria-hidden="true">!</div><div class="retro-invite-kicker">PARTY INVITATION</div><h2>초대 중인 캐릭터가 있습니다</h2><p>초대 수락 대기 중인 ${pendingIds.length}명을 취소하고 조사를 출발합니다.</p><div class="retro-invite-actions retro-departure-actions"><button type="button" class="button" data-party-start-pending-cancel>돌아가기</button><button type="button" class="button primary" data-party-start-pending-confirm="${escapeHtml(partyId)}">초대 취소 후 조사 출발</button></div></section></div>`;
-    root.querySelector("[data-party-start-pending-cancel]")?.addEventListener("click", closePendingDepartureModal);
-    root.querySelector("[data-party-start-pending-modal]")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) closePendingDepartureModal(); });
-    root.querySelector("[data-party-start-pending-confirm]")?.addEventListener("click", (event) => {
-      const targetPartyId = event.currentTarget.dataset.partyStartPendingConfirm;
-      closePendingDepartureModal();
-      commitSessionStart(loadState(), targetPartyId, currentUserId(), true, pendingIds);
+    if (!root || root.childElementCount || root.querySelector("[data-party-departure-modal]")) return;
+    const content = departureModalContent(blockers);
+    root.innerHTML = `<div class="retro-invite-backdrop" data-party-departure-modal><section class="retro-invite-modal" role="dialog" aria-modal="true" aria-label="조사 출발 확인"><div class="retro-invite-emblem" aria-hidden="true">!</div><div class="retro-invite-kicker">PARTY DEPARTURE</div><h2>${content.title}</h2><p>${content.copy}</p><div class="retro-invite-actions retro-departure-actions"><button type="button" class="button" data-party-departure-cancel>돌아가기</button><button type="button" class="button primary" data-party-departure-confirm="${escapeHtml(partyId)}">${content.action}</button></div></section></div>`;
+    root.querySelector("[data-party-departure-cancel]")?.addEventListener("click", closeDepartureModal);
+    root.querySelector("[data-party-departure-modal]")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) closeDepartureModal(); });
+    root.querySelector("[data-party-departure-confirm]")?.addEventListener("click", (event) => {
+      const targetPartyId = event.currentTarget.dataset.partyDepartureConfirm;
+      closeDepartureModal();
+      commitForcedDeparture(loadState(), targetPartyId, currentUserId(), blockers);
     });
-    requestAnimationFrame(() => root.querySelector("[data-party-start-pending-cancel]")?.focus());
+    requestAnimationFrame(() => root.querySelector("[data-party-departure-cancel]")?.focus());
   }
 
-  function commitSessionStart(snapshot, partyId, leaderId, cancelPending, expectedPendingIds = null) {
-    if (cancelPending && !sameInviteeSet(activePendingInviteIds(snapshot, partyId), expectedPendingIds)) {
-      return toast("초대 상태가 변경되었습니다.", "최신 초대 상태를 확인한 뒤 다시 출발해 주세요.", "error");
-    }
+  function commitForcedDeparture(snapshot, partyId, leaderId, expectedBlockers) {
     const shared = Object.values(snapshot.sessions || {}).find((candidate) => ["BRIEFING", "ACTIVE"].includes(candidate.status));
-    const result = startSessionState(snapshot, partyId, leaderId, id("session"), Date.now(), shared?.variant || "c", cancelPending);
+    const result = forcedDepartureState(snapshot, partyId, leaderId, id("session"), Date.now(), shared?.variant || "c", expectedBlockers);
+    if (result.reason === "stale") return toast("조사조 상태가 변경되었습니다.", "최신 초대 및 준비 상태를 확인한 뒤 다시 출발해 주세요.", "error");
     if (!result.ok) return toast("조사를 출발할 수 없습니다.", "준비 상태 또는 초대 상태가 변경되었습니다.", "error");
     state = result.snapshot;
     saveState("start-session");
