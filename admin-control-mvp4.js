@@ -296,6 +296,16 @@
     body.append(wrap);
   }
 
+  function restoreDetailEntry() {
+    const body = dashboardModalRoot()?.querySelector(".admin-modal-body");
+    if (!lastDetailContext || !body || body.querySelector("[data-admin-control-entry]")) return;
+    augmentDetail(lastDetailContext.kind, lastDetailContext.id);
+  }
+
+  function clearDetailContext() {
+    lastDetailContext = null;
+  }
+
   function ensureAuditButton() {
     const meta = document.querySelector(".admin-topbar-meta");
     if (!meta || meta.querySelector("[data-admin-audit-open]")) return;
@@ -315,8 +325,10 @@
     const detail = target.closest("[data-admin-detail]");
     if (detail) {
       lastDetailContext = { kind: detail.dataset.adminDetail, id: detail.dataset.adminId };
-      queueMicrotask(() => augmentDetail(lastDetailContext?.kind, lastDetailContext?.id));
+      queueMicrotask(restoreDetailEntry);
     }
+
+    if (target.closest("[data-admin-modal-close]") || target.matches("[data-admin-modal-backdrop]")) clearDetailContext();
 
     const open = target.closest("[data-admin-control-open]");
     if (open) {
@@ -446,6 +458,11 @@
   const topbarObserver = new MutationObserver(ensureAuditButton);
   const topbar = document.querySelector(".admin-topbar");
   if (topbar) topbarObserver.observe(topbar, { childList: true, subtree: true });
+  const modalRoot = dashboardModalRoot();
+  if (modalRoot) {
+    const detailObserver = new MutationObserver(restoreDetailEntry);
+    detailObserver.observe(modalRoot, { childList: true, subtree: true });
+  }
 
   window.__BAEKJI_ADMIN_CONTROL_MVP4__ = Object.freeze({
     requestId,
@@ -453,6 +470,8 @@
     nodeName,
     sessionForParty,
     augmentDetail,
+    restoreDetailEntry,
+    clearDetailContext,
     openAudit,
   });
 })();
