@@ -36,7 +36,7 @@ assert.doesNotMatch(preflight, /function decorateLeaderParty/, "preflight runtim
 assert.doesNotMatch(stability, /function ensureReadyBackButton/, "paint guard must not recreate the back button");
 assert.doesNotMatch(stability, /function ensurePartyNameControl/, "paint guard must not recreate the name control");
 assert.match(index, /stage2-party-ui=1/, "direct party rendering must be cache-busted");
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.86/);
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
 assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
 

@@ -19,6 +19,7 @@ const GROUPS = Object.freeze({
     "party-flow-check.mjs",
     "party-confirmed-ready-collapse-check.mjs",
     "party-departure-guard-modal-check.mjs",
+    "party-departure-capture-order-check.mjs",
     "result-party-disband-check.mjs",
     "pending-party-invites-check.mjs",
     "party-leadership-flow-check.mjs",
