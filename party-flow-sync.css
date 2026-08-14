@@ -77,6 +77,23 @@
   margin-top: 22px;
 }
 
+.retro-departure-actions {
+  width: 100%;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.35fr);
+}
+
+.retro-departure-actions > .button {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+}
+
+.retro-departure-actions > .button.primary {
+  white-space: nowrap;
+}
+
 .retro-flow-notice {
   display: grid;
   gap: 7px;
@@ -196,6 +213,7 @@ button[aria-disabled="true"] {
   .retro-invite-backdrop { padding: 14px; }
   .retro-invite-modal { padding: 22px 18px; box-shadow: 4px 4px 0 #11110f; }
   .retro-invite-actions { grid-template-columns: 1fr; }
+  .retro-departure-actions { grid-template-columns: 1fr; }
   .briefing-confirmation-header { align-items: center; }
   .briefing-member { grid-template-columns: 36px minmax(0, 1fr); }
   .briefing-member-state { grid-column: 1 / -1; text-align: center; }
