@@ -70,6 +70,7 @@ const GROUPS = Object.freeze({
     "admin-chat-mobile-mvp3-check.mjs",
     "admin-control-mvp4-check.mjs",
     "admin-control-lazy-entry-check.mjs",
+    "admin-control-capture-owner-check.mjs",
     "admin-item-transfer-check.mjs",
     "admin-control-cloud-conflict-check.mjs",
     "admin-session-ops-mvp5-check.mjs",

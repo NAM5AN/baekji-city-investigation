@@ -318,7 +318,7 @@
     meta.insertBefore(button, connection || null);
   }
 
-  document.addEventListener("click", (event) => {
+  window.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
