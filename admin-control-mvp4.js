@@ -68,6 +68,42 @@
     })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
   }
 
+  function inventoryEntries(character) {
+    return Object.entries(character?.inventory || {}).filter(([, item]) => Number(item?.quantity || 0) > 0)
+      .map(([inventoryKey, item]) => ({ inventoryKey, item }));
+  }
+
+  function worldItemEntries(payload, variant) {
+    const claims = payload?.state?.itemClaimsByVariant?.[variant] || {};
+    const objectNameForId = (objectId) => String(Object.values(DATA.objectsByDetail || {}).flat().find((entry) => String(entry?.id || "") === String(objectId))?.name || "조사 오브젝트");
+    return Object.entries(DATA.objectItems || {}).flatMap(([objectId, mappings]) => (mappings || [])
+      .filter((mapping) => !claims[`${objectId}:${mapping?.itemId}`])
+      .map((mapping) => ({ objectId, objectName: objectNameForId(objectId), itemId: String(mapping?.itemId || ""), name: String(mapping?.name || mapping?.itemId || ""), quantity: Number(mapping?.default || 1) })))
+      .filter((entry) => entry.itemId).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  }
+
+  function characterItemOptions(payload, targetCharacterId, mode) {
+    const includeTarget = mode === "CHARACTER_COPY";
+    return Object.entries(payload?.state?.characters || {}).flatMap(([characterId, character]) => !includeTarget && String(characterId) === String(targetCharacterId) ? []
+      : inventoryEntries(character).map(({ inventoryKey, item }) => ({ characterId, inventoryKey, name: String(item?.name || inventoryKey), state: String(item?.state || "CLEAN"), quantity: Number(item?.quantity || 0), owner: profileFor(payload, characterId).name })))
+      .sort((a, b) => `${a.owner}:${a.name}`.localeCompare(`${b.owner}:${b.name}`, "ko"));
+  }
+
+  function transferMarkup(payload, characterId, worldVariant) {
+    const world = worldItemEntries(payload, worldVariant);
+    const moveSources = characterItemOptions(payload, characterId, "CHARACTER_MOVE");
+    const copySources = characterItemOptions(payload, characterId, "CHARACTER_COPY");
+    const worldOptions = world.map((entry) => `<option value="${esc(entry.itemId)}" data-object-id="${esc(entry.objectId)}" data-catalog-item-id="${esc(entry.itemId)}">${esc(entry.name)} · ${esc(entry.objectName)} · ${entry.quantity}개</option>`).join("");
+    const optionMarkup = (sources) => sources.map((entry) => `<option value="${esc(entry.inventoryKey)}" data-source-character-id="${esc(entry.characterId)}" data-source-inventory-key="${esc(entry.inventoryKey)}">${esc(entry.owner)} · ${esc(entry.name)} · ${esc(entry.state)} · ${entry.quantity}개</option>`).join("");
+    const moveOptions = optionMarkup(moveSources);
+    const copyOptions = optionMarkup(copySources);
+    return `<section class="admin-control-section admin-control-transfer"><div class="admin-control-section-head"><div><strong>아이템 이동·복제</strong><small>서버가 최신 상태를 다시 검증해 한 번에 기록합니다.</small></div></div><div class="admin-control-transfer-grid">
+      <article class="admin-control-transfer-card"><strong>미습득 아이템 지급</strong><small>선택한 시간 변주의 월드 획득권을 대상에게 옮깁니다.</small><label><span>시간 변주</span><select data-control-world-variant>${variantOptions(worldVariant)}</select></label><label><span>미습득 아이템</span><select data-control-world-source ${world.length ? "" : "disabled"}><option value="">${world.length ? "목록에서 선택" : "남은 미습득 아이템 없음"}</option>${worldOptions}</select></label><button type="button" data-control-inventory-transfer="WORLD_CLAIM" ${world.length ? "" : "disabled"}>대상에게 지급</button></article>
+      <article class="admin-control-transfer-card"><strong>다른 캐릭터 소지품 이동</strong><small>출처의 전체 소지품 entry를 제거하고 상태 그대로 옮깁니다.</small><label><span>출처 소지품</span><select data-control-character-move-source ${moveSources.length ? "" : "disabled"}><option value="">${moveSources.length ? "출처 소지품 선택" : "이동 가능한 소지품 없음"}</option>${moveOptions}</select></label><button type="button" class="danger" data-control-inventory-transfer="CHARACTER_MOVE" ${moveSources.length ? "" : "disabled"}>대상에게 이동</button></article>
+      <article class="admin-control-transfer-card"><strong>기존 소지품 복제 지급</strong><small>출처는 유지하고 상태가 같은 새 instance를 대상에게 지급합니다.</small><label><span>복제할 소지품</span><select data-control-character-copy-source ${copySources.length ? "" : "disabled"}><option value="">${copySources.length ? "출처 소지품 선택" : "복제 가능한 소지품 없음"}</option>${copyOptions}</select></label><button type="button" data-control-inventory-transfer="CHARACTER_COPY" ${copySources.length ? "" : "disabled"}>대상에게 복제 지급</button></article>
+    </div></section>`;
+  }
+
   function placeOptions(currentNode) {
     const options = [{ id: "E_ENTRY", name: "해오름역 구역 입구", floor: "구역 경계" }, ...values(DATA.places)
       .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
@@ -108,17 +144,17 @@
     </div>`;
   }
 
-  function renderCharacterControl(payload, characterId) {
+  function renderCharacterControl(payload, characterId, worldVariant = "a") {
     const character = payload.state?.characters?.[characterId];
     if (!character) return shell("캐릭터 제어", "대상을 찾을 수 없음", `<div class="admin-control-empty">현재 세계 상태에 이 캐릭터가 없습니다.</div>`);
     const profile = profileFor(payload, characterId);
-    const inventory = values(character.inventory || {}).sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ko"));
-    const itemRows = inventory.length ? inventory.map((item) => `<div class="admin-control-item-row" data-control-item-row="${esc(item.itemId)}">
-      <div><strong>${esc(item.name || item.itemId)}</strong><small>${esc(item.category || "일반")} · ID ${esc(item.itemId)}</small></div>
+    const inventory = inventoryEntries(character).sort((a, b) => String(a.item?.name || "").localeCompare(String(b.item?.name || ""), "ko"));
+    const itemRows = inventory.length ? inventory.map(({ inventoryKey, item }) => `<div class="admin-control-item-row" data-control-item-row="${esc(inventoryKey)}">
+      <div><strong>${esc(item.name || inventoryKey)}</strong><small>${esc(item.category || "일반")} · ID ${esc(inventoryKey)}</small></div>
       <label><span>수량</span><input type="number" min="0" max="99" value="${Number(item.quantity || 0)}" data-control-item-qty /></label>
       <label><span>상태</span><input maxlength="40" value="${esc(item.state || "CLEAN")}" data-control-item-state /></label>
-      <button type="button" data-control-item-save="${esc(item.itemId)}">적용</button>
-      <button type="button" class="danger ghost" data-control-item-remove="${esc(item.itemId)}">제거</button>
+      <button type="button" data-control-item-save="${esc(inventoryKey)}">적용</button>
+      <button type="button" class="danger ghost" data-control-item-remove="${esc(inventoryKey)}">제거</button>
     </div>`).join("") : `<div class="admin-control-empty compact">현재 소지품이 없습니다.</div>`;
     const catalog = itemCatalogEntries();
 
@@ -139,9 +175,9 @@
         <label><span>상태</span><input maxlength="40" value="CLEAN" data-control-add-item-state /></label>
         <button type="button" data-control-add-item="${esc(characterId)}">추가/설정</button>
       </div>
-    </section>
+    </section>${transferMarkup(payload, characterId, worldVariant)}
     <div class="admin-control-footnote">모든 변경은 관리자 계정·변경 전/후 값·세계 revision과 함께 감사 로그에 영구 기록됩니다.</div>`, "character-control");
-    currentControl = { type: "character", id: characterId };
+    currentControl = { type: "character", id: characterId, payload, worldVariant };
   }
 
   function renderPartyControl(payload, partyId, confirmDraft = null) {
@@ -181,7 +217,7 @@
   }
 
   function auditActionLabel(action) {
-    return ({ CHARACTER_STATUS: "캐릭터 상태", INVENTORY_SET: "소지품", SESSION_CONTROL: "조사 세션" })[action] || action || "관리 조작";
+    return ({ CHARACTER_STATUS: "캐릭터 상태", INVENTORY_SET: "소지품", INVENTORY_TRANSFER: "소지품 이동·복제", SESSION_CONTROL: "조사 세션" })[action] || action || "관리 조작";
   }
 
   function jsonCompact(value) {
@@ -335,6 +371,26 @@
       return void sendControl({ operation: "INVENTORY_SET", characterId, itemId, quantity, state, name, category }, (fresh) => renderCharacterControl(fresh, characterId));
     }
 
+    const transfer = target.closest("[data-control-inventory-transfer]");
+    if (transfer) {
+      const targetCharacterId = currentControl?.id;
+      const mode = transfer.dataset.controlInventoryTransfer;
+      if (!targetCharacterId || !mode) return;
+      const body = { operation: "INVENTORY_TRANSFER", mode, targetCharacterId };
+      if (mode === "WORLD_CLAIM") {
+        const variant = String(ensureRoot().querySelector("[data-control-world-variant]")?.value || "");
+        const option = ensureRoot().querySelector("[data-control-world-source]")?.selectedOptions?.[0];
+        if (!option?.dataset.objectId || !option?.dataset.catalogItemId) return toast("지급할 미습득 아이템을 선택해 주세요.", "error");
+        Object.assign(body, { variant, objectId: option.dataset.objectId, catalogItemId: option.dataset.catalogItemId });
+      } else {
+        const selector = mode === "CHARACTER_MOVE" ? "[data-control-character-move-source]" : "[data-control-character-copy-source]";
+        const option = ensureRoot().querySelector(selector)?.selectedOptions?.[0];
+        if (!option?.dataset.sourceCharacterId || !option?.dataset.sourceInventoryKey) return toast("출처 소지품을 선택해 주세요.", "error");
+        Object.assign(body, { sourceCharacterId: option.dataset.sourceCharacterId, sourceInventoryKey: option.dataset.sourceInventoryKey });
+      }
+      return void sendControl(body, (fresh) => renderCharacterControl(fresh, targetCharacterId, String(body.variant || currentControl?.worldVariant || "a")));
+    }
+
     const reviewParty = target.closest("[data-control-party-review]");
     if (reviewParty) {
       const partyId = reviewParty.dataset.controlPartyReview;
@@ -375,6 +431,11 @@
     ensureRoot().querySelectorAll(".admin-audit-row").forEach((row) => {
       row.hidden = Boolean(query) && !String(row.dataset.adminAuditSearchText || "").includes(query);
     });
+  });
+
+  document.addEventListener("change", (event) => {
+    if (!event.target?.matches?.("[data-control-world-variant]") || currentControl?.type !== "character") return;
+    renderCharacterControl(currentControl.payload, currentControl.id, String(event.target.value || "a"));
   });
 
   document.addEventListener("keydown", (event) => {

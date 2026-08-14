@@ -5,7 +5,7 @@ import vm from "node:vm";
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-assert.match(index, /cloud-state-sync\.js\?v=0\.4\.1&fix=0b1/, "movement cloud reconciliation must ship behind a fresh browser cache key");
+assert.match(index, /cloud-state-sync\.js\?v=0\.4\.2&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1/, "movement cloud reconciliation must ship behind a fresh browser cache key");
 assert.match(index, /app\.js\?v=0\.4\.9&fix=0b1[^"']*movement-terminal=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1/, "movement terminal markers must ship behind a fresh browser cache key");
 
 class FakeStorage {

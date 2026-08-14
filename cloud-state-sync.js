@@ -481,6 +481,30 @@
       return state;
     }
 
+    if (action === "INVENTORY_TRANSFER") {
+      (Array.isArray(data.inventoryChanges) ? data.inventoryChanges : []).forEach((change) => {
+        const characterId = String(change?.characterId || "");
+        const inventoryKey = String(change?.inventoryKey || "");
+        const character = state.characters?.[characterId];
+        if (!character || !inventoryKey) return;
+        if (!character.inventory || typeof character.inventory !== "object") character.inventory = {};
+        if (change.item == null) delete character.inventory[inventoryKey];
+        else character.inventory[inventoryKey] = JSON.parse(JSON.stringify(change.item));
+      });
+      const claimChange = data.claimChange;
+      if (claimChange && typeof claimChange === "object") {
+        const variant = String(claimChange.variant || "");
+        const claimKey = String(claimChange.claimKey || "");
+        if (variant && claimKey) {
+          state.itemClaimsByVariant ||= {};
+          const claims = state.itemClaimsByVariant[variant] || (state.itemClaimsByVariant[variant] = {});
+          if (claimChange.claim == null) delete claims[claimKey];
+          else claims[claimKey] = JSON.parse(JSON.stringify(claimChange.claim));
+        }
+      }
+      return state;
+    }
+
     if (action === "SESSION_CONTROL") {
       const session = state.sessions?.[targetId];
       if (!session) return state;
