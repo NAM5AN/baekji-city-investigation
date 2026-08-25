@@ -1,9 +1,10 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.6.3";
+  const VERSION = "0.6.4";
   const panel = document.querySelector("[data-admin-panel]");
-  if (!panel || window.__BAEKJI_ADMIN_LIVE_RENDER__) return;
+  const topology = window.__BAEKJI_ADMIN_ZONE_TOPOLOGY__;
+  if (!panel || !topology || window.__BAEKJI_ADMIN_LIVE_RENDER__) return;
 
   const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")
     || Object.getOwnPropertyDescriptor(HTMLElement.prototype, "innerHTML");
@@ -115,66 +116,13 @@
     return;
   }
 
-  function parseNumber(text, pattern) {
-    const match = String(text || "").match(pattern);
-    return match ? Number(match[1] || 0) : 0;
-  }
-
-  function recordFromCard(card) {
-    const id = String(card?.dataset?.adminId || "");
-    if (!id) return null;
-    const title = String(card.querySelector("h3")?.textContent || id).trim();
-    const topPill = card.querySelector(".admin-card-top .admin-pill");
-    const members = parseNumber(topPill?.textContent, /(\d+)\s*명/);
-    const metaText = String(card.querySelector(".admin-card-meta")?.textContent || "");
-    const sessions = parseNumber(metaText, /(\d+)\s*개\s*조/);
-    return { id, title, members, sessions, card };
-  }
-
-  function makeSvgElement(name, attrs = {}) {
-    const node = document.createElementNS("http://www.w3.org/2000/svg", name);
-    Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
-    return node;
-  }
-
-  function updateOccupancyBadge(node, members) {
-    node.querySelectorAll(".admin-zone-occupancy-badge").forEach((badge) => badge.remove());
-    const room = node.querySelector(".room");
-    if (!room) return;
-    const x = Number(room.getAttribute("x") || 0);
-    const y = Number(room.getAttribute("y") || 0);
-    const width = Number(room.getAttribute("width") || 0);
-    if (!Number.isFinite(x + y + width) || width <= 0) return;
-
-    const badgeWidth = members >= 10 ? 52 : 46;
-    const group = makeSvgElement("g", { class: "admin-zone-occupancy-badge", "aria-hidden": "true" });
-    const left = Math.max(x + 6, x + width - badgeWidth - 7);
-    group.append(
-      makeSvgElement("rect", { x: left, y: y + 6, width: badgeWidth, height: 22, rx: 4, ry: 4 }),
-      makeSvgElement("text", { x: left + badgeWidth / 2, y: y + 21, "text-anchor": "middle" }),
-    );
-    group.querySelector("text").textContent = `${members}명`;
-    node.append(group);
-  }
-
-  function routeRecordMap(records) {
-    const output = new Map();
-    records.forEach((record) => {
-      const match = record.id.match(/^route:([^:]+):([^:]+)$/);
-      if (!match) return;
-      output.set(`${match[1]}→${match[2]}`, record);
-      output.set(`${match[2]}→${match[1]}`, record);
-    });
-    return output;
-  }
-
   function syncZoneMap(records) {
     const svg = panel.querySelector("[data-admin-zone-map-viewport] svg");
     if (!svg) return;
     const nodeRecords = records.filter((record) => record.id.startsWith("node:"));
     const specialRecords = records.filter((record) => !record.id.startsWith("node:"));
     const nodeMap = new Map(nodeRecords.map((record) => [record.id.replace(/^node:/, ""), record]));
-    const routeMap = routeRecordMap(specialRecords);
+    const routeMap = topology.routeRecordMap(specialRecords);
 
     svg.querySelectorAll("[data-node]").forEach((node) => {
       const record = nodeMap.get(String(node.dataset.node || ""));
@@ -185,7 +133,7 @@
       node.setAttribute("role", "button");
       node.setAttribute("tabindex", "0");
       node.setAttribute("aria-label", `${record.title}, 현재 ${record.members}명, ${record.sessions}개 조사조`);
-      updateOccupancyBadge(node, record.members);
+      topology.syncOccupancyBadge(node, record.members);
     });
 
     svg.querySelectorAll("path.route[data-from][data-to]").forEach((route) => {
@@ -250,7 +198,7 @@
     if (incomingHead && currentHead) syncNode(currentHead, incomingHead);
 
     const records = [...fragment.querySelectorAll('.admin-card[data-admin-detail="zone"]')]
-      .map(recordFromCard)
+      .map(topology.recordFromCard)
       .filter(Boolean);
     if (records.length) syncZoneMap(records);
   });

@@ -61,6 +61,8 @@ const GROUPS = Object.freeze({
     "runtime-baseline-stability-check.mjs",
   ],
   admin: [
+    "admin-feature-module-contract-check.mjs",
+    "admin-zone-topology-runtime-check.mjs",
     "admin-shell-runtime-check.mjs",
     "admin-dashboard-mvp-check.mjs",
     "admin-zone-map-check.mjs",
