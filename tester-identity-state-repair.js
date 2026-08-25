@@ -1,6 +1,5 @@
 (() => {
   "use strict";
-
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
@@ -108,7 +107,7 @@
     if (!UUID_RE.test(currentId)) return false;
     const legacyId = currentLegacyId(currentId);
     if (!legacyId) return false;
-    const oldRaw = localStorage.getItem(GLOBAL_KEY);
+    const oldRaw = persistence.readRaw();
     let snapshot;
     try { snapshot = JSON.parse(oldRaw || "null"); } catch { snapshot = null; }
     if (!snapshot || snapshot.version !== 3) return false;
@@ -124,7 +123,7 @@
     const newRaw = JSON.stringify(next);
     if (newRaw === oldRaw) return false;
     repairing = true;
-    try { localStorage.setItem(GLOBAL_KEY, newRaw); }
+    try { persistence.writeRaw(newRaw); }
     finally { repairing = false; }
     dispatchUpdate(oldRaw, newRaw);
     return true;
@@ -141,6 +140,8 @@
 
   window.__BAEKJI_TESTER_IDENTITY_REPAIR_TEST__ = Object.freeze({ normalize, replaceIdentity, mergedCharacter, repairSnapshot });
   window.__BAEKJI_TESTER_IDENTITY_REPAIR__ = Object.freeze({ version: "0.3.96", repairNow });
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
 
   window.addEventListener("storage", (event) => {
     if (!event.key || event.key === GLOBAL_KEY) scheduleRepair();

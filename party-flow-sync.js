@@ -124,13 +124,15 @@
   window.__BAEKJI_PARTY_FLOW_TEST__ = TEST_API;
 
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
 
   let enhancementQueued = false;
   let routeSyncing = false;
 
   function readState() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const parsed = JSON.parse(persistence.readRaw() || "null");
       return parsed?.version === 3 ? parsed : null;
     } catch {
       return null;
@@ -151,7 +153,7 @@
   }
 
   function writeState(snapshot) {
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
+    persistence.writeRaw(JSON.stringify(snapshot));
     try {
       window.dispatchEvent(new HashChangeEvent("hashchange"));
     } catch {
@@ -265,7 +267,7 @@
     if (next.characters?.[userId]?.currentPartyId !== partyId) return;
     clearDeferredInvite(userId, partyId);
     clearInvitationModal();
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(next));
+    persistence.writeRaw(JSON.stringify(next));
     location.hash = `#/party/${partyId}`;
   }
 

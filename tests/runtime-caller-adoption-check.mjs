@@ -20,7 +20,7 @@ function appApi(withStructuredClone) {
   const apiEnd = app.indexOf("  function renderParty(partyId)");
   assert.ok(apiEnd > 0, "party invite reducer seam must precede the renderer");
   const sandbox = {
-    window: {}, console, JSON, Set, Object, String, Math, Array,
+    window: {}, console, JSON, Set, Object, String, Math, Array, queueMicrotask(callback) { callback(); },
     document: { getElementById() { return null; } },
     localStorage: { getItem() { return null; } },
     DAY1_DATA: { meta: { startNode: "E_ENTRY" } },
@@ -103,7 +103,7 @@ assert.equal(transfer.createOffer(separated, { giverId: "giver", receiverId: "re
 const utilsScript = '<script src="runtime-utils.js?v=0.1.0&stage3a=1"></script>';
 const domainScript = '<script src="runtime-domain-rules.js?v=0.1.0&stage3b=1"></script>';
 const itemScript = '<script src="item-transfer-core.js?v=0.3.42&stage3c=1&transfer-privacy=1"></script>';
-const appScript = '<script src="app.js?v=0.4.14&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1"></script>';
+const appScript = '<script src="app.js?v=0.4.15&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1&stage6b=1"></script>';
 for (const script of [utilsScript, domainScript, itemScript, appScript]) assert.ok(index.includes(script), `exact Stage 3-C cache key must be present: ${script}`);
 assert.ok(index.indexOf(utilsScript) < index.indexOf(domainScript), "domain rules must remain after runtime utilities");
 assert.ok(index.indexOf(domainScript) < index.indexOf(itemScript), "item transfer must load after domain rules");

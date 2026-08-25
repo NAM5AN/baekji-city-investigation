@@ -52,7 +52,7 @@ assert.doesNotMatch(renderPartySource, /isCreator\s*&&\s*allReady\s*&&\s*readySt
 assert.match(app, /초대 중인 캐릭터가 있습니다/, "pending-only departure guard copy must be rendered in-app");
 assert.match(app, /준비 중인 캐릭터가 있습니다/, "unready-only departure guard copy must be rendered in-app");
 assert.match(app, /초대 및 준비 중인 캐릭터가 있습니다/, "combined departure guard copy must be rendered in-app");
-assert.match(index, /app\.js\?v=0\.4\.14[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current departure release");
+assert.match(index, /app\.js\?v=0\.4\.15[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current departure release");
 
 class Element {
   constructor(dataset = {}) { this.dataset = dataset; this.listeners = new Map(); }
@@ -97,7 +97,7 @@ function runtime(initial, userId = "test_a") {
     querySelector(selector) { if (selector === "[data-start-session]") return start; return modalRoot.querySelector(selector); }, querySelectorAll() { return []; },
     createElement() { return new Element(); }, addEventListener() {}, removeEventListener() {},
   };
-  const context = vm.createContext({ window: {}, document, localStorage: { getItem(key) { return local.get(key) || null; }, setItem(key, value) { writes += 1; local.set(key, String(value)); } }, sessionStorage: { getItem(key) { return session.get(key) || null; }, setItem(key, value) { session.set(key, String(value)); } }, location: { hash: "#/party/p1" }, history: { pushState() {} }, navigator: {}, Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone, setTimeout() { return 0; }, clearTimeout() {}, setInterval() { return 0; }, requestAnimationFrame(callback) { callback(); return 1; }, console });
+  const context = vm.createContext({ window: {}, document, localStorage: { getItem(key) { return local.get(key) || null; }, setItem(key, value) { writes += 1; local.set(key, String(value)); } }, sessionStorage: { getItem(key) { return session.get(key) || null; }, setItem(key, value) { session.set(key, String(value)); } }, location: { hash: "#/party/p1" }, history: { pushState() {} }, navigator: {}, Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone, setTimeout() { return 0; }, clearTimeout() {}, setInterval() { return 0; }, requestAnimationFrame(callback) { callback(); return 1; }, queueMicrotask(callback) { callback(); }, console });
   context.window = context; context.addEventListener = () => {};
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });

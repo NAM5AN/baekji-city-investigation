@@ -32,7 +32,7 @@ assert.match(testerAuth, /setInterval\(\(\) => loadDirectory\(false\)/);
 
 assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.52/);
 assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.53/);
-assert.match(index, /tester-auth\.js\?v=0\.3\.88/);
+assert.match(index, /tester-auth\.js\?v=0\.3\.89&stage6b=1/);
 assert.ok(index.indexOf("retro-sound-boost.js?v=0.3.50") < index.indexOf("investigation-visual-polish.js?v=0.3.53"));
 
 console.log("investigation visual polish checks passed with stable invite rendering and guest-safe directory polling");

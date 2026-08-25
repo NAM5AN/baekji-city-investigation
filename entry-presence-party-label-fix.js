@@ -8,7 +8,7 @@
 
   function readState(raw = null) {
     try {
-      const parsed = JSON.parse(raw == null ? localStorage.getItem(GLOBAL_KEY) || "null" : raw);
+      const parsed = JSON.parse(raw == null ? persistence.readRaw() || "null" : raw);
       return parsed?.version === 3 ? parsed : null;
     } catch {
       return null;
@@ -66,12 +66,12 @@
 
   function repair(raw = null) {
     if (writing) return false;
-    const oldRaw = raw == null ? localStorage.getItem(GLOBAL_KEY) : String(raw || "");
+    const oldRaw = raw == null ? persistence.readRaw() : String(raw || "");
     const state = readState(oldRaw);
     if (!state || !repairEntryPresenceLabels(state)) return false;
     const newRaw = JSON.stringify(state);
     writing = true;
-    try { localStorage.setItem(GLOBAL_KEY, newRaw); }
+    try { persistence.writeRaw(newRaw); }
     finally { writing = false; }
     dispatchUpdate(oldRaw, newRaw);
     return true;
@@ -94,5 +94,7 @@
   window.addEventListener("hashchange", scheduleRepair);
 
   window.__BAEKJI_ENTRY_PRESENCE_PARTY_LABEL_TEST__ = Object.freeze({ repairEntryPresenceLabels });
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
   scheduleRepair();
 })();

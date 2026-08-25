@@ -1,11 +1,12 @@
 (() => {
   "use strict";
   const T = window.BAEKJI_ITEM_TRANSFER;
-  if (!T) return;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!T || !persistence || T.STATE_KEY !== persistence.key) return;
 
   const HOLD_KEY = "baekji_transfer_held";
   let activeModalId = "";
-  const read = () => T.parse(localStorage.getItem(T.STATE_KEY));
+  const read = () => T.parse(persistence.readRaw());
   const heldTransferId = () => {
     try { return sessionStorage.getItem(HOLD_KEY) || ""; } catch { return ""; }
   };
@@ -29,9 +30,9 @@
 
   function write(state) {
     T.aliasAll(state);
-    const oldValue = localStorage.getItem(T.STATE_KEY);
-    localStorage.setItem(T.STATE_KEY, JSON.stringify(state));
-    dispatchState(oldValue, localStorage.getItem(T.STATE_KEY));
+    const oldValue = persistence.readRaw();
+    const newValue = persistence.writeRaw(JSON.stringify(state));
+    dispatchState(oldValue, newValue);
   }
 
   function toast(title, copy = "", type = "") {

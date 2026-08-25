@@ -37,6 +37,7 @@
   const LAYOUT_KEY = "baekji_city_mvp_investigation_layout_v1";
   const DEFAULT_LAYOUT = { leftPercent: 68, scenePercent: 68 };
   const app = document.getElementById("app");
+  let worldRaw = null;
 
   function loadInvestigationLayout() {
     try {
@@ -211,7 +212,9 @@
 
   function loadState() {
     try {
-      const parsed = JSON.parse(persistence.readRaw() || "null");
+      const raw = persistence.readRaw();
+      worldRaw = raw;
+      const parsed = JSON.parse(raw || "null");
       return parsed?.version === 3 ? normalizeStateShape(parsed) : makeInitialState();
     } catch {
       return makeInitialState();
@@ -235,7 +238,7 @@
   }
 
   function saveState(reason = "update") {
-    persistence.writeRaw(JSON.stringify(currentState()));
+    worldRaw = persistence.writeRaw(JSON.stringify(currentState()));
   }
 
   function mutate(reason, callback) {
@@ -3950,8 +3953,16 @@
     updateAIStatusElements();
   }
 
+  function ingestWorldRaw(raw) {
+    if (raw === worldRaw) return;
+    const latestRaw = persistence.readRaw();
+    if (latestRaw === worldRaw) return;
+    renderExternalUpdate();
+  }
+
+  persistence.subscribe(ingestWorldRaw);
   window.addEventListener("hashchange", render);
-  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) renderExternalUpdate(); });
+  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) ingestWorldRaw(event.newValue); });
   window.addEventListener("pageshow", () => {
     if (routeParts()[0] === "investigate") {
       renderExternalUpdate();

@@ -7,6 +7,7 @@ const USER_KEY = "baekji_city_mvp_current_user_v034";
 const appSource = fs.readFileSync("app.js", "utf8");
 const entrySource = fs.readFileSync("entry-presence-fix.js", "utf8");
 const guardSource = fs.readFileSync("guest-world-isolation.js", "utf8");
+const worldPersistenceSource = fs.readFileSync("world-persistence.js", "utf8");
 const indexSource = fs.readFileSync("index.html", "utf8");
 
 // The original failure mechanism remains documented here: app.js rebuilds the
@@ -139,6 +140,7 @@ windowObject.localStorage = localStorage;
 windowObject.sessionStorage = sessionStorage;
 
 vm.runInContext(guardSource, context, { filename: "guest-world-isolation.js" });
+vm.runInContext(worldPersistenceSource, context, { filename: "world-persistence.js" });
 
 // Simulate app.js registering after the early capture guard.
 let baseAppRenderCount = 0;

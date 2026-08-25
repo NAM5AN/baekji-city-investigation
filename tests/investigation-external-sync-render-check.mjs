@@ -55,6 +55,10 @@ function fakeClock(startAt = 100_000) {
 }
 
 const clock = fakeClock();
+const microtasks = [];
+function flushMicrotasks() {
+  while (microtasks.length) microtasks.shift()();
+}
 class ClockDate extends Date {
   constructor(...args) { super(...(args.length ? args : [clock.now])); }
   static now() { return clock.now; }
@@ -196,7 +200,7 @@ const context = vm.createContext({
   navigator: {},
   Intl, Date: ClockDate, Math, JSON, String, Object, Array, Set, Map, Promise,
   setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: () => 0,
-  requestAnimationFrame: (callback) => callback(),
+  requestAnimationFrame: (callback) => callback(), queueMicrotask(callback) { microtasks.push(callback); },
   console,
 });
 
@@ -206,9 +210,9 @@ vm.runInContext(fs.readFileSync(new URL("../world-persistence.js", import.meta.u
 vm.runInContext(fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8"), context, { filename: "world-store.js" });
 vm.runInContext(fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8"), context, { filename: "runtime-domain-rules.js" });
 let source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
-const footer = source.indexOf('  window.addEventListener("hashchange", render);');
-assert.ok(footer > 0, "test harness must run before app startup rendering");
-source = source.slice(0, footer) + '\n  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) renderExternalUpdate(); });\n  window.addEventListener("pageshow", () => { if (routeParts()[0] === "investigate") renderExternalUpdate(); });\n  window.__TEST__ = { semanticStateEqual, investigationProjection, classifyExternalInvestigationUpdate, refreshMountedInvestigation() { const previousState = currentState(); const nextState = hydrateState("test-external", loadState()); return refreshMountedInvestigation(previousState, nextState); }, syncChoiceRevealUi, chatPanel, chatStreamMarkup, chatComposerPlaceholder, chatLogEntries, bindInvestigation, playerRouteProjection, consumeUnrelatedExternalRouteUpdate, renderExternalUpdate, render, mutate, mutateInvestigationChat, beginMove, scheduleMovement, completeMovement, setUiTab(value) { ui.tab = value; }, getUi() { return ui; }, setState(value) { store.transact("test", () => value); localStorage.setItem(GLOBAL_KEY, JSON.stringify(value)); }, getState() { return clone(store.get()); }, subscribeStore(subscriber) { return store.subscribe(subscriber); }, getMovementTimer(sessionId) { return movementTimers.get(sessionId) || null; }, resetMovementTimers() { movementTimers.forEach((entry) => clearTimeout(entry.timerId)); movementTimers.clear(); } };\n})();';
+const footer = source.indexOf('  window.__BAEKJI_INVESTIGATION_SYNC_TEST__');
+assert.ok(footer > 0, "test harness must retain the production persistence subscription and native storage ingress before exposing test hooks");
+source = source.slice(0, footer) + '\n  window.__TEST__ = { semanticStateEqual, investigationProjection, classifyExternalInvestigationUpdate, refreshMountedInvestigation() { const previousState = currentState(); const nextState = hydrateState("test-external", loadState()); return refreshMountedInvestigation(previousState, nextState); }, syncChoiceRevealUi, chatPanel, chatStreamMarkup, chatComposerPlaceholder, chatLogEntries, bindInvestigation, playerRouteProjection, consumeUnrelatedExternalRouteUpdate, renderExternalUpdate, render, mutate, mutateInvestigationChat, beginMove, scheduleMovement, completeMovement, setUiTab(value) { ui.tab = value; }, getUi() { return ui; }, setState(value) { store.transact("test", () => value); localStorage.setItem(GLOBAL_KEY, JSON.stringify(value)); }, getState() { return clone(store.get()); }, subscribeStore(subscriber) { return store.subscribe(subscriber); }, getMovementTimer(sessionId) { return movementTimers.get(sessionId) || null; }, resetMovementTimers() { movementTimers.forEach((entry) => clearTimeout(entry.timerId)); movementTimers.clear(); } };\n})();';
 vm.runInContext(source, context, { filename: "app.js" });
 const api = window.__TEST__;
 
@@ -453,8 +457,7 @@ inviteMemberJoined.parties.pInvite.memberIds.push("test_new_member");
 const inviteProjectionAfter = api.playerRouteProjection(inviteMemberJoined, "home", "", "test_b");
 assert.equal(inviteProjectionAfter.invitations.find((entry) => entry.id === "pInvite")?.memberCount, 3, "the home route projection must include externally changed invitation member counts");
 localStorage.setItem(GLOBAL_KEY, JSON.stringify(inviteMemberJoined));
-assert.equal(api.consumeUnrelatedExternalRouteUpdate(), false, "an invited party member-count change is relevant and must not be consumed as unrelated");
-window.dispatchEvent({ type: "storage", key: GLOBAL_KEY });
+window.dispatchEvent({ type: "storage", key: GLOBAL_KEY, newValue: JSON.stringify(inviteMemberJoined) });
 assert.equal(app.writes, 1, "a relevant invite member-count change must repaint the recipient home once");
 assert.ok(app.innerHTML.includes("\uD604\uC7AC \uC870\uC6D0 3\uBA85"), "the re-rendered invite card must display the externally updated joined-member count");
 
@@ -514,6 +517,22 @@ window.dispatchEvent({ type: "storage", key: GLOBAL_KEY });
 assert.equal(ingressCommits, 1, "a genuinely changed storage ingress must hydrate through one WorldStore commit");
 assert.equal(app.writes, appWritesBeforeStorageIngress + 1, "a genuinely changed storage ingress must render once after its Store commit");
 unsubscribeIngress();
+
+const sameTabBefore = api.getState();
+const sameTabWorld = structuredClone(sameTabBefore);
+sameTabWorld.characters.test_b.contamination = 29;
+const sameTabRaw = JSON.stringify(sameTabWorld);
+let sameTabCommits = 0;
+const unsubscribeSameTab = api.subscribeStore((_next, meta) => { if (meta.reason === "external-storage") sameTabCommits += 1; });
+app.writes = 0;
+window.__BAEKJI_WORLD_PERSISTENCE__.writeRaw(sameTabRaw);
+flushMicrotasks();
+assert.equal(sameTabCommits, 1, "a same-tab adapter writer must enter the app through one external-storage Store commit");
+assert.equal(app.writes, 1, "a same-tab adapter writer must render the relevant route once");
+window.dispatchEvent({ type: "storage", key: GLOBAL_KEY, newValue: sameTabRaw });
+assert.equal(sameTabCommits, 1, "a following legacy native storage event for the same raw bytes must dedupe to zero extra Store commits");
+assert.equal(app.writes, 1, "a following legacy native storage event for the same raw bytes must dedupe to zero extra renders");
+unsubscribeSameTab();
 
 context.location.hash = "#/investigate/sA";
 api.setState(initial);

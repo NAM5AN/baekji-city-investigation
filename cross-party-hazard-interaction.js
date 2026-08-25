@@ -2,9 +2,10 @@
   "use strict";
   const { clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
   const { spatialScopeKey, contaminationStage } = window.__BAEKJI_DOMAIN_RULES__;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
 
   const DATA = window.DAY1_DATA;
-  if (!DATA || window.__BAEKJI_CROSS_PARTY_HAZARD__) return;
+  if (!DATA || !persistence || window.__BAEKJI_CROSS_PARTY_HAZARD__) return;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -23,7 +24,7 @@
   let replaying = false;
 
   function readState() {
-    try { return JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); }
+    try { return JSON.parse(persistence.readRaw() || "null"); }
     catch { return null; }
   }
 
@@ -380,7 +381,7 @@
       appendLog(latestSession, "interaction", rawAction, uid, { scopeKey: spatialScopeKey(latestSession), crossParty: true });
       applyDecision(latest, latestSession.id, uid, cleanAction, target, decision);
       clearComposer();
-      localStorage.setItem(GLOBAL_KEY, JSON.stringify(latest));
+      persistence.writeRaw(JSON.stringify(latest));
       window.dispatchEvent(new Event("hashchange"));
       window.dispatchEvent(new CustomEvent("baekji-cross-party-hazard-resolved", { detail: { sessionId: latestSession.id, targetId: target.id, targetSessionId: target.sessionId, decision } }));
       return true;

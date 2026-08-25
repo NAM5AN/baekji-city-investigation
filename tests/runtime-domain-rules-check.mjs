@@ -79,15 +79,15 @@ for (const consumer of [
   "action-log-sync.js?v=0.4.2&stage3a=1&stage3b=1&transfer-privacy=1",
   "sound-event-sync.js?v=0.3.35&stage3b=1",
   "runtime-baseline-stability.js?v=0.4.5&stage3a=1&stage3b=1&transfer-privacy=1",
-  "app.js?v=0.4.14&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1",
-  "party-flow-ux-fix.js?v=0.3.87&departure-capture-guard=1&stage3a=1&stage3b=1",
-  "party-reinvite-runtime-fix.js?v=0.3.89&stage3a=1&stage3b=1",
-  "party-membership-ux-fix.js?v=0.3.87&stage3a=1&stage3b=1",
-  "party-preflight-flow-fix.js?v=0.3.96&stage3a=1&stage3b=1",
+  "app.js?v=0.4.15&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1&stage6b=1",
+  "party-flow-ux-fix.js?v=0.3.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1",
+  "party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1",
+  "party-membership-ux-fix.js?v=0.3.88&stage3a=1&stage3b=1&stage6b=1",
+  "party-preflight-flow-fix.js?v=0.3.97&stage3a=1&stage3b=1&stage6b=1",
   "party-member-home-roster.js?v=0.3.98&stage3a=1&stage3b=1",
-  "character-interaction-ai.js?v=0.4.2&stage3a=1&stage3b=1",
-  "cross-party-hazard-interaction.js?v=0.3.77&stage3a=1&stage3b=1",
-  "party-transfer-flow.js?v=0.3.78&stage3a=1&stage3b=1",
+  "character-interaction-ai.js?v=0.4.3&stage3a=1&stage3b=1&stage6b=1",
+  "cross-party-hazard-interaction.js?v=0.3.78&stage3a=1&stage3b=1&stage6b=1",
+  "party-transfer-flow.js?v=0.3.79&stage3a=1&stage3b=1&stage6b=1",
 ]) {
   assert.ok(index.indexOf(consumer) > index.indexOf(domainScript), `domain rules must load before migrated consumer ${consumer}`);
 }

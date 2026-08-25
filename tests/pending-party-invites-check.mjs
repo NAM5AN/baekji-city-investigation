@@ -6,6 +6,7 @@ const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
 const worldPersistence = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const worldStore = fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8");
+const persistenceSource = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
@@ -13,7 +14,7 @@ const apiEnd = app.indexOf("  function renderParty(partyId)");
 assert.ok(apiEnd > 0, "pending-invite helpers must be declared before the party renderer");
 const helperSource = `${app.slice(0, apiEnd)}\n})();`;
 const sandbox = {
-  console,
+  console, queueMicrotask(callback) { callback(); },
   structuredClone,
   document: { getElementById() { return null; } },
   localStorage: { getItem() { return null; } },
@@ -153,11 +154,11 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.14[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current combined flow");
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1&stage3b=1/);
-assert.match(index, /party-leadership-flow\.js\?v=0\.3\.68/);
-assert.match(index, /party-flow-sync\.js\?v=0\.3\.67/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
+assert.match(index, /app\.js\?v=0\.4\.15[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current combined flow");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1/);
+assert.match(index, /party-leadership-flow\.js\?v=0\.3\.69&stage3a=1&stage6b=1/);
+assert.match(index, /party-flow-sync\.js\?v=0\.3\.68&stage3a=1&stage6b=1/);
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.97&stage3a=1&stage3b=1&stage6b=1/);
 
 const uxSource = fs.readFileSync(new URL("../party-flow-ux-fix.js", import.meta.url), "utf8");
 const UX_GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -210,11 +211,13 @@ function uxRuntime(initialState, userId) {
     CustomEvent: class CustomEvent { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } },
     StorageEvent: class StorageEvent { constructor(type, init = {}) { this.type = type; Object.assign(this, init); } },
     HashChangeEvent: class HashChangeEvent { constructor(type) { this.type = type; } },
+    queueMicrotask(callback) { callback(); },
   });
   context.window = context;
   context.dispatchEvent = () => true;
   context.alert = (message) => alerts.push(String(message));
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(persistenceSource, context, { filename: "world-persistence.js" });
   vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   vm.runInContext(uxSource, context, { filename: "party-flow-ux-fix.js" });
   assert.equal(typeof clickHandler, "function", "party flow UX must register a capture click handler");

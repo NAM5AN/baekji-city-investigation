@@ -234,6 +234,8 @@
   });
   if (typeof window !== "undefined") window.__BAEKJI_PARTY_TRANSFER_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
 
   let directoryPromise = null;
   let refreshQueued = false;
@@ -242,7 +244,7 @@
 
   function readState() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const parsed = JSON.parse(persistence.readRaw() || "null");
       return parsed?.version === 3 ? parsed : null;
     } catch {
       return null;
@@ -299,10 +301,10 @@
   }
 
   function writeState(snapshot, reason = "party-transfer") {
-    const oldRaw = localStorage.getItem(GLOBAL_KEY);
+    const oldRaw = persistence.readRaw();
     const newRaw = JSON.stringify(snapshot);
     if (oldRaw === newRaw) return false;
-    localStorage.setItem(GLOBAL_KEY, newRaw);
+    persistence.writeRaw(newRaw);
     dispatchStateUpdate(oldRaw, newRaw);
     window.dispatchEvent(new CustomEvent("baekji-party-transfer", { detail: { reason, version: VERSION } }));
     scheduleRefresh();

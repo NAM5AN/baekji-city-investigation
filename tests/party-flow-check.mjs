@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-flow-sync.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const worldPersistence = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const sandbox = {
   window: {
@@ -18,10 +19,13 @@ const sandbox = {
     },
   },
   structuredClone,
+  localStorage: { getItem() { return null; }, setItem() {} },
+  queueMicrotask(callback) { callback(); },
   console,
 };
 vm.createContext(sandbox);
 vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, sandbox, { filename: "world-persistence.js" });
 vm.runInContext(source, sandbox, { filename: "party-flow-sync.js" });
 
 const api = sandbox.window.__BAEKJI_PARTY_FLOW_TEST__;

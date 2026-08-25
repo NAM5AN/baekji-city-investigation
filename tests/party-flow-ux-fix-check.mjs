@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-flow-ux-fix.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const worldPersistence = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../party-flow-ux-fix.css", import.meta.url), "utf8");
 const preflightSource = fs.readFileSync(new URL("../party-preflight-flow-fix.js", import.meta.url), "utf8");
@@ -127,17 +128,18 @@ assert.match(css, /party-ready-state\.is-ready/);
 assert.match(css, /party-ready-state\.is-waiting/);
 assert.match(css, /party-ready-count\.is-all-ready/);
 assert.match(index, /party-flow-ux-fix\.css\?v=0\.3\.81/);
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1&stage3b=1/);
-const partyFlowUxIndex = index.indexOf("party-flow-ux-fix.js?v=0.3.87&departure-capture-guard=1&stage3a=1&stage3b=1");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1/);
+const partyFlowUxIndex = index.indexOf("party-flow-ux-fix.js?v=0.3.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1");
 assert.ok(partyFlowUxIndex >= 0, "party flow UX guard script must be present before checking its load order");
-assert.ok(partyFlowUxIndex < index.indexOf("party-leadership-flow.js?v=0.3.68"), "fixed invite interception must run before legacy leadership capture handlers");
-assert.ok(partyFlowUxIndex < index.indexOf("party-flow-sync.js?v=0.3.67"), "fixed state flow must own invite/ready clicks before legacy flow sync");
+assert.ok(partyFlowUxIndex < index.indexOf("party-leadership-flow.js?v=0.3.69&stage3a=1&stage6b=1"), "fixed invite interception must run before legacy leadership capture handlers");
+assert.ok(partyFlowUxIndex < index.indexOf("party-flow-sync.js?v=0.3.68&stage3a=1&stage6b=1"), "fixed state flow must own invite/ready clicks before legacy flow sync");
 assert.doesNotMatch(source, /function decorateLeaderParty/, "party UI must render directly instead of being decorated after paint");
 assert.doesNotMatch(source, /function decorateMemberHome|function decorateBriefingRoster/, "home and briefing must render directly instead of being decorated after paint");
 
-const preflightSandbox = { window: {}, console, structuredClone };
+const preflightSandbox = { window: {}, localStorage: { getItem() { return null; }, setItem() {} }, queueMicrotask(callback) { callback(); }, console, structuredClone };
 vm.createContext(preflightSandbox);
 vm.runInContext(runtimeUtils, preflightSandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, preflightSandbox, { filename: "world-persistence.js" });
 vm.runInContext(domainRules, preflightSandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(preflightSource, preflightSandbox, { filename: "party-preflight-flow-fix.js" });
 const preflightApi = preflightSandbox.window.__BAEKJI_PARTY_PREFLIGHT_FLOW_TEST__;
@@ -207,14 +209,15 @@ assert.doesNotMatch(renderBriefing, /조사조 확인/, "redundant briefing rost
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-ready/);
 assert.match(preflightCss, /\[data-preflight-member-ready\]\.is-waiting/);
 assert.match(index, /party-preflight-flow-fix\.css\?v=0\.3\.90/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96&stage3a=1&stage3b=1/);
-assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.87&stage3a=1&stage3b=1") < index.indexOf("party-preflight-flow-fix.js?v=0.3.96&stage3a=1&stage3b=1"), "preflight behavior must run after guarded-departure membership UI normalization");
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.97&stage3a=1&stage3b=1&stage6b=1/);
+assert.ok(index.indexOf("party-membership-ux-fix.js?v=0.3.88&stage3a=1&stage3b=1&stage6b=1") < index.indexOf("party-preflight-flow-fix.js?v=0.3.97&stage3a=1&stage3b=1&stage6b=1"), "preflight behavior must run after guarded-departure membership UI normalization");
 assert.doesNotMatch(preflightSource, /function decorateLeaderParty/, "preflight party UI must not patch the rendered party page");
 assert.doesNotMatch(preflightSource, /function decorateMemberHome|function decorateBriefing/, "preflight runtime must not patch home or briefing");
 
-const stabilitySandbox = { window: {}, console, structuredClone };
+const stabilitySandbox = { window: {}, localStorage: { getItem() { return null; }, setItem() {} }, queueMicrotask(callback) { callback(); }, console, structuredClone };
 vm.createContext(stabilitySandbox);
 vm.runInContext(runtimeUtils, stabilitySandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, stabilitySandbox, { filename: "world-persistence.js" });
 vm.runInContext(stabilitySource, stabilitySandbox, { filename: "party-ui-stability.js" });
 const namingApi = stabilitySandbox.window.__BAEKJI_PARTY_NAME_UI_TEST__;
 assert.ok(namingApi, "party naming and stability test API must be exposed");
@@ -245,10 +248,10 @@ assert.match(stabilityCss, /party-name-edit-modal/, "party rename editor needs a
 assert.match(presenceLabelSource, /entryPresenceFix/, "special entry presence logs must be normalized");
 assert.match(presenceLabelSource, /PARTY_NAME_UI/, "presence labels must reuse the party display-name contract");
 assert.match(index, /party-ui-stability\.css\?v=0\.3\.91/);
-assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
-assert.match(index, /entry-presence-party-label-fix\.js\?v=0\.3\.91/);
-assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.96&stage3a=1&stage3b=1") < index.indexOf("party-ui-stability.js?v=0.3.93"), "preflight behavior must load before the party naming runtime");
-assert.ok(index.indexOf("party-ui-stability.js?v=0.3.93") < index.indexOf("entry-presence-party-label-fix.js?v=0.3.91"), "presence label normalizer must consume the party display-name API");
+assert.match(index, /party-ui-stability\.js\?v=0\.3\.94&stage3a=1&stage6b=1/);
+assert.match(index, /entry-presence-party-label-fix\.js\?v=0\.3\.92&stage6b=1/);
+assert.ok(index.indexOf("party-preflight-flow-fix.js?v=0.3.97&stage3a=1&stage3b=1&stage6b=1") < index.indexOf("party-ui-stability.js?v=0.3.94&stage3a=1&stage6b=1"), "preflight behavior must load before the party naming runtime");
+assert.ok(index.indexOf("party-ui-stability.js?v=0.3.94&stage3a=1&stage6b=1") < index.indexOf("entry-presence-party-label-fix.js?v=0.3.92&stage6b=1"), "presence label normalizer must consume the party display-name API");
 assert.doesNotMatch(stabilitySource, /function ensureReadyBackButton/, "the stability layer must not recreate the party back button");
 assert.doesNotMatch(stabilitySource, /function ensurePartyNameControl/, "the stability layer must not recreate the party name control");
 

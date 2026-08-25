@@ -6,6 +6,8 @@ const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 const cloudSource = fs.readFileSync("cloud-state-sync.js", "utf8");
 const testerAuthSource = fs.readFileSync("tester-auth.js", "utf8");
+const guestIsolationSource = fs.readFileSync("guest-world-isolation.js", "utf8");
+const worldPersistenceSource = fs.readFileSync("world-persistence.js", "utf8");
 
 const initialWorld = {
   version: 3,
@@ -193,6 +195,8 @@ async function probeTesterDirectoryGuest() {
     }),
   });
 
+  vm.runInContext(guestIsolationSource, tab.context, { filename: "guest-world-isolation.js" });
+  vm.runInContext(worldPersistenceSource, tab.context, { filename: "world-persistence.js" });
   vm.runInContext(testerAuthSource, tab.context, { filename: "tester-auth.js" });
   await sleep();
   tab.timers.clearAll();

@@ -32,7 +32,7 @@ const context = vm.createContext({
   location: { hash: "#/login" },
   Intl, Date, Math, JSON, String, Object, Array, Set, Map,
   setTimeout, clearTimeout, setInterval: () => 0,
-  requestAnimationFrame: (fn) => fn(),
+  requestAnimationFrame: (fn) => fn(), queueMicrotask(callback) { callback(); },
   console,
 });
 

@@ -26,7 +26,7 @@ assert.match(app, /startSessionState/, "atomic confirmed-departure reducer must 
 assert.doesNotMatch(ux, /party\.status = "READY_CHECK"/, "UX runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(preflight, /party\.status = "READY_CHECK"/, "preflight runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(ux, /window\.alert/, "party readiness must not use browser alerts");
-assert.match(index, /app\.js\?v=0\.4\.14[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current combined flow");
+assert.match(index, /app\.js\?v=0\.4\.15[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current combined flow");
 
 const apiEnd = app.indexOf("  function renderParty(partyId)");
 const helperSource = `${app.slice(0, apiEnd)}\n})();`;
@@ -165,7 +165,7 @@ function appRuntime(initialState, userId = "test_a") {
     },
     location: { hash: "#/party/p1" }, history: { pushState() {} }, navigator: {},
     Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone,
-    setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, requestAnimationFrame(callback) { callback(); return 1; },
+    setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, requestAnimationFrame(callback) { callback(); return 1; }, queueMicrotask(callback) { callback(); },
     console,
   });
   context.window = context;

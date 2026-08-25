@@ -10,6 +10,7 @@ const SKIP_DIRS = new Set([".git", "node_modules"]);
 
 const GROUPS = Object.freeze({
   core: [
+    "world-persistence-writer-ingress-check.mjs",
     "world-persistence-runtime-check.mjs",
     "world-store-runtime-check.mjs",
     "data-check.mjs",
@@ -48,6 +49,7 @@ const GROUPS = Object.freeze({
     "stage2-party-direct-render-check.mjs",
     "stage2-home-briefing-party-direct-render-check.mjs",
     "tester-auth-registry-check.mjs",
+    "tester-registry-guard-check.mjs",
     "party-member-home-roster-check.mjs",
   ],
   sync: [

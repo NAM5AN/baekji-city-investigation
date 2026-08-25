@@ -12,7 +12,7 @@ const index = fs.readFileSync("index.html", "utf8");
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1&stage3b=1/, "capture guard must retain its exact Stage 3-B cache key");
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1/, "capture guard must retain its exact Stage 6-B cache key");
 
 class Element {
   constructor(dataset = {}) { this.dataset = dataset; this.listeners = new Map(); }
@@ -32,7 +32,7 @@ function runtime(initial) {
   const appRoot = { set innerHTML(value) { start = String(value).includes("data-start-session") ? new Element({ startSession: "" }) : null; }, get innerHTML() { return ""; } };
   const modalRoot = { set innerHTML(value) { modal = String(value); back = modal ? new Element() : null; }, get innerHTML() { return modal; }, replaceChildren() { modal = ""; back = null; }, querySelector(selector) { return selector.includes("cancel") ? back : null; } };
   const document = { body: { classList: { add() {}, remove() {} } }, documentElement: { dataset: {} }, fonts: { ready: Promise.resolve() }, getElementById(id) { return id === "app" ? appRoot : id === "modal-root" ? modalRoot : { appendChild() {} }; }, querySelector(selector) { return selector === "[data-start-session]" ? start : modalRoot.querySelector(selector); }, querySelectorAll() { return []; }, createElement() { return new Element(); }, addEventListener(type, listener, capture) { if (type === "click" && capture === true) captures.push(listener); }, removeEventListener() {} };
-  const context = vm.createContext({ window: {}, document, localStorage: { getItem(key) { return local.get(key) || null; }, setItem(key, value) { writes += 1; local.set(key, String(value)); } }, sessionStorage: { getItem(key) { return session.get(key) || null; } }, location: { hash: "#/party/p1" }, history: { pushState() {} }, navigator: {}, Element, Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone, setTimeout() { return 0; }, clearTimeout() {}, setInterval() { return 0; }, requestAnimationFrame(callback) { callback(); return 1; }, console });
+  const context = vm.createContext({ window: {}, document, localStorage: { getItem(key) { return local.get(key) || null; }, setItem(key, value) { writes += 1; local.set(key, String(value)); } }, sessionStorage: { getItem(key) { return session.get(key) || null; } }, location: { hash: "#/party/p1" }, history: { pushState() {} }, navigator: {}, Element, Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone, setTimeout() { return 0; }, clearTimeout() {}, setInterval() { return 0; }, requestAnimationFrame(callback) { callback(); return 1; }, queueMicrotask(callback) { callback(); }, console });
   context.window = context; context.addEventListener = () => {}; context.dispatchEvent = () => true;
   vm.runInContext(fs.readFileSync("data/day1-data.js", "utf8"), context);
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 const guardSource = fs.readFileSync("tester-registry-guard.js", "utf8");
 const authSource = fs.readFileSync("tester-auth.js", "utf8");
+const worldPersistenceSource = fs.readFileSync("world-persistence.js", "utf8");
 const testerId = "755ccd33-676f-48c8-a825-c9a28b56ac3e";
 const globalKey = "baekji_city_mvp_state_v3";
 const userKey = "baekji_city_mvp_current_user_v034";
@@ -119,6 +120,7 @@ context.__registry = {
 };
 assert.equal(vm.runInContext("window.__BAEKJI_TESTER_REGISTRY_GUARD__.attachRegistry(__registry)", context), true);
 
+vm.runInContext(worldPersistenceSource, context, { filename: "world-persistence.js" });
 vm.runInContext(authSource, context, { filename: "tester-auth.js" });
 await new Promise((resolve) => setTimeout(resolve, 30));
 

@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 
 const guardSource = fs.readFileSync("tester-registry-guard.js", "utf8");
 const authSource = fs.readFileSync("tester-auth.js", "utf8");
+const guestIsolationSource = fs.readFileSync("guest-world-isolation.js", "utf8");
+const worldPersistenceSource = fs.readFileSync("world-persistence.js", "utf8");
 const testerId = "755ccd33-676f-48c8-a825-c9a28b56ac3e";
 const futureId = "11111111-2222-4333-8444-555555555555";
 const userKey = "baekji_city_mvp_current_user_v034";
@@ -24,6 +26,13 @@ const localValues = new Map([["baekji_city_mvp_state_v3", JSON.stringify({
 })]]);
 const sessionValues = new Map();
 
+class TestStorage {
+  constructor(values) { this.values = values; }
+  getItem(key) { return this.values.has(key) ? this.values.get(key) : null; }
+  setItem(key, value) { this.values.set(key, String(value)); }
+  removeItem(key) { this.values.delete(key); }
+}
+
 class TestEvent {
   constructor(type, init = {}) {
     this.type = type;
@@ -43,16 +52,9 @@ const context = vm.createContext({
   clearTimeout,
   setInterval() { return 1; },
   clearInterval() {},
-  localStorage: {
-    getItem(key) { return localValues.has(key) ? localValues.get(key) : null; },
-    setItem(key, value) { localValues.set(key, String(value)); },
-    removeItem(key) { localValues.delete(key); },
-  },
-  sessionStorage: {
-    getItem(key) { return sessionValues.has(key) ? sessionValues.get(key) : null; },
-    setItem(key, value) { sessionValues.set(key, String(value)); },
-    removeItem(key) { sessionValues.delete(key); },
-  },
+  Storage: TestStorage,
+  localStorage: new TestStorage(localValues),
+  sessionStorage: new TestStorage(sessionValues),
   location: { hash: "#/login", href: "https://example.test/" },
   document: {
     documentElement: {},
@@ -75,6 +77,8 @@ context.removeEventListener = () => {};
 context.dispatchEvent = () => true;
 
 vm.runInContext(guardSource, context, { filename: "tester-registry-guard.js" });
+vm.runInContext(guestIsolationSource, context, { filename: "guest-world-isolation.js" });
+vm.runInContext(worldPersistenceSource, context, { filename: "world-persistence.js" });
 vm.runInContext(authSource, context, { filename: "tester-auth.js" });
 await new Promise((resolve) => setTimeout(resolve, 0));
 await new Promise((resolve) => setTimeout(resolve, 0));

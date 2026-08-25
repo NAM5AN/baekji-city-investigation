@@ -1,6 +1,5 @@
 (() => {
   "use strict";
-
   const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
   const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -133,7 +132,7 @@
 
   function repairTesterCharacters({ touchCurrent = false } = {}) {
     if (repairingState || !canRepairSharedWorld()) return false;
-    const oldRaw = localStorage.getItem(GLOBAL_KEY);
+    const oldRaw = persistence.readRaw();
     let state;
     try { state = JSON.parse(oldRaw || "null"); } catch { state = null; }
     if (!state || state.version !== 3) state = blankWorld();
@@ -169,7 +168,7 @@
 
     const newRaw = JSON.stringify(state);
     repairingState = true;
-    try { localStorage.setItem(GLOBAL_KEY, newRaw); }
+    try { persistence.writeRaw(newRaw); }
     finally { repairingState = false; }
     dispatchWorldUpdate(oldRaw, newRaw);
     return true;
@@ -177,7 +176,7 @@
 
   function ensureCharacter(userId) {
     repairTesterCharacters();
-    const oldRaw = localStorage.getItem(GLOBAL_KEY);
+    const oldRaw = persistence.readRaw();
     let state;
     try { state = JSON.parse(oldRaw || "null"); } catch { state = null; }
     if (!state || state.version !== 3) state = blankWorld();
@@ -187,7 +186,7 @@
     state.characters[userId] = repaired.character;
     state.characters[userId].onlineAt = Date.now();
     const newRaw = JSON.stringify(state);
-    localStorage.setItem(GLOBAL_KEY, newRaw);
+    persistence.writeRaw(newRaw);
     dispatchWorldUpdate(oldRaw, newRaw);
   }
 
@@ -389,7 +388,7 @@
     const userId = currentUserId();
     if (!userId || !users.has(userId)) return;
     let state;
-    try { state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); } catch { state = null; }
+    try { state = JSON.parse(persistence.readRaw() || "null"); } catch { state = null; }
     const value = Number(state?.characters?.[userId]?.contamination);
     const contamination = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
     const contaminationText = `${contamination}%`;
@@ -453,6 +452,8 @@
     canRepairSharedWorld,
     directoryUsers: () => Array.from(users.values()),
   });
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
 
   new MutationObserver(scheduleRefresh).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) scheduleRefresh(); });
