@@ -16,7 +16,7 @@ const sessionOps = read("admin-session-ops-mvp5.js");
 const orderedScripts = [
   "admin-canonical-zones.js?v=0.5.4",
   "admin-shell-runtime.js?v=0.1.0",
-  "admin-dashboard.js?v=0.1.1&shell-runtime=1",
+  "admin-dashboard.js?v=0.1.2&shell-runtime=1&stage4d=1",
   "admin-zone-topology.js?v=0.1.0&stage4b=1",
   "admin-zone-map.js?v=0.6.1&stage4b=1",
   "admin-live-render.js?v=0.6.4&stage4b=1",
@@ -36,6 +36,7 @@ for (let index = 1; index < orderedScripts.length; index += 1) {
   assert.ok(scriptIndexes.get(orderedScripts[index - 1]) < scriptIndexes.get(orderedScripts[index]), `${orderedScripts[index - 1]} loads before ${orderedScripts[index]}`);
 }
 assert.doesNotMatch(html, /admin-modal-reopen-guard\.js/, "legacy modal guard cannot reintroduce a second modal owner");
+assert.doesNotMatch(html, /admin-control-status-mvp4\.js/, "legacy status decorator cannot reintroduce post-paint connection ownership");
 
 assert.match(shell, /\/api\/admin-snapshot/, "shell remains the snapshot owner");
 for (const [lane, source] of [["dashboard", dashboard], ["map", map], ["live", live], ["observation", observation]]) {

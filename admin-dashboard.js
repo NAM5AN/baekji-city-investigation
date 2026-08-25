@@ -21,6 +21,29 @@
   const unique = (values) => [...new Set(Array.isArray(values) ? values : [])];
   const values = (object) => Object.values(object && typeof object === "object" ? object : {});
 
+  function presentConnection(status) {
+    if (!connection) return;
+    const value = String(status || "").trim();
+    const show = (text, kind) => {
+      connection.textContent = text;
+      connection.style.color = "";
+      connection.dataset.adminSyncKind = kind;
+      connection.dataset.adminSyncVisible = "true";
+      connection.hidden = false;
+    };
+    const hide = () => {
+      delete connection.dataset.adminSyncVisible;
+      delete connection.dataset.adminSyncKind;
+      connection.hidden = true;
+    };
+    if (value === "SYNC" || value === "동기화 중…") return show("동기화 중…", "sync");
+    if (value === "OFFLINE" || value === "연결 끊김") return show("연결 끊김", "error");
+    if (value === "SETUP" || value === "설정 확인 필요") return show("설정 확인 필요", "error");
+    connection.textContent = value;
+    connection.style.color = value === "READ ONLY" ? "var(--green)" : "";
+    hide();
+  }
+
   function profileMap(directory = []) {
     return new Map((Array.isArray(directory) ? directory : []).map((entry) => [String(entry.id), entry]));
   }
@@ -215,11 +238,8 @@
       ADMIN_SESSION_INVALID: "관리자 세션을 확인할 수 없습니다.",
       ADMIN_SESSION_EXPIRED: "관리자 세션이 만료되었습니다.",
     };
-    if (connection) {
-      const setup = Number(payload?.status || 0) === 503 || code === "HTTP_503" || code === "ADMIN_AUTH_NOT_CONFIGURED";
-      connection.textContent = code === "ADMIN_SNAPSHOT_OFFLINE" ? "OFFLINE" : setup ? "SETUP" : "LOCKED";
-      connection.style.color = "";
-    }
+    const setup = Number(payload?.status || 0) === 503 || code === "HTTP_503" || code === "ADMIN_AUTH_NOT_CONFIGURED";
+    presentConnection(code === "ADMIN_SNAPSHOT_OFFLINE" ? "OFFLINE" : setup ? "SETUP" : "LOCKED");
     panel.innerHTML = `<div class="admin-locked"><div class="admin-locked-inner"><div class="admin-lock-icon">⌁</div><h2>관리자 데이터 잠금</h2><p>${esc(messages[code] || "관리자 관제 데이터를 불러올 수 없습니다.")}</p><code>${esc(code || "LOCKED")}</code></div></div>`;
   }
 
@@ -240,8 +260,7 @@
     if (!payload?.state) return;
     const stats = snapshotStats(payload.state);
     worldMeta.textContent = `DAY ${String(payload.state.storyDay || 1).padStart(2, "0")} · ${payload.state.loopId || "LOOP"} · ${stats.characters}명 활동`;
-    connection.textContent = "READ ONLY";
-    connection.style.color = "var(--green)";
+    presentConnection("READ ONLY");
   }
 
   function modal(title, subtitle, body) {
@@ -311,7 +330,7 @@
   }
 
   async function loadSnapshot() {
-    connection.textContent = "SYNC";
+    presentConnection("SYNC");
     payload = await shell.snapshot.refresh();
   }
 
