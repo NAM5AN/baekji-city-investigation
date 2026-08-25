@@ -78,6 +78,7 @@ const GROUPS = Object.freeze({
     "admin-observation-mvp2-check.mjs",
     "admin-modal-reopen-guard-check.mjs",
     "admin-communications-mvp3-check.mjs",
+    "admin-communications-direct-sender-runtime-check.mjs",
     "admin-chat-mobile-mvp3-check.mjs",
     "admin-control-mvp4-check.mjs",
     "admin-control-lazy-entry-check.mjs",

@@ -158,7 +158,6 @@ assert.equal(JSON.parse(playerFeed.body).events[0].recipient_session_ids[0], "s1
 assert.equal(JSON.parse(playerFeed.body).events[0].sender_label, "안내방송");
 
 const adminJs = await readFile(new URL("../admin-communications-mvp3.js", import.meta.url), "utf8");
-const senderUi = await readFile(new URL("../admin-system-sender-ui.js", import.meta.url), "utf8");
 const canonicalZones = await readFile(new URL("../admin-canonical-zones.js", import.meta.url), "utf8");
 const entryPresence = await readFile(new URL("../entry-presence-fix.js", import.meta.url), "utf8");
 const playerJs = await readFile(new URL("../admin-system-feed.js", import.meta.url), "utf8");
@@ -180,7 +179,9 @@ assert.match(canonicalZones, /data\.meta\.startNode/);
 assert.match(canonicalZones, /data\.places\[startNode\]/);
 assert.match(canonicalZones, /해오름역 구역 입구/);
 assert.ok(adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4") < adminHtml.indexOf("admin-shell-runtime.js?v=0.1.0"), "canonical E_ENTRY must exist before admin zone rendering starts");
-assert.ok(adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4") < adminHtml.indexOf("admin-communications-mvp3.js?v=0.3.0"), "canonical E_ENTRY must exist before SYSTEM target options are built");
+const canonicalZonesIndex = adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4");
+const communicationsIndex = adminHtml.indexOf("admin-communications-mvp3.js?v=0.3.1&stage7b=1");
+assert.ok(canonicalZonesIndex >= 0 && communicationsIndex >= 0 && canonicalZonesIndex < communicationsIndex, "canonical E_ENTRY must exist before SYSTEM target options are built");
 
 assert.match(entryPresence, /ENTRY_NODE = "E_ENTRY"/);
 assert.match(entryPresence, /entry_meet_/);
@@ -191,11 +192,12 @@ assert.match(entryPresence, /hasRecentDepartureLog/);
 assert.match(entryPresence, /a\.variant !== b\.variant/);
 assert.match(index, /entry-presence-fix\.js\?v=0\.3\.90&isolation=1&movement-departure-presence=1&stage6b=1/);
 
-assert.match(senderUi, /DEFAULT_LABEL = "SYSTEM"/);
-assert.match(senderUi, /"안내방송"/);
-assert.match(senderUi, /data-admin-system-sender/);
-assert.match(senderUi, /body\.senderLabel/);
-assert.match(adminHtml, /admin-system-sender-ui\.js\?v=0\.5\.4/);
+assert.match(adminJs, /DEFAULT_SENDER_LABEL = "SYSTEM"/);
+assert.match(adminJs, /SENDER_PRESETS = \["SYSTEM", "운영 SYSTEM", "안내방송"/);
+assert.match(adminJs, /data-admin-system-sender/);
+assert.match(adminJs, /senderLabel,/);
+assert.doesNotMatch(adminJs, /new MutationObserver|window\.fetch\s*=/);
+assert.doesNotMatch(adminHtml, /admin-system-sender-ui\.js/);
 assert.match(migration, /add column if not exists sender_label text not null default 'SYSTEM'/);
 assert.match(migration, /p_scope_snapshot->>'senderLabel'/);
 assert.match(migration, /baekji_player_admin_system_list/);
@@ -215,7 +217,7 @@ assert.match(playerCss, /retro-admin-system-chat/);
 assert.match(index, /admin-system-feed\.js\?v=0\.3\.88/);
 assert.match(index, /render-motion-stability\.js\?v=0\.3\.89&transfer-privacy=1/);
 
-assert.match(adminHtml, /admin-communications-mvp3\.js\?v=0\.3\.0/);
+assert.match(adminHtml, /admin-communications-mvp3\.js\?v=0\.3\.1&stage7b=1/);
 assert.match(vercel, /\/api\/admin-communications/);
 assert.match(vercel, /\/api\/player-admin-system/);
 

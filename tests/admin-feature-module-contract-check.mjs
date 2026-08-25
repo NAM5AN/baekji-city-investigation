@@ -21,7 +21,7 @@ const orderedScripts = [
   "admin-zone-map.js?v=0.6.1&stage4b=1",
   "admin-live-render.js?v=0.6.4&stage4b=1",
   "admin-observation-mvp2.js?v=0.2.2&shell-runtime=1&stage4c=1",
-  "admin-communications-mvp3.js?v=0.3.0",
+  "admin-communications-mvp3.js?v=0.3.1&stage7b=1",
   "admin-control-mvp4.js?v=0.4.7&stage4-item-transfer=1&lazy-entry=1&async-entry=1&shell-capture=1&item-disposition=1&field-item-management=1",
   "admin-session-ops-mvp5.js?v=0.5.1&shell-runtime=1",
 ];
