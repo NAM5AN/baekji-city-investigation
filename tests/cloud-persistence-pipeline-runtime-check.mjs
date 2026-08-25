@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { assertExactScriptOrder } from "./helpers/browser-harness.mjs";
 
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const cloudSource = fs.readFileSync(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
 const persistenceSource = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
-const persistenceIndex = index.indexOf("world-persistence.js?v=0.1.1&stage6a=1&stage6b=1");
-const cloudIndex = index.indexOf("cloud-state-sync.js?v=0.4.5&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1&stage6c-ingress=1");
-assert.ok(persistenceIndex >= 0 && cloudIndex > persistenceIndex, "production must load WorldPersistence before the cloud ingress owner");
+assertExactScriptOrder(index, [
+  "world-persistence.js?v=0.1.1&stage6a=1&stage6b=1",
+  "cloud-state-sync.js?v=0.4.5&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1&stage6c-ingress=1",
+], "production must load WorldPersistence before the cloud ingress owner");
 assert.match(cloudSource, /function ingestLocalWorldRaw\(raw\)/, "cloud ingress must have one canonical raw owner");
 assert.match(cloudSource, /storageProto\.setItem\s*=\s*function patchedSetItem[\s\S]*?ingestLocalWorldRaw\(value\)/, "legacy raw writers must delegate through the canonical ingress owner");
 assert.match(cloudSource, /persistence\?\.subscribe\?\.\(\(raw\)\s*=>\s*ingestLocalWorldRaw\(raw\)\)/, "WorldPersistence notifications must delegate through the canonical ingress owner");
