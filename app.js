@@ -2,7 +2,9 @@
   "use strict";
   const { clone, escapeHtml, clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
   const { spatialScopeKey, contaminationStage, effectivePartyReady } = window.__BAEKJI_DOMAIN_RULES__;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
   const store = window.__BAEKJI_WORLD_STORE__;
+  if (!persistence) throw new Error("world-persistence.js를 불러오지 못했습니다.");
   if (!store) throw new Error("world-store.js를 불러오지 못했습니다.");
 
   const DATA = window.DAY1_DATA;
@@ -29,7 +31,7 @@
     "오염이 심해질수록 이동이 느려지거나 실패할 수 있으며, 오염도 100%의 완전 용해 상태에서는 이동할 수 없습니다.",
   ]);
 
-  const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const GLOBAL_KEY = persistence.key;
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
   const LAYOUT_KEY = "baekji_city_mvp_investigation_layout_v1";
@@ -209,7 +211,7 @@
 
   function loadState() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const parsed = JSON.parse(persistence.readRaw() || "null");
       return parsed?.version === 3 ? normalizeStateShape(parsed) : makeInitialState();
     } catch {
       return makeInitialState();
@@ -233,7 +235,7 @@
   }
 
   function saveState(reason = "update") {
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(currentState()));
+    persistence.writeRaw(JSON.stringify(currentState()));
   }
 
   function mutate(reason, callback) {

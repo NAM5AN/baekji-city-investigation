@@ -29,7 +29,7 @@ assert.equal(packageJson.version, "0.4.0");
 assert.ok(indexSource.includes('id="modal-root"'));
 assert.ok(indexSource.indexOf("data/day1-data.js") < indexSource.indexOf("data/image-map.js"));
 assert.ok(indexSource.indexOf("data/image-map.js") < indexSource.indexOf("app.js"));
-assert.ok(appSource.includes('const GLOBAL_KEY = "baekji_city_mvp_state_v3"'));
+assert.ok(appSource.includes("const GLOBAL_KEY = persistence.key;"));
 assert.ok(appSource.includes('const USER_KEY = "baekji_city_mvp_current_user_v034"'));
 assert.ok(appSource.includes('const LAYOUT_KEY = "baekji_city_mvp_investigation_layout_v1"'));
 assert.ok(appSource.includes('data-layout-resizer="rows"'));

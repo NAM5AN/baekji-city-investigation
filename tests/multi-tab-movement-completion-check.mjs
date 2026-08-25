@@ -165,6 +165,7 @@ function makeAppRuntime({ gameplayVariance = false, flexibleHazard = false, flex
   });
 vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
 vm.runInContext(fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8"), context, { filename: "runtime-utils.js" });
+vm.runInContext(fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8"), context, { filename: "world-persistence.js" });
 vm.runInContext(fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8"), context, { filename: "world-store.js" });
 vm.runInContext(fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8"), context, { filename: "runtime-domain-rules.js" });
 if (gameplayVariance) vm.runInContext(fs.readFileSync(new URL("../gameplay-variance.js", import.meta.url), "utf8"), context);

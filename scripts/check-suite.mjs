@@ -10,6 +10,7 @@ const SKIP_DIRS = new Set([".git", "node_modules"]);
 
 const GROUPS = Object.freeze({
   core: [
+    "world-persistence-runtime-check.mjs",
     "world-store-runtime-check.mjs",
     "data-check.mjs",
     "runtime-utils-check.mjs",
