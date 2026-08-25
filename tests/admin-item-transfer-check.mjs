@@ -169,7 +169,7 @@ const adminHtml = fs.readFileSync(new URL("../admin-dashboard.html", import.meta
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 assert.match(adminHtml, /admin-control-mvp4\.css\?v=0\.4\.3&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
 assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.7&stage4-item-transfer=1&lazy-entry=1&async-entry=1&shell-capture=1&item-disposition=1&field-item-management=1/);
-assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.4&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
+assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.5&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1&stage6c-ingress=1/);
 
 const Storage = class { getItem() { return null; } setItem() {} removeItem() {} };
 const cloudContext = { console, window: { addEventListener() {}, dispatchEvent() {} }, document: { hidden: false, documentElement: { dataset: {} }, addEventListener() {} }, Storage, localStorage: new Storage(), sessionStorage: new Storage(), CustomEvent: class {}, Event: class {}, StorageEvent: class {}, AbortController, setTimeout: () => 0, clearTimeout() {}, fetch: async () => ({ ok: true, status: 200, json: async () => [] }), Math, Date, JSON, Object, Array, Number, String, Boolean, Set, Map };

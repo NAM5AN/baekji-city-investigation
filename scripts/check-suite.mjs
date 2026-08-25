@@ -53,6 +53,7 @@ const GROUPS = Object.freeze({
     "party-member-home-roster-check.mjs",
   ],
   sync: [
+    "cloud-persistence-pipeline-runtime-check.mjs",
     "action-log-sync-check.mjs",
     "cloud-state-sync-check.mjs",
     "cloud-auth-race-check.mjs",
