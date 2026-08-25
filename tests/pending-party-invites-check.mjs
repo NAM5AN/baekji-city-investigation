@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const worldStore = fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8");
 const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
@@ -20,6 +21,7 @@ sandbox.window = sandbox;
 sandbox.DAY1_DATA = {};
 vm.createContext(sandbox);
 vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldStore, sandbox, { filename: "world-store.js" });
 vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(helperSource, sandbox, { filename: "app-pending-invite-helpers.js" });
 const api = sandbox.window.__BAEKJI_PENDING_PARTY_INVITES_TEST__;
@@ -149,7 +151,7 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.12[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1/, "app cache key must identify the current combined flow");
+assert.match(index, /app\.js\?v=0\.4\.13[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1/, "app cache key must identify the current combined flow");
 assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1&stage3a=1&stage3b=1/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.68/);
 assert.match(index, /party-flow-sync\.js\?v=0\.3\.67/);

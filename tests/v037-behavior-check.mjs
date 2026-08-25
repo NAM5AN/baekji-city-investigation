@@ -38,6 +38,7 @@ const context = vm.createContext({
 
 vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
 vm.runInContext(fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8"), context);
+vm.runInContext(fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8"), context);
 vm.runInContext(fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8"), context);
 let appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const footerIndex = appSource.indexOf('  window.addEventListener("hashchange", render);');

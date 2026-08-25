@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const app = fs.readFileSync("app.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const worldStore = fs.readFileSync("world-store.js", "utf8");
 const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const ux = fs.readFileSync("party-flow-ux-fix.js", "utf8");
 const preflight = fs.readFileSync("party-preflight-flow-fix.js", "utf8");
@@ -24,7 +25,7 @@ assert.match(app, /startSessionState/, "atomic confirmed-departure reducer must 
 assert.doesNotMatch(ux, /party\.status = "READY_CHECK"/, "UX runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(preflight, /party\.status = "READY_CHECK"/, "preflight runtime must not transition a new party into READY_CHECK");
 assert.doesNotMatch(ux, /window\.alert/, "party readiness must not use browser alerts");
-assert.match(index, /app\.js\?v=0\.4\.12[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1/, "app cache key must identify the current combined flow");
+assert.match(index, /app\.js\?v=0\.4\.13[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1/, "app cache key must identify the current combined flow");
 
 const apiEnd = app.indexOf("  function renderParty(partyId)");
 const helperSource = `${app.slice(0, apiEnd)}\n})();`;
@@ -32,6 +33,7 @@ const sandbox = { window: {}, console, structuredClone, document: { getElementBy
  sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldStore, sandbox, { filename: "world-store.js" });
 vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(helperSource, sandbox, { filename: "app-confirmed-ready-helpers.js" });
 const api = sandbox.window.__BAEKJI_PENDING_PARTY_INVITES_TEST__;
@@ -169,6 +171,7 @@ function appRuntime(initialState, userId = "test_a") {
   context.confirm = () => { confirmCount += 1; return true; };
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(worldStore, context, { filename: "world-store.js" });
   vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   let fullApp = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const footer = fullApp.indexOf('  window.addEventListener("hashchange", render);');

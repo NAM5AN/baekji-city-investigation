@@ -5,6 +5,7 @@ import vm from "node:vm";
 const app = fs.readFileSync("app.js", "utf8");
 const ux = fs.readFileSync("party-flow-ux-fix.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const worldStore = fs.readFileSync("world-store.js", "utf8");
 const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -34,6 +35,7 @@ function runtime(initial) {
   context.window = context; context.addEventListener = () => {}; context.dispatchEvent = () => true;
   vm.runInContext(fs.readFileSync("data/day1-data.js", "utf8"), context);
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(worldStore, context, { filename: "world-store.js" });
   vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   const footer = app.lastIndexOf("})();");
   vm.runInContext(`${app.slice(0, footer)}window.__CAPTURE_TEST__ = { renderParty };\n})();`, context, { filename: "app-capture-order.js" });

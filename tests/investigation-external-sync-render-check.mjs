@@ -202,11 +202,12 @@ const context = vm.createContext({
 
 vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
 vm.runInContext(fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8"), context, { filename: "runtime-utils.js" });
+vm.runInContext(fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8"), context, { filename: "world-store.js" });
 vm.runInContext(fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8"), context, { filename: "runtime-domain-rules.js" });
 let source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const footer = source.indexOf('  window.addEventListener("hashchange", render);');
 assert.ok(footer > 0, "test harness must run before app startup rendering");
-source = source.slice(0, footer) + '\n  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) renderExternalUpdate(); });\n  window.addEventListener("pageshow", () => { if (routeParts()[0] === "investigate") renderExternalUpdate(); });\n  window.__TEST__ = { semanticStateEqual, investigationProjection, classifyExternalInvestigationUpdate, refreshMountedInvestigation, syncChoiceRevealUi, chatPanel, chatStreamMarkup, chatComposerPlaceholder, chatLogEntries, bindInvestigation, playerRouteProjection, consumeUnrelatedExternalRouteUpdate, renderExternalUpdate, render, mutate, beginMove, scheduleMovement, completeMovement, setUiTab(value) { ui.tab = value; }, getUi() { return ui; }, setState(value) { state = value; localStorage.setItem(GLOBAL_KEY, JSON.stringify(value)); }, getState() { return state; }, getMovementTimer(sessionId) { return movementTimers.get(sessionId) || null; }, resetMovementTimers() { movementTimers.forEach((entry) => clearTimeout(entry.timerId)); movementTimers.clear(); } };\n})();';
+source = source.slice(0, footer) + '\n  window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) renderExternalUpdate(); });\n  window.addEventListener("pageshow", () => { if (routeParts()[0] === "investigate") renderExternalUpdate(); });\n  window.__TEST__ = { semanticStateEqual, investigationProjection, classifyExternalInvestigationUpdate, refreshMountedInvestigation() { const previousState = currentState(); const nextState = hydrateState("test-external", loadState()); return refreshMountedInvestigation(previousState, nextState); }, syncChoiceRevealUi, chatPanel, chatStreamMarkup, chatComposerPlaceholder, chatLogEntries, bindInvestigation, playerRouteProjection, consumeUnrelatedExternalRouteUpdate, renderExternalUpdate, render, mutate, mutateInvestigationChat, beginMove, scheduleMovement, completeMovement, setUiTab(value) { ui.tab = value; }, getUi() { return ui; }, setState(value) { store.transact("test", () => value); localStorage.setItem(GLOBAL_KEY, JSON.stringify(value)); }, getState() { return clone(store.get()); }, subscribeStore(subscriber) { return store.subscribe(subscriber); }, getMovementTimer(sessionId) { return movementTimers.get(sessionId) || null; }, resetMovementTimers() { movementTimers.forEach((entry) => clearTimeout(entry.timerId)); movementTimers.clear(); } };\n})();';
 vm.runInContext(source, context, { filename: "app.js" });
 const api = window.__TEST__;
 
@@ -490,9 +491,42 @@ const localMutationBase = structuredClone(homeBase);
 context.location.hash = "#/home";
 api.setState(localMutationBase);
 const storageWritesBeforeLocalMutation = localStorage.writes();
+const appWritesBeforeLocalMutation = app.writes;
+let localMutationCommits = 0;
+const unsubscribeLocalMutation = api.subscribeStore((_next, meta) => { if (meta.reason === "local-test") localMutationCommits += 1; });
 api.mutate("local-test", (draft) => { draft.characters.test_b.contamination = 12; });
 assert.equal(localStorage.writes(), storageWritesBeforeLocalMutation + 1, "local mutate must keep its normal single shared-world write");
+assert.equal(localMutationCommits, 1, "ordinary mutate must commit through WorldStore exactly once");
+assert.equal(app.writes, appWritesBeforeLocalMutation + 1, "ordinary mutate must render exactly once after its single commit and persistence write");
 assert.equal(api.getState().characters.test_b.contamination, 12, "local mutate semantics must remain unchanged by external gating");
+api.render(true);
+assert.equal(localMutationCommits, 1, "go/hash render hydration of the same persisted snapshot must not commit or notify again");
+unsubscribeLocalMutation();
+
+let ingressCommits = 0;
+const unsubscribeIngress = api.subscribeStore((_next, meta) => { if (meta.reason === "external-storage") ingressCommits += 1; });
+const appWritesBeforeStorageIngress = app.writes;
+const externallyChanged = api.getState();
+externallyChanged.parties.pA.memberIds.push("test_external");
+localStorage.setItem(GLOBAL_KEY, JSON.stringify(externallyChanged));
+window.dispatchEvent({ type: "storage", key: GLOBAL_KEY });
+assert.equal(ingressCommits, 1, "a genuinely changed storage ingress must hydrate through one WorldStore commit");
+assert.equal(app.writes, appWritesBeforeStorageIngress + 1, "a genuinely changed storage ingress must render once after its Store commit");
+unsubscribeIngress();
+
+context.location.hash = "#/investigate/sA";
+api.setState(initial);
+chatStream.writes = 0;
+app.writes = 0;
+let chatCommits = 0;
+const unsubscribeChat = api.subscribeStore((_next, meta) => { if (meta.reason === "chat-store-contract") chatCommits += 1; });
+api.mutateInvestigationChat("chat-store-contract", (draft) => {
+  draft.sessions.sA.logs.push({ id: "chat-store-contract", type: "interaction", actorId: "test_a", scopeKey: "node:E_ENTRY", at: 4999, text: "store chat" });
+}, composer);
+assert.equal(chatCommits, 1, "local chat must create one WorldStore commit, with no second commit for its selective previous-to-next repaint");
+assert.equal(chatStream.writes, 1, "local chat selective path must repaint the chat surface once");
+assert.equal(app.writes, 0, "local chat selective repaint must not replace the app shell");
+unsubscribeChat();
 
 api.setUiTab("inventory");
 const inventoryBase = structuredClone(choiceCleared);
