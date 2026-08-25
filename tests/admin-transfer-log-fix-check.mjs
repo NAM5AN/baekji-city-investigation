@@ -32,8 +32,8 @@ assert.equal(output[0].text, "테스트 캐릭터 C가 해오름역 조사조 2�
 assert.equal(output[0].sourceParty, "해오름역 조사조 2");
 assert.equal(output[0].targetParty, "해오름역 조사조 3");
 assert.equal(output[1].row, "other");
-assert.match(source, /data\.directory/);
+assert.match(source, /snapshot\.directory/);
 assert.match(source, /partyTransferCanonical/);
-assert.match(html, /admin-transfer-log-fix\.js\?v=0\.5\.2/);
+assert.match(html, /admin-transfer-log-fix\.js\?v=0\.5\.3&stage7c=1/);
 
 console.log("PASS: admin transfer log shows a character name and one canonical source-to-target movement row");

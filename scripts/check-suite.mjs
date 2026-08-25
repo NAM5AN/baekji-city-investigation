@@ -75,6 +75,7 @@ const GROUPS = Object.freeze({
     "admin-dashboard-mvp-check.mjs",
     "admin-zone-map-check.mjs",
     "admin-transfer-log-fix-check.mjs",
+    "admin-transfer-log-shell-snapshot-runtime-check.mjs",
     "admin-observation-mvp2-check.mjs",
     "admin-modal-reopen-guard-check.mjs",
     "admin-communications-mvp3-check.mjs",
