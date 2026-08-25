@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 const source = fs.readFileSync("cross-party-hazard-interaction.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const worldPersistence = fs.readFileSync("world-persistence.js", "utf8");
 const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 
 function store() {
@@ -19,6 +20,7 @@ const context = vm.createContext({
   console,
   setTimeout,
   clearTimeout,
+  queueMicrotask(callback) { callback(); },
   location: { hash: "#/investigate/s1" },
   localStorage: store(),
   sessionStorage: store(),
@@ -50,6 +52,7 @@ context.DAY1_DATA = {
 context.sessionStorage.setItem("baekji_city_mvp_current_user_v034", "test_a");
 
 vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, context, { filename: "world-persistence.js" });
 vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, context, { filename: "cross-party-hazard-interaction.js" });
 const api = context.__BAEKJI_CROSS_PARTY_HAZARD__;
@@ -166,7 +169,7 @@ const indexSource = fs.readFileSync("index.html", "utf8");
 assert.match(apiIndexSource, /\/api\/resolve-character-interaction/);
 assert.match(apiIndexSource, /character_interaction_resolution/);
 assert.match(apiIndexSource, /밀기, 당기기, 붙잡기, 때리기/);
-assert.match(indexSource, /character-interaction-ai\.js\?v=0\.4\.2/);
-assert(indexSource.indexOf("character-interaction-ai.js?v=0.4.2") < indexSource.indexOf("cross-party-hazard-interaction.js?v=0.3.77"), "general interaction interceptor must load before the hazard-specific interceptor");
+assert.match(indexSource, /character-interaction-ai\.js\?v=0\.4\.3&stage3a=1&stage3b=1&stage6b=1/);
+assert(indexSource.indexOf("character-interaction-ai.js?v=0.4.3&stage3a=1&stage3b=1&stage6b=1") < indexSource.indexOf("cross-party-hazard-interaction.js?v=0.3.78&stage3a=1&stage3b=1&stage6b=1"), "general interaction interceptor must load before the hazard-specific interceptor");
 
 console.log("PASS: same-field characters from other investigation parties can be targeted, general character interactions get AI outcomes, and Korean name particles are normalized");

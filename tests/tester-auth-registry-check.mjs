@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 const guardSource = fs.readFileSync("tester-registry-guard.js", "utf8");
 const source = fs.readFileSync("tester-auth.js", "utf8");
+const worldPersistence = fs.readFileSync("world-persistence.js", "utf8");
 const testerId = "11111111-2222-4333-8444-555555555555";
 const demoAId = "aaaaaaaa-1111-4111-8111-111111111111";
 const demoBId = "bbbbbbbb-2222-4222-8222-222222222222";
@@ -95,6 +96,7 @@ const context = vm.createContext({
 context.window = context;
 
 vm.runInContext(guardSource, context, { filename: "tester-registry-guard.js" });
+vm.runInContext(worldPersistence, context, { filename: "world-persistence.js" });
 vm.runInContext(source, context, { filename: "tester-auth.js" });
 await new Promise((resolve) => setTimeout(resolve, 0));
 await new Promise((resolve) => setTimeout(resolve, 0));

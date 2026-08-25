@@ -4,6 +4,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync("tester-login-stable.js", "utf8");
+const worldPersistence = fs.readFileSync("world-persistence.js", "utf8");
 const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
@@ -52,6 +53,7 @@ const context = vm.createContext({
   Event: TestEvent,
   setTimeout,
   clearTimeout,
+  queueMicrotask(callback) { callback(); },
   localStorage: {
     getItem(key) { return local.has(key) ? local.get(key) : null; },
     setItem(key, value) { local.set(key, String(value)); },
@@ -88,6 +90,7 @@ const context = vm.createContext({
 });
 context.window = context;
 
+vm.runInContext(worldPersistence, context, { filename: "world-persistence.js" });
 vm.runInContext(source, context, { filename: "tester-login-stable.js" });
 assert.equal(typeof submitHandler, "function");
 assert.equal(context.__BAEKJI_TESTER_LOGIN_STABLE_TEST__.shouldHandleLoginName("AD01"), false, "admin login stays owned by admin bridge");

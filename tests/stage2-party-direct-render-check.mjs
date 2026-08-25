@@ -37,8 +37,8 @@ assert.doesNotMatch(preflight, /function decorateLeaderParty/, "preflight runtim
 assert.doesNotMatch(stability, /function ensureReadyBackButton/, "paint guard must not recreate the back button");
 assert.doesNotMatch(stability, /function ensurePartyNameControl/, "paint guard must not recreate the name control");
 assert.match(index, /stage2-party-ui=1/, "direct party rendering must be cache-busted");
-assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.87&departure-capture-guard=1/);
-assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.96/);
-assert.match(index, /party-ui-stability\.js\?v=0\.3\.93/);
+assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1/);
+assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.97&stage3a=1&stage3b=1&stage6b=1/);
+assert.match(index, /party-ui-stability\.js\?v=0\.3\.94&stage3a=1&stage6b=1/);
 
 console.log("PASS: party composition and ready-state UI render directly without party-page DOM post-processing");

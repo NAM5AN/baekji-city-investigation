@@ -1,7 +1,6 @@
 (() => {
   "use strict";
   const { clone, uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
-
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const VERSION = "0.3.68";
@@ -108,13 +107,15 @@
   window.__BAEKJI_PARTY_LEADERSHIP_TEST__ = TEST_API;
 
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
 
   let refreshQueued = false;
   let navigationTimer = 0;
 
   function readState() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const parsed = JSON.parse(persistence.readRaw() || "null");
       return parsed?.version === 3 ? parsed : null;
     } catch {
       return null;
@@ -144,7 +145,7 @@
   }
 
   function writeState(snapshot) {
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
+    persistence.writeRaw(JSON.stringify(snapshot));
     window.dispatchEvent(new CustomEvent("baekji-party-leadership", { detail: { version: VERSION } }));
     scheduleRefresh();
   }
@@ -208,7 +209,7 @@
       clearLeadershipModal();
       return;
     }
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(next));
+    persistence.writeRaw(JSON.stringify(next));
     navigateToParty(partyId);
   }
 

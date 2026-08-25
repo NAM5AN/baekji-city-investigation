@@ -82,7 +82,7 @@ assert.ok(end > 0, "field item runtime seam precedes session result rendering");
 const appContext = vm.createContext({
   window: {}, document: { getElementById() { return null; } },
   localStorage: { getItem() { return null; } }, sessionStorage: { getItem() { return "test_b"; } },
-  console, structuredClone, Intl, Date, Math, JSON, String, Object, Array, Set, Map,
+  console, structuredClone, Intl, Date, Math, JSON, String, Object, Array, Set, Map, queueMicrotask(callback) { callback(); },
 });
 appContext.window = appContext;
 vm.runInContext(dataSource, appContext, { filename: "day1-data.js" });

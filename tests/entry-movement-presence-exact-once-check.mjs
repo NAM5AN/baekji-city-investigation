@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 const source = fs.readFileSync(new URL("../entry-presence-fix.js", import.meta.url), "utf8");
+const persistenceSource = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const K = "baekji_city_mvp_state_v3", U = "baekji_city_mvp_current_user_v034";
 let now = 10_000, timer;
 const state = { version: 3, characters: {}, parties: { p1: { name: "1조" }, p2: { name: "2조" } }, sessions: { s1: { id: "s1", partyId: "p1", status: "ACTIVE", variant: "a", currentNode: "E_ENTRY", memberIds: ["a", "c"], logs: [] }, s2: { id: "s2", partyId: "p2", status: "ACTIVE", variant: "a", currentNode: "E_ENTRY", memberIds: ["b"], logs: [] } } };
 const values = new Map([[K, JSON.stringify(state)]]); const session = new Map([[U, "a"]]);
 class Store { constructor(map) { this.map = map; } getItem(k) { return this.map.get(k) || null; } setItem(k,v) { this.map.set(k,String(v)); } }
 const win = { DAY1_DATA: { places: { E_NEXT: { name: "다음" } } }, addEventListener() {}, dispatchEvent() {} };
-const ctx = { window: win, globalThis: win, localStorage: new Store(values), sessionStorage: new Store(session), Date: class extends Date { static now() { return now; } }, StorageEvent: class { constructor(t,x){Object.assign(this,x)} }, Event: class {}, setTimeout(fn){ timer=fn; return 1; }, clearTimeout(){}, JSON, Object, Array, Map, Set, String, Number, console, location:{href:"x"} }; win.window=win;
-vm.createContext(ctx); vm.runInContext(source, ctx, { filename:"entry-presence-fix.js" });
+const ctx = { window: win, globalThis: win, localStorage: new Store(values), sessionStorage: new Store(session), Date: class extends Date { static now() { return now; } }, StorageEvent: class { constructor(t,x){Object.assign(this,x)} }, Event: class {}, setTimeout(fn){ timer=fn; return 1; }, clearTimeout(){}, queueMicrotask(callback) { callback(); }, JSON, Object, Array, Map, Set, String, Number, console, location:{href:"x"} }; win.window=win;
+vm.createContext(ctx); vm.runInContext(persistenceSource, ctx, { filename:"world-persistence.js" }); vm.runInContext(source, ctx, { filename:"entry-presence-fix.js" });
 const moved = JSON.parse(values.get(K)); moved.sessions.s1.movement = { token:"move-ac", fromNode:"E_ENTRY", targetNode:"E_NEXT", startedAt: now }; moved.sessions.s2.logs.push({ id:"app_depart_move-ac_s2", type:"presence", at:now, text:"AC가 해오름역 구역 입구를 떠나 다음 방향으로 이동을 시작했다.", movementToken:"move-ac", departurePresence:true }); values.set(K, JSON.stringify(moved));
 moved.sessions.s2.logs[0].movementEffect = "departure-presence";
 moved.sessions.s2.logs[0].id = "movement:move-ac:s2:departure-presence";

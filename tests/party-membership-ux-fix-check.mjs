@@ -4,12 +4,14 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-membership-ux-fix.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const worldPersistence = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
-const sandbox = { window: {}, console, structuredClone };
+const sandbox = { window: {}, localStorage: { getItem() { return null; }, setItem() {} }, queueMicrotask(callback) { callback(); }, console, structuredClone };
 vm.createContext(sandbox);
 vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, sandbox, { filename: "world-persistence.js" });
 vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, sandbox, { filename: "party-membership-ux-fix.js" });
 const api = sandbox.window.__BAEKJI_PARTY_MEMBERSHIP_UX_TEST__;
@@ -127,12 +129,13 @@ assert.match(source, /party-membership-ready-only/, "leader participant status m
 assert.doesNotMatch(source, /function decorateInviteVisibility|function normalizeMemberHomeButtons/, "membership runtime must not post-process home UI");
 assert.doesNotMatch(source, /queueMicrotask\(refresh\)/, "membership observer refresh must yield to the browser instead of creating an unbounded microtask chain");
 assert.match(source, /setTimeout\(refresh, 16\)/, "membership observer refresh should be frame-throttled");
-assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.87/, "membership UX fix must be cache-bumped after guarded-departure membership rendering");
+assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.88&stage3a=1&stage3b=1&stage6b=1/, "membership UX fix must be cache-bumped after guarded-departure membership rendering");
 
 const reinviteSource = fs.readFileSync(new URL("../party-reinvite-runtime-fix.js", import.meta.url), "utf8");
-const reinviteSandbox = { window: {}, console, structuredClone };
+const reinviteSandbox = { window: {}, localStorage: { getItem() { return null; }, setItem() {} }, queueMicrotask(callback) { callback(); }, console, structuredClone };
 vm.createContext(reinviteSandbox);
 vm.runInContext(runtimeUtils, reinviteSandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, reinviteSandbox, { filename: "world-persistence.js" });
 vm.runInContext(domainRules, reinviteSandbox, { filename: "runtime-domain-rules.js" });
 vm.runInContext(reinviteSource, reinviteSandbox, { filename: "party-reinvite-runtime-fix.js" });
 const reinviteApi = reinviteSandbox.window.__BAEKJI_PARTY_REINVITE_RUNTIME_TEST__;
@@ -187,8 +190,8 @@ assert.equal(secondLeaveRepair.snapshot.parties.p1.memberIds.includes("member_b"
 assert.match(reinviteSource, /reinvite-atomic/, "same-party invite click must be owned by the atomic runtime path");
 assert.match(reinviteSource, /reinvite-accept-atomic/, "same-party accept click must be owned by the atomic runtime path");
 assert.match(reinviteSource, /rejoin-invariant-repair/, "post-join cloud merge repair must stay wired");
-assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.89/, "reinvite runtime fix must be loaded with a fresh cache key");
-assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.89") < index.indexOf("party-membership-ux-fix.js?v=0.3.87"), "atomic reinvite capture must run before the guarded-departure membership sidecar capture listener");
+assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.90&stage3a=1&stage3b=1&stage6b=1/, "reinvite runtime fix must be loaded with a fresh cache key");
+assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1") < index.indexOf("party-membership-ux-fix.js?v=0.3.88&stage3a=1&stage3b=1&stage6b=1"), "atomic reinvite capture must run before the guarded-departure membership sidecar capture listener");
 
 class MembershipClickTarget {
   constructor(matches = {}, dataset = {}) { this.matches = matches; this.dataset = dataset; }
@@ -235,12 +238,14 @@ const membershipRuntime = vm.createContext({
   StorageEvent: class StorageEvent { constructor(type, init = {}) { this.type = type; Object.assign(this, init); } },
   setTimeout() { return 1; },
   setInterval() { return 1; },
+  queueMicrotask(callback) { callback(); },
   clearTimeout() {},
 });
 membershipRuntime.window = membershipRuntime;
 membershipRuntime.addEventListener = (type, handler) => runtimeHandlers.set(type, handler);
 membershipRuntime.dispatchEvent = () => true;
 vm.runInContext(runtimeUtils, membershipRuntime, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, membershipRuntime, { filename: "world-persistence.js" });
 vm.runInContext(domainRules, membershipRuntime, { filename: "runtime-domain-rules.js" });
 vm.runInContext(source, membershipRuntime, { filename: "party-membership-ux-fix-runtime.js" });
 assert.equal(typeof membershipClickHandler, "function", "membership UX must own an executable click capture handler");

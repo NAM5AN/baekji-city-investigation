@@ -1,6 +1,5 @@
 (() => {
   "use strict";
-
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const SESSION_PROFILE_KEY = "baekji_city_tester_session_profile_v1";
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
@@ -43,7 +42,7 @@
 
   function ensureCharacter(userId) {
     let snapshot;
-    try { snapshot = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); }
+    try { snapshot = JSON.parse(persistence.readRaw() || "null"); }
     catch { snapshot = null; }
     if (!snapshot || snapshot.version !== 3) snapshot = blankWorld();
     snapshot.characters ||= {};
@@ -61,7 +60,7 @@
       if (!("currentPartyId" in current)) { current.currentPartyId = null; changed = true; }
       if (!("currentSessionId" in current)) { current.currentSessionId = null; changed = true; }
       if (!("onlineAt" in current)) { current.onlineAt = null; changed = true; }
-      if (changed) localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
+      if (changed) persistence.writeRaw(JSON.stringify(snapshot));
       return;
     }
 
@@ -74,7 +73,7 @@
       currentSessionId: null,
       onlineAt: null,
     };
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
+    persistence.writeRaw(JSON.stringify(snapshot));
   }
 
   function toUser(payload, pin) {
@@ -212,6 +211,8 @@
     completeVerifiedLogin,
     reloadHome,
   });
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
 
   document.addEventListener("submit", handleSubmit, true);
 })();

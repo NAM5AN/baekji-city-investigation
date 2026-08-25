@@ -32,7 +32,7 @@ const context = vm.createContext({
   location: { hash: '#/login' },
   Intl, Date, Math, JSON, String, Object, Array, Set, Map,
   setTimeout, clearTimeout, setInterval: () => 0,
-  requestAnimationFrame: (fn) => fn(), console,
+  requestAnimationFrame: (fn) => fn(), queueMicrotask(callback) { callback(); }, console,
 });
 
 vm.runInContext(fs.readFileSync(new URL('../data/day1-data.js', import.meta.url), 'utf8'), context);

@@ -2,7 +2,6 @@
   "use strict";
   const { uniqueArray: unique } = window.__BAEKJI_RUNTIME_UTILS__;
   const { spatialScopeKey } = window.__BAEKJI_DOMAIN_RULES__;
-
   const DATA = window.DAY1_DATA || {};
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -31,7 +30,7 @@
 
   function readState() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const parsed = JSON.parse(persistence.readRaw() || "null");
       return parsed?.version === 3 ? parsed : null;
     } catch {
       return null;
@@ -373,7 +372,7 @@
   }
 
   function saveState(snapshot) {
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(snapshot));
+    persistence.writeRaw(JSON.stringify(snapshot));
     try { window.dispatchEvent(new Event("hashchange")); } catch { /* ignore */ }
   }
 
@@ -524,6 +523,8 @@
   });
   if (typeof window !== "undefined") window.__BAEKJI_CHARACTER_INTERACTION_TEST__ = TEST_API;
   if (typeof document === "undefined" || typeof localStorage === "undefined" || typeof sessionStorage === "undefined") return;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
 
   document.addEventListener("click", interceptClick, true);
   document.addEventListener("keydown", interceptKeydown, true);

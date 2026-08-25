@@ -17,7 +17,7 @@
 
   function readState() {
     try {
-      const state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const state = JSON.parse(persistence.readRaw() || "null");
       return state?.version === 3 ? state : null;
     } catch {
       return null;
@@ -131,7 +131,7 @@
       return;
     }
 
-    const oldRaw = localStorage.getItem(GLOBAL_KEY);
+    const oldRaw = persistence.readRaw();
     const state = readState();
     if (!state) {
       timer = setTimeout(reconcile, POLL_MS);
@@ -199,7 +199,7 @@
     if (changed) {
       const newRaw = JSON.stringify(state);
       writing = true;
-      try { localStorage.setItem(GLOBAL_KEY, newRaw); }
+      try { persistence.writeRaw(newRaw); }
       finally { writing = false; }
       dispatchUpdate(oldRaw, newRaw);
     }
@@ -216,5 +216,7 @@
     hasRecentDepartureLog,
     hasDeparturePresenceToken,
   });
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
   reconcile();
 })();

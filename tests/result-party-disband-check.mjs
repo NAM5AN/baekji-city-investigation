@@ -38,7 +38,7 @@ function completedFixture() {
 function appReducer() {
   const end = appSource.indexOf("  function renderParty(");
   assert.ok(end > 0, "party result reducer seam must precede the party renderer");
-  const context = vm.createContext({ window: {}, document: { getElementById() { return null; } }, localStorage: { getItem() { return null; } }, DAY1_DATA: { meta: { startNode: "E_ENTRY" } }, console, structuredClone, Date, JSON, String, Object, Array, Set, Map });
+  const context = vm.createContext({ window: {}, document: { getElementById() { return null; } }, localStorage: { getItem() { return null; }, setItem() {} }, DAY1_DATA: { meta: { startNode: "E_ENTRY" } }, console, queueMicrotask(callback) { callback(); }, structuredClone, Date, JSON, String, Object, Array, Set, Map });
   context.window = context;
   vm.runInContext(runtimeUtilsSource, context, { filename: "runtime-utils.js" });
   vm.runInContext(worldPersistenceSource, context, { filename: "world-persistence.js" });
@@ -139,7 +139,7 @@ function resultRuntime(snapshot, userId) {
     querySelectorAll() { return []; }, createElement() { return { classList: { add() {}, remove() {} }, appendChild() {}, remove() {}, style: {}, dataset: {} }; }, addEventListener() {}, removeEventListener() {},
   };
   const window = { addEventListener() {} };
-  const context = vm.createContext({ window, document, localStorage: { getItem(key) { return local.get(key) || null; }, setItem(key, value) { writes += 1; local.set(key, String(value)); } }, sessionStorage: { getItem(key) { return session.get(key) || null; }, setItem(key, value) { session.set(key, String(value)); } }, location: { hash: "#/result/s1" }, history: { pushState() {} }, navigator: {}, Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone, setTimeout() { return 0; }, clearTimeout() {}, setInterval() { return 0; }, requestAnimationFrame(callback) { callback(); return 1; }, console });
+  const context = vm.createContext({ window, document, localStorage: { getItem(key) { return local.get(key) || null; }, setItem(key, value) { writes += 1; local.set(key, String(value)); } }, sessionStorage: { getItem(key) { return session.get(key) || null; }, setItem(key, value) { session.set(key, String(value)); } }, location: { hash: "#/result/s1" }, history: { pushState() {} }, navigator: {}, Intl, Date, Math, JSON, String, Object, Array, Set, Map, Promise, structuredClone, setTimeout() { return 0; }, clearTimeout() {}, setInterval() { return 0; }, requestAnimationFrame(callback) { callback(); return 1; }, queueMicrotask(callback) { callback(); }, console });
   context.window = context;
   context.addEventListener = () => {};
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);

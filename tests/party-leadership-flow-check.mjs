@@ -4,11 +4,13 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../party-leadership-flow.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const worldPersistence = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
-const sandbox = { window: {}, console, structuredClone };
+const sandbox = { window: {}, localStorage: { getItem() { return null; }, setItem() {} }, queueMicrotask(callback) { callback(); }, console, structuredClone };
 vm.createContext(sandbox);
 vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+vm.runInContext(worldPersistence, sandbox, { filename: "world-persistence.js" });
 vm.runInContext(source, sandbox, { filename: "party-leadership-flow.js" });
 const api = sandbox.window.__BAEKJI_PARTY_LEADERSHIP_TEST__;
 assert.ok(api, "party leadership test API must be exposed");
@@ -89,8 +91,8 @@ assert.match(source, /data-member-ready/);
 assert.match(source, /currentPartyId\) card\.remove\(\)/, "busy invite candidates should be removed from leader invite list");
 assert.match(source, /replaceChildren\(\)/, "warning modal must be fully cleared instead of leaving a click-blocking backdrop");
 assert.doesNotMatch(source, /new MutationObserver/, "leadership UI must not self-trigger through a DOM observer");
-assert.match(index, /party-leadership-flow\.js\?v=0\.3\.68/);
-assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.68") < index.indexOf("party-flow-sync.js?v=0.3.67"), "leadership interception must load before party-flow-sync");
+assert.match(index, /party-leadership-flow\.js\?v=0\.3\.69&stage3a=1&stage6b=1/);
+assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.69&stage3a=1&stage6b=1") < index.indexOf("party-flow-sync.js?v=0.3.68&stage3a=1&stage6b=1"), "leadership interception must load before party-flow-sync");
 assert.doesNotMatch(source, /function decorateMemberHome/, "member home must render directly in app.js");
 
 console.log("PASS: leader warning, member confirmation/ready flow, stable navigation, and busy invite filtering");

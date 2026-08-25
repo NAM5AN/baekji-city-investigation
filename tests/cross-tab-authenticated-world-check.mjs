@@ -7,6 +7,8 @@ const USER_KEY = "baekji_city_mvp_current_user_v034";
 const cloudSource = fs.readFileSync("cloud-state-sync.js", "utf8");
 const testerAuthSource = fs.readFileSync("tester-auth.js", "utf8");
 const identitySource = fs.readFileSync("tester-identity-state-repair.js", "utf8");
+const guestIsolationSource = fs.readFileSync("guest-world-isolation.js", "utf8");
+const worldPersistenceSource = fs.readFileSync("world-persistence.js", "utf8");
 
 const USER_A = "aaaaaaaa-1111-4111-8111-111111111111";
 const USER_B = "bbbbbbbb-2222-4222-8222-222222222222";
@@ -149,6 +151,7 @@ function createTab({ name, hub, server, userId = "" }) {
 
   class BasicEvent {
     constructor(type, init = {}) { this.type = type; Object.assign(this, init); }
+    stopImmediatePropagation() { this.stopped = true; }
   }
 
   let tab;
@@ -230,6 +233,8 @@ function createTab({ name, hub, server, userId = "" }) {
 }
 
 function loadRuntime(tab) {
+  vm.runInContext(guestIsolationSource, tab.context, { filename: `${tab.name}:guest-world-isolation.js` });
+  vm.runInContext(worldPersistenceSource, tab.context, { filename: `${tab.name}:world-persistence.js` });
   vm.runInContext(testerAuthSource, tab.context, { filename: `${tab.name}:tester-auth.js` });
   vm.runInContext(cloudSource, tab.context, { filename: `${tab.name}:cloud-state-sync.js` });
   vm.runInContext(identitySource, tab.context, { filename: `${tab.name}:tester-identity-state-repair.js` });

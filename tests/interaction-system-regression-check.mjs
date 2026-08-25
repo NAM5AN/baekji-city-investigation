@@ -5,6 +5,7 @@ import vm from "node:vm";
 const UUID_B = "11111111-1111-4111-8111-111111111111";
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
 const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
+const worldPersistence = fs.readFileSync("world-persistence.js", "utf8");
 const registry = { values: () => [{ id: UUID_B, name: "테스트B", loginId: "테스트B" }] };
 
 {
@@ -72,8 +73,10 @@ const registry = { values: () => [{ id: UUID_B, name: "테스트B", loginId: "�
 
 {
   const window = { DAY1_DATA: {}, __BAEKJI_TESTER_REGISTRY_GUARD__: registry };
-  const context = vm.createContext({ window, Date, JSON, Set, Map, console, String, Number, Object, Array, Math });
+  const localStorage = { getItem() { return null; }, setItem() {} };
+  const context = vm.createContext({ window, localStorage, queueMicrotask(callback) { callback(); }, Date, JSON, Set, Map, console, String, Number, Object, Array, Math });
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(worldPersistence, context, { filename: "world-persistence.js" });
   vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   vm.runInContext(fs.readFileSync("character-interaction-ai.js", "utf8"), context, { filename: "character-interaction-ai.js" });
   const api = window.__BAEKJI_CHARACTER_INTERACTION_TEST__;
