@@ -230,7 +230,7 @@ try {
   const indexResponse = await fetch(`${aiBase}/`);
   assert.equal(indexResponse.status, 200);
   assert.match(indexResponse.headers.get("content-type"), /text\/html/);
-  assert.match(await indexResponse.text(), /app\.js\?v=0\.4\.13[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1/);
+  assert.match(await indexResponse.text(), /app\.js\?v=0\.4\.14[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/);
 } finally {
   await close(aiServer);
   await close(mockOpenAI);

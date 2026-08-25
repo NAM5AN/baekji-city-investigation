@@ -6,6 +6,7 @@ const GLOBAL_KEY = "baekji_city_mvp_state_v3";
 const USER_KEY = "baekji_city_mvp_current_user_v034";
 const appSource = fs.readFileSync("app.js", "utf8");
 const runtimeUtilsSource = fs.readFileSync("runtime-utils.js", "utf8");
+const worldPersistenceSource = fs.readFileSync("world-persistence.js", "utf8");
 const worldStoreSource = fs.readFileSync("world-store.js", "utf8");
 const domainRulesSource = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const cloudSource = fs.readFileSync("cloud-state-sync.js", "utf8");
@@ -40,6 +41,7 @@ function appReducer() {
   const context = vm.createContext({ window: {}, document: { getElementById() { return null; } }, localStorage: { getItem() { return null; } }, DAY1_DATA: { meta: { startNode: "E_ENTRY" } }, console, structuredClone, Date, JSON, String, Object, Array, Set, Map });
   context.window = context;
   vm.runInContext(runtimeUtilsSource, context, { filename: "runtime-utils.js" });
+  vm.runInContext(worldPersistenceSource, context, { filename: "world-persistence.js" });
   vm.runInContext(worldStoreSource, context, { filename: "world-store.js" });
   vm.runInContext(domainRulesSource, context, { filename: "runtime-domain-rules.js" });
   vm.runInContext(`${appSource.slice(0, end)}\n})();`, context, { filename: "result-party-disband-reducer.js" });
@@ -142,6 +144,7 @@ function resultRuntime(snapshot, userId) {
   context.addEventListener = () => {};
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
   vm.runInContext(runtimeUtilsSource, context, { filename: "runtime-utils.js" });
+  vm.runInContext(worldPersistenceSource, context, { filename: "world-persistence.js" });
   vm.runInContext(worldStoreSource, context, { filename: "world-store.js" });
   vm.runInContext(domainRulesSource, context, { filename: "runtime-domain-rules.js" });
   const footer = appSource.lastIndexOf("})();");

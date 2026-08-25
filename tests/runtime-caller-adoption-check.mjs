@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const worldPersistence = fs.readFileSync(new URL("../world-persistence.js", import.meta.url), "utf8");
 const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const worldStore = fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
@@ -28,6 +29,8 @@ function appApi(withStructuredClone) {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
+  sandbox.localStorage = { getItem() { return null; }, setItem() {} };
+  vm.runInContext(worldPersistence, sandbox, { filename: "world-persistence.js" });
   vm.runInContext(worldStore, sandbox, { filename: "world-store.js" });
   vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
   vm.runInContext(`${app.slice(0, apiEnd)}\n})();`, sandbox, { filename: "app-party-clone-adoption.js" });
@@ -100,7 +103,7 @@ assert.equal(transfer.createOffer(separated, { giverId: "giver", receiverId: "re
 const utilsScript = '<script src="runtime-utils.js?v=0.1.0&stage3a=1"></script>';
 const domainScript = '<script src="runtime-domain-rules.js?v=0.1.0&stage3b=1"></script>';
 const itemScript = '<script src="item-transfer-core.js?v=0.3.42&stage3c=1&transfer-privacy=1"></script>';
-const appScript = '<script src="app.js?v=0.4.13&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1"></script>';
+const appScript = '<script src="app.js?v=0.4.14&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1"></script>';
 for (const script of [utilsScript, domainScript, itemScript, appScript]) assert.ok(index.includes(script), `exact Stage 3-C cache key must be present: ${script}`);
 assert.ok(index.indexOf(utilsScript) < index.indexOf(domainScript), "domain rules must remain after runtime utilities");
 assert.ok(index.indexOf(domainScript) < index.indexOf(itemScript), "item transfer must load after domain rules");
