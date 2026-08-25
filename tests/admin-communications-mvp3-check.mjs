@@ -179,7 +179,7 @@ assert.doesNotMatch(adminJs, /baekji_mvp_put_state/);
 assert.match(canonicalZones, /data\.meta\.startNode/);
 assert.match(canonicalZones, /data\.places\[startNode\]/);
 assert.match(canonicalZones, /해오름역 구역 입구/);
-assert.ok(adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4") < adminHtml.indexOf("admin-dashboard.js?v=0.1.0"), "canonical E_ENTRY must exist before admin zone rendering starts");
+assert.ok(adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4") < adminHtml.indexOf("admin-shell-runtime.js?v=0.1.0"), "canonical E_ENTRY must exist before admin zone rendering starts");
 assert.ok(adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4") < adminHtml.indexOf("admin-communications-mvp3.js?v=0.3.0"), "canonical E_ENTRY must exist before SYSTEM target options are built");
 
 assert.match(entryPresence, /ENTRY_NODE = "E_ENTRY"/);

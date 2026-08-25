@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const source = await readFile(new URL("../admin-control-mvp4.js", import.meta.url), "utf8");
+const shellSource = await readFile(new URL("../admin-shell-runtime.js", import.meta.url), "utf8");
 class Element { constructor(match) { this.match = match; } closest(selector) { return this.match?.(selector) || null; } matches(selector) { return this.match?.(selector) === this; } }
 class MutationObserver { static callbacks = []; static instances = []; constructor(callback) { this.callback = callback; MutationObserver.callbacks.push(callback); MutationObserver.instances.push(this); } observe(target) { this.target = target; } }
 const windowListeners = [];
@@ -18,11 +19,12 @@ const document = {
   body,
   getElementById: (id) => roots.get(id) || null,
   querySelector: () => null,
+  querySelectorAll: () => [],
   addEventListener(type, handler, capture = false) { documentListeners.push({ type, handler, capture: Boolean(capture) }); },
   createElement: makeNode,
 };
 const makeDetailBody = () => ({ injected: null, appendCount: 0, querySelector(selector) { return selector === "[data-admin-control-entry]" && this.injected ? this.injected : null; }, append(node) { this.injected = node; this.appendCount += 1; } });
-const dashboardRoot = { detailBody: null, querySelector(selector) { return selector === ".admin-modal-body" ? this.detailBody : null; } };
+const dashboardRoot = { detailBody: null, childElementCount: 0, querySelector(selector) { return selector === ".admin-modal-body" ? this.detailBody : null; }, replaceChildren() { this.childElementCount = 0; } };
 const payload = { ok: true, revision: 7, directory: [{ id: "c1", name: "테스트 캐릭터" }], state: { characters: { c1: { inventory: {}, contamination: 0, symptom: "안정" } }, parties: {}, sessions: {}, itemClaimsByVariant: { a: {} } } };
 const fetchCalls = [];
 const window = {
@@ -40,9 +42,10 @@ context.globalThis = context;
 window.window = window;
 roots.set("admin-modal-root", dashboardRoot);
 vm.createContext(context);
+vm.runInContext(shellSource, context, { filename: "admin-shell-runtime.js" });
 vm.runInContext(source, context, { filename: "admin-control-mvp4.js" });
 document.addEventListener("click", () => { dashboardAfter += 1; });
-assert.equal(windowListeners.filter((entry) => entry.type === "click" && entry.capture).length, 1, "control owns one window capture click handler");
+assert.equal(windowListeners.filter((entry) => entry.type === "click" && entry.capture).length, 1, "shared shell owns one window capture click handler");
 assert.equal(MutationObserver.instances.at(-1).target, dashboardRoot, "the delayed-detail observer is scoped to the dashboard modal root");
 
 function eventFor(match) {

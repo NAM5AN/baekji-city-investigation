@@ -1,9 +1,9 @@
 (() => {
   "use strict";
 
-  if (window.__BAEKJI_ADMIN_SESSION_OPS_MVP5__) return;
+  const shell = window.__BAEKJI_ADMIN_SHELL__;
+  if (!shell || window.__BAEKJI_ADMIN_SESSION_OPS_MVP5__) return;
   const OPS_API = "/api/admin-session-ops";
-  const SNAPSHOT_API = "/api/admin-snapshot";
   const DATA = window.DAY1_DATA || { places: {} };
   let root = null;
   let currentFilter = "";
@@ -31,6 +31,10 @@
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.ok) throw Object.assign(new Error(data?.code || `HTTP_${response.status}`), { status: response.status, data });
     return data;
+  }
+
+  function readSnapshot(options = {}) {
+    return shell.snapshot.refresh(options);
   }
 
   function requestId() {
@@ -160,8 +164,8 @@
     setTimeout(() => node.remove(), 2800);
   }
 
-  async function load(filter = currentFilter) {
-    const [payload, snapshot] = await Promise.all([request(OPS_API), request(SNAPSHOT_API)]);
+  async function load(filter = currentFilter, snapshotOptions = {}) {
+    const [payload, snapshot] = await Promise.all([request(OPS_API), readSnapshot(snapshotOptions)]);
     render(payload, snapshot, filter);
   }
 
@@ -185,7 +189,9 @@
     if (!ensureRoot().childElementCount) return;
     refreshTimer = setTimeout(async () => {
       try {
-        const [payload, snapshot] = await Promise.all([request(OPS_API), request(SNAPSHOT_API)]);
+        const payload = await request(OPS_API);
+        const latest = shell.snapshot.latest();
+        const snapshot = latest?.state ? latest : currentSnapshot;
         if (!ensureRoot().querySelector(".mvp5-confirm-backdrop")) render(payload, snapshot, currentFilter);
       } catch {}
     }, 5000);
@@ -202,8 +208,8 @@
         body: JSON.stringify({ requestId: requestId(), operation, sessionId, resetField }),
       });
       toast(result.summary || "관리자 운영 조작 완료");
-      document.querySelector("[data-admin-refresh]")?.click();
-      await load(currentFilter);
+      const freshSnapshot = await shell.snapshot.refresh({ force: true });
+      render(await request(OPS_API), freshSnapshot, currentFilter);
       refreshSummary();
     } catch (error) {
       const code = error?.data?.code || error?.message || "ADMIN_SESSION_OPS_UNAVAILABLE";
@@ -244,7 +250,7 @@
   }
 
   function augmentPartyDetail(partyId) {
-    const body = document.querySelector("#admin-modal-root .admin-modal-body");
+    const body = shell.modal.root()?.querySelector(".admin-modal-body");
     if (!body || body.querySelector("[data-mvp5-party-entry]")) return;
     const party = currentSnapshot?.state?.parties?.[partyId];
     const session = party?.sessionId ? currentSnapshot?.state?.sessions?.[party.sessionId] : values(currentSnapshot?.state?.sessions).find((entry) => entry?.partyId === partyId);
@@ -261,7 +267,7 @@
     if (!target) return;
     const detail = target.closest('[data-admin-detail="party"]');
     if (detail) {
-      Promise.all([request(OPS_API).catch(() => null), request(SNAPSHOT_API).catch(() => null)]).then(([payload, snapshot]) => {
+      Promise.all([request(OPS_API).catch(() => null), readSnapshot().catch(() => null)]).then(([payload, snapshot]) => {
         if (payload) currentPayload = payload;
         if (snapshot) currentSnapshot = snapshot;
         setTimeout(() => augmentPartyDetail(detail.dataset.adminId), 0);

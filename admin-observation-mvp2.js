@@ -1,16 +1,14 @@
 (() => {
   "use strict";
 
-  const API_URL = "/api/admin-snapshot";
-  const POLL_MS = 3000;
+  const shell = window.__BAEKJI_ADMIN_SHELL__;
   const DATA = window.DAY1_DATA || { places: {}, variants: {}, meta: {} };
-  const modalRoot = document.getElementById("admin-modal-root");
+  const modalRoot = shell?.modal.root();
   const tabs = document.querySelector(".admin-tabs");
   if (!modalRoot || !tabs || window.__BAEKJI_ADMIN_OBSERVATION_MVP2__) return;
 
   let payload = null;
-  let pollTimer = 0;
-  let loading = false;
+  let unsubscribeSnapshot = null;
   let currentView = null;
   let historyStack = [];
 
@@ -193,7 +191,7 @@
   }
 
   function modalFrame(title, subtitle, tabsMarkup, body) {
-    modalRoot.innerHTML = `<div class="admin-modal-backdrop admin-observe-backdrop" data-admin-modal-backdrop>
+    shell.modal.render("observation", `<div class="admin-modal-backdrop admin-observe-backdrop" data-admin-modal-backdrop>
       <section class="admin-modal admin-observe-modal" role="dialog" aria-modal="true">
         <header class="admin-modal-head admin-observe-head">
           <div class="admin-observe-head-main">
@@ -205,7 +203,7 @@
         ${tabsMarkup || ""}
         <div class="admin-modal-body admin-observe-body">${body}</div>
       </section>
-    </div>`;
+    </div>`);
   }
 
   function modalTabs(active, items) {
@@ -386,31 +384,7 @@
     tabs.append(button);
   }
 
-  async function loadSnapshot() {
-    if (loading) return;
-    loading = true;
-    try {
-      const response = await fetch(API_URL, { method: "GET", credentials: "same-origin", cache: "no-store" });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data?.ok && data?.state) {
-        payload = data;
-        if (currentView) renderCurrentView();
-      } else if (response.status === 401) {
-        payload = null;
-        currentView = null;
-        historyStack = [];
-        modalRoot.replaceChildren();
-      }
-    } catch {
-      // Base dashboard already owns the visible connection state; keep the last good observation snapshot.
-    } finally {
-      loading = false;
-      clearTimeout(pollTimer);
-      pollTimer = setTimeout(loadSnapshot, POLL_MS);
-    }
-  }
-
-  document.addEventListener("click", (event) => {
+  shell.onCaptureClick((event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
@@ -482,7 +456,7 @@
       historyStack = [];
       renderCurrentView();
     }
-  }, true);
+  });
 
   window.__BAEKJI_ADMIN_OBSERVATION_MVP2__ = Object.freeze({
     sessionScope,
@@ -494,5 +468,14 @@
   });
 
   installLaunchButton();
-  loadSnapshot();
+  unsubscribeSnapshot = shell.snapshot.subscribe((next) => {
+    payload = next?.state ? next : null;
+    if (currentView && shell.modal.getOwner() === "observation") renderCurrentView();
+  });
+  shell.modal.subscribe((state) => {
+    if (!state.open && !state.owner) {
+      currentView = null;
+      historyStack = [];
+    }
+  });
 })();

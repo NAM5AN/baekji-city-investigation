@@ -9,14 +9,15 @@ const peopleJs = await readFile(new URL("../admin-observation-people-polish.js",
 
 assert.match(html, /OBSERVE · COMMUNICATION · CONTROL/);
 assert.match(html, /admin-observation-mvp2\.css\?v=0\.2\.0/);
-assert.match(html, /admin-observation-mvp2\.js\?v=0\.2\.0/);
+assert.match(html, /admin-observation-mvp2\.js\?v=0\.2\.1&shell-runtime=1/);
 assert.match(html, /admin-observation-people-polish\.css\?v=0\.2\.1/);
 assert.match(html, /admin-observation-people-polish\.js\?v=0\.2\.1/);
 assert.ok(html.indexOf("admin-observation-people-polish.css?v=0.2.1") > html.indexOf("admin-observation-mvp2.css?v=0.2.0"));
-assert.ok(html.indexOf("admin-observation-people-polish.js?v=0.2.1") > html.indexOf("admin-observation-mvp2.js?v=0.2.0"));
+assert.ok(html.indexOf("admin-observation-people-polish.js?v=0.2.1") > html.indexOf("admin-observation-mvp2.js?v=0.2.1"));
 assert.match(html, /admin-chat-badge">MVP 3/);
 
-assert.match(js, /const POLL_MS = 3000/);
+assert.match(js, /__BAEKJI_ADMIN_SHELL__/);
+assert.match(js, /shell\.snapshot\.subscribe/);
 assert.match(js, /data-admin-observe-launch/);
 assert.match(js, /전체 구역 · 분기 관찰/);
 assert.match(js, /function renderNavigator/);
@@ -34,9 +35,8 @@ assert.match(js, /현재 현장 보기/);
 assert.match(js, /다른 구역 바로 관찰/);
 assert.match(js, /돌발 상황 감지/);
 assert.match(js, /hazardSummary/);
-assert.match(js, /credentials: "same-origin"/);
 assert.match(js, /event\.stopImmediatePropagation\(\)/);
-assert.match(js, /}, true\);/);
+assert.match(js, /shell\.onCaptureClick\(/);
 assert.doesNotMatch(js, /localStorage/);
 assert.doesNotMatch(js, /sessionStorage/);
 assert.doesNotMatch(js, /PUT|PATCH|DELETE/);

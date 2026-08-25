@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../admin-control-mvp4.js", import.meta.url), "utf8");
+const shellSource = fs.readFileSync(new URL("../admin-shell-runtime.js", import.meta.url), "utf8");
 const html = fs.readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 
 class Element {
@@ -38,6 +39,7 @@ const document = {
   body, documentElement: new Element(),
   getElementById: (id) => roots.get(id) || null,
   querySelector: () => null,
+  querySelectorAll: () => [],
   createElement: () => new Element(),
   addEventListener(type, handler, capture = false) { if (type === "click") listeners.push({ handler, capture: capture === true }); },
 };
@@ -58,8 +60,9 @@ const context = {
 };
 context.globalThis = context;
 vm.createContext(context);
+vm.runInContext(shellSource, context, { filename: "admin-shell-runtime.js" });
 vm.runInContext(source, context, { filename: "admin-control-mvp4.js" });
-assert.equal(windowListeners.at(-1)?.capture, true, "admin control must register its own click owner on window capture before legacy document capture handlers");
+assert.equal(windowListeners.filter((entry) => entry.capture).length, 1, "shared shell registers one click owner on window capture before legacy document capture handlers");
 
 async function dispatch(target) {
   let stopped = false;
@@ -83,5 +86,5 @@ const transfer = new Element({ controlInventoryTransfer: "CHARACTER_MOVE" });
 await Promise.all([dispatch(transfer), dispatch(transfer)]);
 assert.equal(calls.filter((call) => call.url === "/api/admin-control").length, 1, "capture owner and busy guard issue one transfer mutation for duplicate clicks");
 
-assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.6&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1&field-item-management=1/);
+assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.7&stage4-item-transfer=1&lazy-entry=1&async-entry=1&shell-capture=1&item-disposition=1&field-item-management=1/);
 console.log("PASS: capture-phase admin control survives dashboard bubble ownership and preserves one mutation path");
