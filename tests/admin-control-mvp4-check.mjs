@@ -123,7 +123,6 @@ assert.deepEqual(worldSummary(resetState), {
 
 const html = await readFile(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const ui = await readFile(new URL("../admin-control-mvp4.js", import.meta.url), "utf8");
-const statusUi = await readFile(new URL("../admin-control-status-mvp4.js", import.meta.url), "utf8");
 const resetUi = await readFile(new URL("../admin-world-reset.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../admin-control-mvp4.css", import.meta.url), "utf8");
 const api = await readFile(new URL("../api/admin-control.mjs", import.meta.url), "utf8");
@@ -137,7 +136,7 @@ const cloud = await readFile(new URL("../cloud-state-sync.js", import.meta.url),
 assert.match(html, /OBSERVE · COMMUNICATION · CONTROL/);
 assert.match(html, /admin-control-mvp4\.css\?v=0\.4\.3&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
 assert.match(html, /admin-control-mvp4\.js\?v=0\.4\.7&stage4-item-transfer=1&lazy-entry=1&async-entry=1&shell-capture=1&item-disposition=1&field-item-management=1/);
-assert.match(html, /admin-control-status-mvp4\.js\?v=0\.4\.0/);
+assert.doesNotMatch(html, /admin-control-status-mvp4\.js/, "status presentation belongs to the canonical dashboard renderer, not the control lane");
 assert.match(html, /admin-world-reset\.js\?v=0\.5\.1/);
 assert.match(ui, /감사 로그/);
 assert.match(ui, /상태·소지품 조작/);
@@ -145,11 +144,6 @@ assert.match(ui, /조사 세션 조작/);
 assert.match(ui, /operation: "CHARACTER_STATUS"/);
 assert.match(ui, /operation: "INVENTORY_SET"/);
 assert.match(ui, /operation: "SESSION_CONTROL"/);
-assert.match(statusUi, /동기화 중…/);
-assert.match(statusUi, /document\.body\.append\(node\)/);
-assert.match(statusUi, /data-admin-sync-visible/);
-assert.doesNotMatch(statusUi, /node\.textContent = "CONTROL"/);
-assert.match(statusUi, /new MutationObserver\(sync\)/);
 assert.match(css, /#admin-control-mvp4-root/);
 assert.match(css, /@media\(max-width:760px\)/);
 
