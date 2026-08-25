@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { loadScripts } from "./helpers/browser-harness.mjs";
 
 const app = fs.readFileSync("app.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
@@ -33,11 +34,13 @@ const helperSource = `${app.slice(0, apiEnd)}\n})();`;
 const sandbox = { window: {}, console, structuredClone, document: { getElementById() { return null; } }, localStorage: { getItem() { return null; } }, DAY1_DATA: { meta: { startNode: "E_ENTRY" } } };
  sandbox.window = sandbox;
 vm.createContext(sandbox);
-vm.runInContext(runtimeUtils, sandbox, { filename: "runtime-utils.js" });
-vm.runInContext(worldPersistence, sandbox, { filename: "world-persistence.js" });
-vm.runInContext(worldStore, sandbox, { filename: "world-store.js" });
-vm.runInContext(domainRules, sandbox, { filename: "runtime-domain-rules.js" });
-vm.runInContext(helperSource, sandbox, { filename: "app-confirmed-ready-helpers.js" });
+loadScripts(sandbox, [
+  { source: runtimeUtils, filename: "runtime-utils.js" },
+  { source: worldPersistence, filename: "world-persistence.js" },
+  { source: worldStore, filename: "world-store.js" },
+  { source: domainRules, filename: "runtime-domain-rules.js" },
+  { source: helperSource, filename: "app-confirmed-ready-helpers.js" },
+]);
 const api = sandbox.window.__BAEKJI_PENDING_PARTY_INVITES_TEST__;
 assert.ok(api, "confirmed-ready atomic reducer API must be exposed");
 
@@ -171,16 +174,18 @@ function appRuntime(initialState, userId = "test_a") {
   context.window = context;
   context.alert = () => { alertCount += 1; };
   context.confirm = () => { confirmCount += 1; return true; };
-  vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
-  vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
-  vm.runInContext(worldPersistence, context, { filename: "world-persistence.js" });
-  vm.runInContext(worldStore, context, { filename: "world-store.js" });
-  vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
+  loadScripts(context, [
+    { source: fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), filename: "day1-data.js" },
+    { source: runtimeUtils, filename: "runtime-utils.js" },
+    { source: worldPersistence, filename: "world-persistence.js" },
+    { source: worldStore, filename: "world-store.js" },
+    { source: domainRules, filename: "runtime-domain-rules.js" },
+  ]);
   let fullApp = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const footer = fullApp.indexOf('  window.addEventListener("hashchange", render);');
   assert.ok(footer > 0, "app VM must stop before browser startup listeners");
   fullApp = `${fullApp.slice(0, footer)}\n  window.__PARTY_RUNTIME_TEST__ = { renderParty, startSession, effectivePartyReady };\n})();`;
-  vm.runInContext(fullApp, context, { filename: "app-party-confirmed-ready-runtime.js" });
+  loadScripts(context, [{ source: fullApp, filename: "app-party-confirmed-ready-runtime.js" }]);
   const api = context.window.__PARTY_RUNTIME_TEST__;
   return {
     render() { api.renderParty("p1"); },

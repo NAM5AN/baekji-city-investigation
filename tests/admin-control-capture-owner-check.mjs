@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { loadScripts } from "./helpers/browser-harness.mjs";
 
 const source = fs.readFileSync(new URL("../admin-control-mvp4.js", import.meta.url), "utf8");
 const shellSource = fs.readFileSync(new URL("../admin-shell-runtime.js", import.meta.url), "utf8");
@@ -60,8 +61,10 @@ const context = {
 };
 context.globalThis = context;
 vm.createContext(context);
-vm.runInContext(shellSource, context, { filename: "admin-shell-runtime.js" });
-vm.runInContext(source, context, { filename: "admin-control-mvp4.js" });
+loadScripts(context, [
+  { source: shellSource, filename: "admin-shell-runtime.js" },
+  { source, filename: "admin-control-mvp4.js" },
+]);
 assert.equal(windowListeners.filter((entry) => entry.capture).length, 1, "shared shell registers one click owner on window capture before legacy document capture handlers");
 
 async function dispatch(target) {
