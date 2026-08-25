@@ -2,6 +2,8 @@
   "use strict";
   const { clone, escapeHtml, clamp, hashNumber } = window.__BAEKJI_RUNTIME_UTILS__;
   const { spatialScopeKey, contaminationStage, effectivePartyReady } = window.__BAEKJI_DOMAIN_RULES__;
+  const store = window.__BAEKJI_WORLD_STORE__;
+  if (!store) throw new Error("world-store.js를 불러오지 못했습니다.");
 
   const DATA = window.DAY1_DATA;
   if (!DATA) throw new Error("day1-data.js를 불러오지 못했습니다.");
@@ -56,6 +58,7 @@
     transferItemId: "",
     isComposing: false,
     pendingExternalRender: false,
+    pendingExternalPreviousState: null,
     choicePanelOpen: false,
     choiceRevealKey: "",
     aiAvailable: null,
@@ -213,31 +216,46 @@
     }
   }
 
-  let state = loadState();
+  store.transact("bootstrap", () => loadState());
+
+  function currentState() {
+    return store.get();
+  }
+
+  function commitState(reason, snapshot) {
+    return store.transact(reason, () => snapshot);
+  }
+
+  function hydrateState(reason, snapshot = loadState()) {
+    const current = currentState();
+    if (JSON.stringify(current) === JSON.stringify(snapshot)) return current;
+    return commitState(reason, snapshot);
+  }
 
   function saveState(reason = "update") {
-    localStorage.setItem(GLOBAL_KEY, JSON.stringify(state));
+    localStorage.setItem(GLOBAL_KEY, JSON.stringify(currentState()));
   }
 
   function mutate(reason, callback) {
-    state = loadState();
-    callback(state);
+    store.transact(reason, () => {
+      const draft = loadState();
+      callback(draft);
+      return draft;
+    });
     saveState(reason);
-    render();
+    render(false);
     flushPendingNarrations();
   }
 
   function mutateInvestigationChat(reason, callback, input) {
     const previousState = loadState();
-    state = JSON.parse(JSON.stringify(previousState));
-    callback(state);
+    const nextState = store.transact(reason, () => {
+      const draft = clone(previousState);
+      callback(draft);
+      return draft;
+    });
     saveState(reason);
-    const nextState = state;
-    state = previousState;
-    if (!refreshMountedInvestigation()) {
-      state = nextState;
-      render();
-    }
+    if (!refreshMountedInvestigation(previousState, nextState)) render(false);
     if (input?.isConnected) {
       input.focus();
       input.setSelectionRange?.(input.value.length, input.value.length);
@@ -247,7 +265,7 @@
 
   function currentUserId() { return sessionStorage.getItem(USER_KEY); }
   function currentUser() { return DEMO_USERS[currentUserId()] || null; }
-  function currentCharacter() { return state.characters[currentUserId()] || null; }
+  function currentCharacter() { return currentState().characters[currentUserId()] || null; }
 
   function partyAccount(userId) {
     const id = String(userId || "");
@@ -453,18 +471,20 @@
       go("login");
       return false;
     }
-    state = loadState();
+    hydrateState("auth-hydrate", loadState());
     return true;
   }
 
   function getUserParty(userId) {
-    const character = state.characters[userId];
-    return character?.currentPartyId ? state.parties[character.currentPartyId] : null;
+    const snapshot = currentState();
+    const character = snapshot.characters[userId];
+    return character?.currentPartyId ? snapshot.parties[character.currentPartyId] : null;
   }
 
   function getUserSession(userId) {
-    const character = state.characters[userId];
-    return character?.currentSessionId ? state.sessions[character.currentSessionId] : null;
+    const snapshot = currentState();
+    const character = snapshot.characters[userId];
+    return character?.currentSessionId ? snapshot.sessions[character.currentSessionId] : null;
   }
 
   function renderHome() {
@@ -475,7 +495,7 @@
     const character = currentCharacter();
     const party = getUserParty(uid);
     const session = getUserSession(uid);
-    const invitations = Object.values(state.parties).filter((p) => p.invitedIds.includes(uid) && !p.memberIds.includes(uid) && !p.declinedIds?.includes(uid) && PARTY_INVITE_ACCEPT_STATUSES.includes(p.status));
+    const invitations = Object.values(currentState().parties).filter((p) => p.invitedIds.includes(uid) && !p.memberIds.includes(uid) && !p.declinedIds?.includes(uid) && PARTY_INVITE_ACCEPT_STATUSES.includes(p.status));
     const inventoryCount = Object.values(character.inventory || {}).reduce((sum, item) => sum + item.quantity, 0);
     const memberPartyHome = Boolean(party && party.creatorId !== uid && unique(party.memberIds).includes(uid));
     const partyMembers = party ? unique(party.memberIds) : [];
@@ -544,7 +564,7 @@
     document.querySelector("[data-create-party]")?.addEventListener("click", createParty);
     document.querySelectorAll("[data-open-party]").forEach((el) => el.addEventListener("click", () => go(`party/${el.dataset.openParty}`)));
     document.querySelectorAll("[data-resume-session]").forEach((el) => el.addEventListener("click", () => {
-      const s = state.sessions[el.dataset.resumeSession];
+      const s = currentState().sessions[el.dataset.resumeSession];
       go(s.status === "BRIEFING" ? `briefing/${s.id}` : s.status === "COMPLETED" ? `result/${s.id}` : `investigate/${s.id}`);
     }));
     document.querySelectorAll("[data-accept]").forEach((el) => el.addEventListener("click", () => acceptInvite(el.dataset.accept)));
@@ -577,17 +597,17 @@
 
   function acceptInvite(partyId) {
     const uid = currentUserId();
-    state = acceptInviteState(loadState(), partyId, uid);
+    commitState("accept-invite", acceptInviteState(loadState(), partyId, uid));
     saveState("accept-invite");
-    render();
+    render(false);
     go(`party/${partyId}`);
   }
 
   function declineInvite(partyId) {
     const uid = currentUserId();
-    state = declineInviteState(loadState(), partyId, uid);
+    commitState("decline-invite", declineInviteState(loadState(), partyId, uid));
     saveState("decline-invite");
-    render();
+    render(false);
     toast("초대를 거절했습니다.");
   }
 
@@ -799,7 +819,8 @@
     if (!ensureAuth()) return;
     document.body.classList.add("retro-mode", "retro-page-mode");
     document.body.classList.remove("retro-login-mode", "retro-home-mode");
-    const party = state.parties[partyId];
+    const snapshot = currentState();
+    const party = snapshot.parties[partyId];
     const uid = currentUserId();
     if (!party || (!party.memberIds.includes(uid) && !party.invitedIds.includes(uid))) return go("home");
     const isCreator = party.creatorId === uid;
@@ -809,8 +830,8 @@
     const readyCount = readyIds.length;
     const allReady = members.length > 0 && readyCount === members.length;
     const step = partyStep(party);
-    const inviteCandidates = inviteCandidateIds(state, partyId, uid).map((id) => ({ ...partyAccount(id), note: DEMO_USERS[id]?.note || "참가 가능" }));
-    const pendingInviteIds = activePendingInviteIds(state, partyId);
+    const inviteCandidates = inviteCandidateIds(snapshot, partyId, uid).map((id) => ({ ...partyAccount(id), note: DEMO_USERS[id]?.note || "참가 가능" }));
+    const pendingInviteIds = activePendingInviteIds(snapshot, partyId);
     const pendingInviteLabel = "초대하는 중...";
     const readyStage = ["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status);
     const ownReady = effectivePartyReady(party, uid);
@@ -900,18 +921,18 @@
   }
 
   function inviteUser(partyId, userId) {
-    if (state.characters[userId].currentPartyId) return toast("초대할 수 없습니다.", "이미 다른 조사조에 참여 중입니다.", "error");
+    if (currentState().characters[userId].currentPartyId) return toast("초대할 수 없습니다.", "이미 다른 조사조에 참여 중입니다.", "error");
     const uid = currentUserId();
-    state = inviteState(loadState(), partyId, userId, uid);
+    commitState("invite-user", inviteState(loadState(), partyId, userId, uid));
     saveState("invite-user");
-    render();
+    render(false);
     toast("초대를 전송했습니다.", partyAccount(userId).name);
   }
 
   function cancelInvite(partyId, userId) {
-    state = cancelInviteState(loadState(), partyId, userId, currentUserId());
+    commitState("cancel-invite", cancelInviteState(loadState(), partyId, userId, currentUserId()));
     saveState("cancel-invite");
-    render();
+    render(false);
   }
 
   function confirmComposition(partyId) {
@@ -1013,16 +1034,16 @@
     const result = forcedDepartureState(snapshot, partyId, leaderId, id("session"), Date.now(), shared?.variant || "c", expectedBlockers);
     if (result.reason === "stale") return toast("조사조 상태가 변경되었습니다.", "최신 초대 및 준비 상태를 확인한 뒤 다시 출발해 주세요.", "error");
     if (!result.ok) return toast("조사를 출발할 수 없습니다.", "준비 상태 또는 초대 상태가 변경되었습니다.", "error");
-    state = result.snapshot;
+    commitState("start-session", result.snapshot);
     saveState("start-session");
-    render();
-    go(`briefing/${state.parties[partyId].sessionId}`);
+    render(false);
+    go(`briefing/${currentState().parties[partyId].sessionId}`);
   }
 
   function disbandCompletedPartyAndGoHome(sessionId) {
     const next = disbandCompletedPartyState(loadState(), sessionId, currentUserId(), Date.now());
     if (!next.changed) return go("home");
-    state = next.snapshot;
+    commitState("result-party-disband", next.snapshot);
     saveState("result-party-disband");
     go("home");
   }
@@ -1055,9 +1076,10 @@
     if (!ensureAuth()) return;
     document.body.classList.add("retro-mode", "retro-page-mode");
     document.body.classList.remove("retro-login-mode", "retro-home-mode");
-    const session = state.sessions[sessionId];
+    const snapshot = currentState();
+    const session = snapshot.sessions[sessionId];
     if (!session || !session.memberIds.includes(currentUserId())) return go("home");
-    const party = state.parties[session.partyId];
+    const party = snapshot.parties[session.partyId];
     if (!party) return go("home");
     const uid = currentUserId();
     const isLeader = party.creatorId === uid;
@@ -1430,11 +1452,11 @@
       systemNarration: true,
     });
 
-    state = snapshot;
+    commitState("resolve-flexible-hazard", snapshot);
     ui.actionText = "";
     requestLatestLogScroll({ system: true });
     saveState("resolve-flexible-hazard");
-    render();
+    render(false);
     flushPendingNarrations();
     return { applied: true, arrived, selfDelta, targetId, targetDelta };
   }
@@ -1932,7 +1954,7 @@
 
   function investigationSceneMarkup(session, hazard) {
     const uid = currentUserId();
-    const visiblePeople = fieldCharacterIds(state, session).filter((memberId) => memberId !== uid);
+    const visiblePeople = fieldCharacterIds(currentState(), session).filter((memberId) => memberId !== uid);
     return `<section class="retro-scene-frame" data-investigation-scene="true">
       ${mappedMediaMarkup(sceneMediaFor(session), "scene")}
       <div class="retro-halftone" aria-hidden="true"></div>
@@ -1963,7 +1985,8 @@
   function renderInvestigation(sessionId) {
     const viewSnapshot = captureInvestigationViewState();
     if (!ensureAuth()) return;
-    const session = state.sessions[sessionId];
+    const snapshot = currentState();
+    const session = snapshot.sessions[sessionId];
     const uid = currentUserId();
     if (!session || !session.memberIds.includes(uid)) return go("home");
     if (session.status === "BRIEFING") return go(`briefing/${session.id}`);
@@ -1979,7 +2002,7 @@
     const currentHazardId = encounter?.hazards?.[encounter.currentIndex] || null;
     const hazard = currentHazardId ? DATA.hazardTemplates[currentHazardId] : null;
     syncChoiceRevealUi(session);
-    const userCharacter = state.characters[uid];
+    const userCharacter = snapshot.characters[uid];
     const scene = investigationSceneMarkup(session, hazard);
     const systemPanel = `<section class="retro-system-panel" data-investigation-system="true">${investigationSystemPanelMarkup(session, hazard)}</section>`;
 
@@ -2221,18 +2244,18 @@
     return true;
   }
 
-  function refreshMountedInvestigation() {
+  function refreshMountedInvestigation(previousState, nextState) {
+    const previous = previousState === undefined ? currentState() : previousState;
+    const next = nextState === undefined ? hydrateState("investigation-refresh-hydrate", loadState()) : nextState;
     const [page, sessionId] = routeParts();
     if (page !== "investigate" || !sessionId) return false;
     const userId = currentUserId();
-    const nextState = loadState();
-    const classification = classifyExternalInvestigationUpdate(state, nextState, sessionId, userId);
+    const classification = classifyExternalInvestigationUpdate(previous, next, sessionId, userId);
     if (classification.kind === "navigation") return false;
-    state = nextState;
     if (classification.kind !== "selective") return true;
     const root = [...document.querySelectorAll(".retro-investigation[data-session-id]")]
       .find((element) => element.dataset.sessionId === sessionId);
-    const session = state.sessions?.[sessionId];
+    const session = currentState().sessions?.[sessionId];
     if (!root || !session) return false;
     syncChoiceRevealUi(session);
     const hazard = investigationHazard(session);
@@ -2269,7 +2292,7 @@
     } else if (classification.surfaces.panel) {
       const body = panel.querySelector(".retro-tab-body");
       if (!body) return false;
-      body.innerHTML = panelContent(session, state.characters[userId], hazard);
+      body.innerHTML = panelContent(session, currentState().characters[userId], hazard);
       bindInvestigationPanelContent(session);
     }
     return true;
@@ -2335,15 +2358,15 @@
     return null;
   }
 
-  function consumeUnrelatedExternalRouteUpdate() {
+  function consumeUnrelatedExternalRouteUpdate(previousState, nextState) {
+    const previous = previousState === undefined ? currentState() : previousState;
+    const next = nextState === undefined ? loadState() : nextState;
     const [page, param] = routeParts();
     if (!["home", "party", "briefing", "result"].includes(page)) return false;
     const userId = currentUserId();
-    const nextState = loadState();
-    const previousProjection = playerRouteProjection(state, page, param, userId);
-    const nextProjection = playerRouteProjection(nextState, page, param, userId);
+    const previousProjection = playerRouteProjection(previous, page, param, userId);
+    const nextProjection = playerRouteProjection(next, page, param, userId);
     if (!previousProjection || !nextProjection || !semanticStateEqual(previousProjection, nextProjection)) return false;
-    state = nextState;
     return true;
   }
 
@@ -2360,7 +2383,7 @@
       ${place?.details?.map((detail) => `<button class="retro-choice ${detail.id === selectedId ? "selected" : ""}" data-detail="${detail.id}">◇ ${escapeHtml(detail.name)} 살펴보기</button>`).join("") || ""}
       ${objects.map((object) => {
         const inspected = session.inspectedObjectIds.includes(object.id);
-        const itemButtons = inspected ? availableObjectItems(state, session, object.id).map((mapping) => `<button class="retro-choice" data-take-item="${object.id}|${mapping.itemId}">□ ${escapeHtml(mapping.name)} 가져가기</button>`).join("") : "";
+        const itemButtons = inspected ? availableObjectItems(currentState(), session, object.id).map((mapping) => `<button class="retro-choice" data-take-item="${object.id}|${mapping.itemId}">□ ${escapeHtml(mapping.name)} 가져가기</button>`).join("") : "";
         return `<button class="retro-choice" data-inspect-object="${object.id}">${inspected ? "●" : "○"} ${escapeHtml(object.name)} ${inspected ? "상세 보기" : "조사하기"}</button>${itemButtons}`;
       }).join("")}
     </div>`;
@@ -2381,7 +2404,7 @@
   function inventoryPanel(character) {
     const inventory = Object.values(character.inventory || {});
     const activeSession = getUserSession(currentUserId());
-    const presentIds = activeSession ? fieldCharacterIds(state, activeSession).filter((memberId) => memberId !== currentUserId()) : [];
+    const presentIds = activeSession ? fieldCharacterIds(currentState(), activeSession).filter((memberId) => memberId !== currentUserId()) : [];
     return `<section class="retro-menu-panel"><div class="retro-menu-head"><strong>소지품</strong><small>가져가기 행동을 완료한 물품</small></div>${inventory.length ? inventory.map((item) => `<button class="retro-menu-row" data-item-modal="${item.itemId}"><span>▶ ${escapeHtml(item.name)}</span><b>×${item.quantity}</b></button>`).join("") : `<div class="retro-empty-box">아직 획득한 물품이 없습니다.</div>`}${presentIds.length && inventory.length ? `<div class="retro-transfer-box"><strong>소지품 건네기</strong><select data-transfer-target><option value="">받을 인물</option>${presentIds.map((memberId) => `<option value="${memberId}">${escapeHtml(DEMO_USERS[memberId]?.name)}</option>`).join("")}</select><select data-transfer-item><option value="">전달할 물품</option>${inventory.map((item) => `<option value="${item.itemId}">${escapeHtml(item.name)} ×${item.quantity}</option>`).join("")}</select><button class="retro-choice" data-transfer-item-button>1개 건네기</button></div>` : ""}</section>`;
   }
 
@@ -2417,10 +2440,10 @@
     if (!object || !root) return;
     const detail = findDetail(object.detailId);
     const media = objectMediaFor(object);
-    state = loadState();
+    const snapshot = hydrateState("object-modal-hydrate", loadState());
     const session = getUserSession(currentUserId());
-    const mappedItems = session ? objectMappedItems(state, session, object.id) : DATA.objectItems[object.id] || [];
-    const availableItems = session ? availableObjectItems(state, session, object.id) : mappedItems;
+    const mappedItems = session ? objectMappedItems(snapshot, session, object.id) : DATA.objectItems[object.id] || [];
+    const availableItems = session ? availableObjectItems(snapshot, session, object.id) : mappedItems;
     root.innerHTML = `<div class="retro-modal-backdrop" data-close-modal>
       <section class="retro-modal retro-object-modal" role="dialog" aria-modal="true" aria-labelledby="object-modal-title">
         <div class="retro-modal-title"><span>오브젝트 상세</span><button type="button" data-close-modal data-modal-close-button aria-label="닫기">×</button></div>
@@ -2473,8 +2496,8 @@
   }
 
   function showMapModal(sessionId) {
-    state = loadState();
-    const session = state.sessions[sessionId];
+    const snapshot = hydrateState("map-modal-hydrate", loadState());
+    const session = snapshot.sessions[sessionId];
     const root = document.getElementById("modal-root");
     if (!session || !root) return;
     const displayLocation = session.movement
@@ -3242,8 +3265,8 @@
   }
 
   function applyActionInterpretation(sessionId, text, interpretation) {
-    state = loadState();
-    const session = state.sessions[sessionId];
+    const snapshot = hydrateState("action-interpretation-hydrate", loadState());
+    const session = snapshot.sessions[sessionId];
     if (!session || session.movement) return;
     requestLatestLogScroll({ system: true });
     const uid = currentUserId();
@@ -3254,7 +3277,7 @@
       queueActionNarration(current, entry, text, interpretation, event);
       return entry;
     };
-    const itemUse = evaluateItemUse(state.characters[uid], text, interpretation);
+    const itemUse = evaluateItemUse(snapshot.characters[uid], text, interpretation);
     if (itemUse && itemUse.status !== "usable") {
       mutate("item-use-rejected", (draft) => {
         const current = draft.sessions[sessionId];
@@ -3542,7 +3565,9 @@
       ui.actionText = event.target.value;
       if (ui.pendingExternalRender) {
         ui.pendingExternalRender = false;
-        renderExternalUpdate();
+        const previousState = ui.pendingExternalPreviousState;
+        ui.pendingExternalPreviousState = null;
+        renderExternalUpdate(previousState, currentState());
       }
     });
     chatInput?.addEventListener("input", (event) => { ui.actionText = event.target.value; });
@@ -3854,7 +3879,8 @@
     if (!ensureAuth()) return;
     document.body.classList.add("retro-mode", "retro-page-mode");
     document.body.classList.remove("retro-login-mode", "retro-home-mode");
-    const session = state.sessions[sessionId];
+    const snapshot = currentState();
+    const session = snapshot.sessions[sessionId];
     if (!session || session.partyDisbandedAt || !session.memberIds.includes(currentUserId())) return go("home");
     const inspected = session.inspectedObjectIds.map(findObject).filter(Boolean);
     shell(`
@@ -3865,15 +3891,15 @@
           <article class="card kpi"><span class="muted small">확인 오브젝트</span><div class="kpi-value">${inspected.length}</div></article>
           <article class="card kpi"><span class="muted small">획득 처리</span><div class="kpi-value">${session.takenItemKeys.length}</div></article>
         </section>
-        <section class="section card pad"><div class="card-header"><div><h2 class="card-title">조원 상태</h2></div></div><div class="member-grid">${session.memberIds.map((memberId) => memberRow({ ...state.parties[session.partyId], confirmedBy: session.memberIds, readyBy: session.memberIds }, memberId)).join("")}</div></section>
+        <section class="section card pad"><div class="card-header"><div><h2 class="card-title">조원 상태</h2></div></div><div class="member-grid">${session.memberIds.map((memberId) => memberRow({ ...snapshot.parties[session.partyId], confirmedBy: session.memberIds, readyBy: session.memberIds }, memberId)).join("")}</div></section>
         <section class="section card pad"><div class="card-header"><div><h2 class="card-title">확인된 조사 결과</h2></div></div><div class="list">${inspected.length ? inspected.map((o) => `<div class="list-item"><div class="list-main"><div class="list-title">${escapeHtml(o.name)}</div><div class="list-sub">${escapeHtml(o.result)}</div></div></div>`).join("") : `<div class="empty">확인한 오브젝트가 없습니다.</div>`}</div></section>
         <section class="section"><div class="button-row"><button class="button" data-result-disband-home="${escapeHtml(session.id)}">해산</button></div></section>
       </main>`);
     document.querySelector("[data-result-disband-home]")?.addEventListener("click", (event) => disbandCompletedPartyAndGoHome(event.currentTarget.dataset.resultDisbandHome));
   }
 
-  function render() {
-    state = loadState();
+  function render(reload = true) {
+    if (reload) hydrateState("render-hydrate");
     const [page, param] = routeParts();
     document.body.classList.add("retro-mode");
     if (page !== "login") document.body.classList.remove("retro-login-mode");
@@ -3890,14 +3916,17 @@
     go("home");
   }
 
-  function renderExternalUpdate() {
+  function renderExternalUpdate(previousState, nextState) {
+    const previous = previousState === undefined ? currentState() : previousState;
+    const next = nextState === undefined ? hydrateState("external-storage", loadState()) : nextState;
     if (ui.isComposing) {
       ui.pendingExternalRender = true;
+      if (!ui.pendingExternalPreviousState) ui.pendingExternalPreviousState = previous;
       return;
     }
-    if (refreshMountedInvestigation()) return;
-    if (consumeUnrelatedExternalRouteUpdate()) return;
-    render();
+    if (refreshMountedInvestigation(previous, next)) return;
+    if (consumeUnrelatedExternalRouteUpdate(previous, next)) return;
+    render(false);
   }
 
   async function checkAIStatus() {

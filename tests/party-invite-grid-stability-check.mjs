@@ -63,7 +63,7 @@ assert.match(partyFlowCss, /\.retro-departure-actions\s*\{\s*width:\s*100%;\s*gr
 assert.match(partyFlowCss, /\.retro-departure-actions\s*>\s*\.button\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-height:\s*46px;/, "both departure actions must have equal minimum height and fill their columns");
 assert.match(partyFlowCss, /\.retro-departure-actions\s*>\s*\.button\.primary\s*\{\s*white-space:\s*nowrap;/, "the primary departure action label must not wrap");
 assert.match(partyFlowCss, /@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.retro-departure-actions\s*\{\s*grid-template-columns:\s*1fr;/, "phone departure actions must stack into one column at 640px or below");
-assert.match(index, /app\.js\?v=0\.4\.12[^"']*party-invite-grid-stability=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1/, "app cache key must identify the current combined implementation");
+assert.match(index, /app\.js\?v=0\.4\.13[^"']*party-invite-grid-stability=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1/, "app cache key must identify the current combined implementation");
 assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.52/);
 assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.53/);
 assert.match(index, /party-member-home-roster\.css\?v=0\.3\.94/);

@@ -37,6 +37,7 @@ const context = vm.createContext({
 
 vm.runInContext(fs.readFileSync(new URL('../data/day1-data.js', import.meta.url), 'utf8'), context);
 vm.runInContext(fs.readFileSync(new URL('../runtime-utils.js', import.meta.url), 'utf8'), context);
+vm.runInContext(fs.readFileSync(new URL('../world-store.js', import.meta.url), 'utf8'), context);
 vm.runInContext(fs.readFileSync(new URL('../runtime-domain-rules.js', import.meta.url), 'utf8'), context);
 let appSource = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 appSource = appSource.replace('saveState(reason);\n    render();', 'saveState(reason);');
@@ -51,8 +52,8 @@ appSource = appSource.slice(0, footerIndex) + `
     routeMatch, detailMatch, objectMatch, systemLogEntries, chatScopeKey, chatLogEntries,
     sceneObservationText, hazardObservationText, hintResponseText, ambiguousMovementText,
     handleChatInput, authenticateDemoUser,
-    setState(value) { state = value; saveState("test"); },
-    getState() { state = loadState(); return state; },
+    setState(value) { store.transact("test", () => value); saveState("test"); },
+    getState() { return clone(store.get()); },
   };
 })();`;
 vm.runInContext(appSource, context);

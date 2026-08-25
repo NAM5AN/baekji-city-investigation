@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const app = fs.readFileSync("app.js", "utf8");
 const runtimeUtils = fs.readFileSync("runtime-utils.js", "utf8");
+const worldStore = fs.readFileSync("world-store.js", "utf8");
 const domainRules = fs.readFileSync("runtime-domain-rules.js", "utf8");
 const membership = fs.readFileSync("party-membership-ux-fix.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
@@ -50,7 +51,7 @@ assert.doesNotMatch(renderPartySource, /isCreator\s*&&\s*allReady\s*&&\s*readySt
 assert.match(app, /초대 중인 캐릭터가 있습니다/, "pending-only departure guard copy must be rendered in-app");
 assert.match(app, /준비 중인 캐릭터가 있습니다/, "unready-only departure guard copy must be rendered in-app");
 assert.match(app, /초대 및 준비 중인 캐릭터가 있습니다/, "combined departure guard copy must be rendered in-app");
-assert.match(index, /app\.js\?v=0\.4\.12[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1/, "app cache key must identify the current departure release");
+assert.match(index, /app\.js\?v=0\.4\.13[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1/, "app cache key must identify the current departure release");
 
 class Element {
   constructor(dataset = {}) { this.dataset = dataset; this.listeners = new Map(); }
@@ -99,6 +100,7 @@ function runtime(initial, userId = "test_a") {
   context.window = context; context.addEventListener = () => {};
   vm.runInContext(fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8"), context);
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
+  vm.runInContext(worldStore, context, { filename: "world-store.js" });
   vm.runInContext(domainRules, context, { filename: "runtime-domain-rules.js" });
   const footer = app.lastIndexOf("})();");
   vm.runInContext(`${app.slice(0, footer)}window.__DEPARTURE_GUARD_RUNTIME__ = { renderParty, startSession };\n})();`, context, { filename: "party-departure-guard-runtime.js" });

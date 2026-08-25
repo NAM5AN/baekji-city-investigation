@@ -73,6 +73,7 @@ assert.throws(() => applyOperation(reserved, {
 
 const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const runtimeUtils = fs.readFileSync(new URL("../runtime-utils.js", import.meta.url), "utf8");
+const worldStore = fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8");
 const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const dataSource = fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8");
 const end = appSource.indexOf("  function endSession(");
@@ -85,6 +86,7 @@ const appContext = vm.createContext({
 appContext.window = appContext;
 vm.runInContext(dataSource, appContext, { filename: "day1-data.js" });
 vm.runInContext(runtimeUtils, appContext, { filename: "runtime-utils.js" });
+vm.runInContext(worldStore, appContext, { filename: "world-store.js" });
 vm.runInContext(domainRules, appContext, { filename: "runtime-domain-rules.js" });
 vm.runInContext(`${appSource.slice(0, end)}\nwindow.__FIELD_ITEM_RUNTIME__ = { fieldObjectItems, availableObjectItems, takeFieldPlacementItemState };\n})();`, appContext, { filename: "field-item-runtime.js" });
 const fieldApi = appContext.window.__FIELD_ITEM_RUNTIME__;
