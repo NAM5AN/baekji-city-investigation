@@ -262,11 +262,17 @@
     const subtitle = place?.floor || (group?.kind === "route" ? "이동/위험 구간" : "현재 현장");
     let body = "";
     if (tab === "people") {
+      const characterIds = unique(sessions.flatMap((session) => session.memberIds || []));
+      const visibleMemberIds = new Set(characterIds.map((id) => String(id)));
       const partyRows = sessions.map((session) => {
         const party = partyForSession(payload.state, session);
-        return `<button type="button" class="admin-observe-row" data-observe-jump="party" data-observe-id="${esc(party?.id || session.partyId || session.id)}"><span><strong>${esc(party?.name || "조사조")}</strong><small>${esc(sessionScope(session).title)} · ${esc(session.status || "")}</small></span><b>${session.memberIds?.length || 0}명 ›</b></button>`;
+        const partyId = party?.id || session.partyId || session.id;
+        const memberNames = unique((session.memberIds || [])
+          .filter((id) => visibleMemberIds.has(String(id)))
+          .map((id) => profileFor(payload.directory, id).name));
+        const memberLabel = memberNames.length ? `<small class="admin-observe-party-members">조원 · ${esc(memberNames.join(" · "))}</small>` : "";
+        return `<button type="button" class="admin-observe-row" data-observe-jump="party" data-observe-id="${esc(partyId)}"><span><strong>${esc(party?.name || "조사조")}</strong><small>${esc(sessionScope(session).title)} · ${esc(session.status || "")}</small>${memberLabel}</span><b>${session.memberIds?.length || 0}명 ›</b></button>`;
       }).join("") || `<div class="admin-observe-empty">현재 조사조가 없습니다.</div>`;
-      const characterIds = unique(sessions.flatMap((session) => session.memberIds || []));
       const characters = characterIds.map((id) => {
         const character = payload.state.characters?.[id] || {};
         const profile = profileFor(payload.directory, id);
