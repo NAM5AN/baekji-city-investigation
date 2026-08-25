@@ -17,6 +17,7 @@
   const nativeSetItem = storageProto?.setItem;
   const nativeRemoveItem = storageProto?.removeItem;
   const nativeGetItem = storageProto?.getItem;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__ || null;
 
   let initialized = false;
   let bootstrapInFlight = false;
@@ -35,6 +36,7 @@
   let pushTimer = 0;
   let pushInFlight = false;
   let pollTimer = 0;
+  let lastIngestedLocalRaw = null;
 
   function activeUserId() {
     try { return String(sessionStorage.getItem(USER_KEY) || ""); }
@@ -44,6 +46,18 @@
   function syncEnabled() {
     return Boolean(activeUserId());
   }
+
+  function syncIngressMirror(raw) {
+    let nextRaw = raw;
+    if (arguments.length === 0) {
+      try { nextRaw = nativeGetItem?.call(localStorage, GLOBAL_KEY); }
+      catch { nextRaw = null; }
+    }
+    lastIngestedLocalRaw = nextRaw == null ? null : String(nextRaw);
+    return lastIngestedLocalRaw;
+  }
+
+  syncIngressMirror();
 
   function unsyncedKey(userId = activeUserId()) {
     return userId ? `${UNSYNCED_KEY_PREFIX}${userId}` : "";
@@ -815,6 +829,7 @@
     } finally {
       applyingRemote = false;
     }
+    syncIngressMirror(nextRaw);
     dispatchExternalUpdate(oldRaw, nextRaw);
     return true;
   }
@@ -843,6 +858,7 @@
       applyingRemote = true;
       try { nativeSetItem.call(localStorage, GLOBAL_KEY, mergedRaw); }
       finally { applyingRemote = false; }
+      syncIngressMirror(mergedRaw);
       dispatchExternalUpdate(oldRaw, mergedRaw);
     }
     pendingRaw = mergedRaw;
@@ -869,6 +885,18 @@
     if (!initialized || applyingRemote) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(flushPush, PUSH_DEBOUNCE_MS);
+  }
+
+  // WorldPersistence notifies after a physical write, while legacy decorators
+  // still enter through the captured Storage path. Both sources may observe the
+  // same final bytes; schedule exactly one logical cloud batch for them.
+  function ingestLocalWorldRaw(raw) {
+    if (applyingRemote || !syncEnabled()) return false;
+    const nextRaw = String(raw ?? "");
+    if (nextRaw === lastIngestedLocalRaw || !safeParse(nextRaw)) return false;
+    lastIngestedLocalRaw = nextRaw;
+    schedulePush(nextRaw);
+    return true;
   }
 
   async function flushPush() {
@@ -911,9 +939,11 @@
         remoteBasisRaw = JSON.stringify(candidate);
         clearUnsyncedOverlay(batchUnsyncedGeneration);
         if (conflictCount) {
+          const candidateRaw = JSON.stringify(candidate);
           applyingRemote = true;
-          try { nativeSetItem.call(localStorage, GLOBAL_KEY, JSON.stringify(candidate)); }
+          try { nativeSetItem.call(localStorage, GLOBAL_KEY, candidateRaw); }
           finally { applyingRemote = false; }
+          syncIngressMirror(candidateRaw);
         }
         notifyStatus("synced");
       } else {
@@ -1105,13 +1135,18 @@
   if (storageProto && nativeSetItem && nativeRemoveItem && nativeGetItem) {
     storageProto.setItem = function patchedSetItem(key, value) {
       nativeSetItem.call(this, key, value);
-      if (this === localStorage && key === GLOBAL_KEY && !applyingRemote && syncEnabled()) schedulePush(String(value));
+      if (this === localStorage && key === GLOBAL_KEY) ingestLocalWorldRaw(value);
     };
     storageProto.removeItem = function patchedRemoveItem(key) {
       nativeRemoveItem.call(this, key);
-      if (this === localStorage && key === GLOBAL_KEY && !applyingRemote) pendingRaw = null;
+      if (this === localStorage && key === GLOBAL_KEY && !applyingRemote) {
+        pendingRaw = null;
+        lastIngestedLocalRaw = null;
+      }
     };
   }
+
+  persistence?.subscribe?.((raw) => ingestLocalWorldRaw(raw));
 
   window.addEventListener("online", () => refreshSync(true));
   window.addEventListener("focus", () => refreshSync(false));
@@ -1158,6 +1193,8 @@
     scheduleRecovery,
     activeUserId,
     syncEnabled,
+    ingestLocalWorldRaw,
+    syncIngressMirror,
     preserveCurrentCharacterOnBootstrap,
   });
 
