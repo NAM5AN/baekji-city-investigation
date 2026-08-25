@@ -70,7 +70,7 @@ const vercel = JSON.parse(await readFile(new URL("../vercel.json", import.meta.u
 
 assert.match(adminHtml, /OPERATIONS · MVP 5/);
 assert.match(adminHtml, /admin-session-ops-mvp5\.css\?v=0\.5\.0/);
-assert.match(adminHtml, /admin-session-ops-mvp5\.js\?v=0\.5\.0/);
+assert.match(adminHtml, /admin-session-ops-mvp5\.js\?v=0\.5\.1&shell-runtime=1/);
 assert.match(indexHtml, /player-admin-ops-mvp5\.css\?v=0\.5\.0/);
 assert.match(indexHtml, /player-admin-ops-mvp5\.js\?v=0\.5\.0/);
 assert.match(adminUi, /운영 점검/);

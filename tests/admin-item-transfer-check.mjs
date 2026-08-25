@@ -146,6 +146,7 @@ assert.equal(invalidReads, 1, "invalid authentication must stop before any world
 
 const apiSource = fs.readFileSync(new URL("../api/admin-control.mjs", import.meta.url), "utf8");
 const adminUi = fs.readFileSync(new URL("../admin-control-mvp4.js", import.meta.url), "utf8");
+const shellUi = fs.readFileSync(new URL("../admin-shell-runtime.js", import.meta.url), "utf8");
 const cloudSource = fs.readFileSync(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
 assert.match(apiSource, /operation === "INVENTORY_TRANSFER"/);
 assert.match(apiSource, /inventoryTransferMutation/);
@@ -167,7 +168,7 @@ assert.match(cloudSource, /action === "INVENTORY_TRANSFER"/);
 const adminHtml = fs.readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 assert.match(adminHtml, /admin-control-mvp4\.css\?v=0\.4\.3&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
-assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.6&stage4-item-transfer=1&lazy-entry=1&async-entry=1&capture-owner=1&item-disposition=1&field-item-management=1/);
+assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.7&stage4-item-transfer=1&lazy-entry=1&async-entry=1&shell-capture=1&item-disposition=1&field-item-management=1/);
 assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.4&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
 
 const Storage = class { getItem() { return null; } setItem() {} removeItem() {} };
@@ -204,9 +205,10 @@ const fakeRoot = new FakeElement();
 fakeRoot.querySelector = (selector) => rootNodes.get(selector) || null;
 const fakeDocument = {
   body: { append() {} },
-  getElementById() { return null; },
+  getElementById(id) { return id === "admin-modal-root" ? fakeRoot : null; },
   createElement() { return fakeRoot; },
   querySelector(selector) { return selector === "[data-admin-refresh]" ? new FakeElement() : null; },
+  querySelectorAll() { return []; },
   addEventListener(type, handler) { if (type === "click") capturedClick = handler; },
 };
 const uiCalls = [];
@@ -215,8 +217,9 @@ const uiWindow = { DAY1_DATA: { places: {}, variants: {}, itemCatalog: {}, objec
 const uiContext = { window: uiWindow, document: fakeDocument, Element: FakeElement, MutationObserver: class { observe() {} }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } }, crypto: { randomUUID: () => `ui-request${uiRequestCount++ ? "-2" : ""}` }, fetch: async (url, options = {}) => { uiCalls.push({ url, options }); return { ok: true, status: 200, json: async () => String(url) === "/api/admin-snapshot" ? { ok: true, revision: 1, state: { characters: { b: { id: "b", inventory: {} } }, itemClaimsByVariant: { a: {} }, fieldItemPlacementsByVariant: { a: { field_1: { id: "field_1", variant: "a", objectId: "E_OBJ_002", sourceCharacterId: "b", sourceInventoryKey: "pen", item: { itemId: "pen", name: "볼펜", quantity: 1, state: "USED" }, placedAt: 1 } }, b: {}, c: {}, d: {} }, fieldItemPlacementClaimsByVariant: { a: {}, b: {}, c: {}, d: {} } }, directory: [{ id: "b", name: "테스트B" }] } : { ok: true, revision: 2, summary: "ok" } }; }, setTimeout: () => 0, queueMicrotask, console, Date, Math, JSON, Object, Array, Number, String, Boolean, Set, Map };
 uiContext.globalThis = uiContext;
 vm.createContext(uiContext);
+vm.runInContext(shellUi, uiContext, { filename: "admin-shell-runtime.js" });
 vm.runInContext(adminUi, uiContext, { filename: "admin-control-mvp4.js" });
-assert.ok(capturedClick, "admin UI must register a capture click handler");
+assert.ok(capturedClick, "shared shell must register the one physical capture click handler");
 capturedClick({ target: new FakeElement({ adminControlOpen: "character", adminControlId: "b" }), preventDefault() {}, stopPropagation() {} });
 await new Promise((resolve) => setImmediate(resolve));
 const sourceOption = new FakeElement({ sourceCharacterId: "a", sourceInventoryKey: "lamp" });

@@ -3,10 +3,10 @@
 
   const CONTROL_API = "/api/admin-control";
   const AUDIT_API = "/api/admin-audit";
-  const SNAPSHOT_API = "/api/admin-snapshot";
+  const shellRuntime = window.__BAEKJI_ADMIN_SHELL__;
   const DATA = window.DAY1_DATA || { places: {}, variants: {}, itemCatalog: {} };
-  const dashboardModalRoot = () => document.getElementById("admin-modal-root");
-  if (window.__BAEKJI_ADMIN_CONTROL_MVP4__) return;
+  const dashboardModalRoot = () => shellRuntime?.modal.root();
+  if (!shellRuntime || window.__BAEKJI_ADMIN_CONTROL_MVP4__) return;
 
   let controlRoot = null;
   let currentControl = null;
@@ -41,8 +41,8 @@
     return data;
   }
 
-  async function snapshot() {
-    return request(SNAPSHOT_API);
+  async function snapshot(options = {}) {
+    return shellRuntime.snapshot.refresh(options);
   }
 
   function profileFor(payload, id) {
@@ -312,8 +312,7 @@
         body: JSON.stringify({ requestId: requestId(), ...body }),
       });
       toast(`${result.summary || "관리자 변경 완료"} · r${Number(result.revision || 0)}`);
-      document.querySelector("[data-admin-refresh]")?.click();
-      const fresh = await snapshot();
+      const fresh = await shellRuntime.snapshot.refresh({ force: true });
       if (typeof reopen === "function") reopen(fresh);
       window.dispatchEvent(new CustomEvent("baekji-admin-control-applied", { detail: result }));
     } catch (error) {
@@ -376,7 +375,7 @@
     meta.insertBefore(button, connection || null);
   }
 
-  window.addEventListener("click", (event) => {
+  shellRuntime.onCaptureClick((event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
@@ -520,7 +519,7 @@
     }
 
     if (target.closest("[data-admin-audit-refresh]")) return void openAudit();
-  }, true);
+  });
 
   document.addEventListener("input", (event) => {
     if (!event.target?.matches?.("[data-admin-audit-search]")) return;
@@ -548,6 +547,9 @@
     const detailObserver = new MutationObserver(restoreDetailEntry);
     detailObserver.observe(modalRoot, { childList: true, subtree: true });
   }
+  shellRuntime.modal.subscribe((state) => {
+    if (!state.open) clearDetailContext();
+  });
 
   window.__BAEKJI_ADMIN_CONTROL_MVP4__ = Object.freeze({
     requestId,

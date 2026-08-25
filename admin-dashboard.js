@@ -1,19 +1,15 @@
 (() => {
   "use strict";
 
-  const API_URL = "/api/admin-snapshot";
-  const POLL_MS = 3000;
-  const TABS = new Set(["overview", "zones", "parties", "characters", "logs"]);
+  const shell = window.__BAEKJI_ADMIN_SHELL__;
+  if (!shell) return;
   const panel = document.querySelector("[data-admin-panel]");
   const connection = document.querySelector("[data-admin-connection]");
   const worldMeta = document.querySelector("[data-admin-world-meta]");
-  const modalRoot = document.getElementById("admin-modal-root");
   const DATA = window.DAY1_DATA || { places: {}, variants: {}, meta: {} };
 
-  let currentTab = "overview";
-  let payload = null;
-  let pollTimer = 0;
-  let loading = false;
+  let currentTab = shell.tabs.get();
+  let payload = shell.snapshot.latest();
 
   const esc = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -219,11 +215,15 @@
       ADMIN_SESSION_INVALID: "관리자 세션을 확인할 수 없습니다.",
       ADMIN_SESSION_EXPIRED: "관리자 세션이 만료되었습니다.",
     };
+    if (connection) {
+      const setup = Number(payload?.status || 0) === 503 || code === "HTTP_503" || code === "ADMIN_AUTH_NOT_CONFIGURED";
+      connection.textContent = code === "ADMIN_SNAPSHOT_OFFLINE" ? "OFFLINE" : setup ? "SETUP" : "LOCKED";
+      connection.style.color = "";
+    }
     panel.innerHTML = `<div class="admin-locked"><div class="admin-locked-inner"><div class="admin-lock-icon">⌁</div><h2>관리자 데이터 잠금</h2><p>${esc(messages[code] || "관리자 관제 데이터를 불러올 수 없습니다.")}</p><code>${esc(code || "LOCKED")}</code></div></div>`;
   }
 
   function render() {
-    document.querySelectorAll("[data-admin-tab]").forEach((button) => button.classList.toggle("active", button.dataset.adminTab === currentTab));
     if (!payload?.state) return renderLocked(payload?.code || "ADMIN_SESSION_REQUIRED");
     const state = payload.state;
     const directory = payload.directory || [];
@@ -245,7 +245,7 @@
   }
 
   function modal(title, subtitle, body) {
-    modalRoot.innerHTML = `<div class="admin-modal-backdrop" data-admin-modal-backdrop><section class="admin-modal" role="dialog" aria-modal="true"><header class="admin-modal-head"><div><h2>${esc(title)}</h2>${subtitle ? `<p>${esc(subtitle)}</p>` : ""}</div><button type="button" class="admin-modal-close" data-admin-modal-close aria-label="닫기">×</button></header><div class="admin-modal-body">${body}</div></section></div>`;
+    shell.modal.render("dashboard", `<div class="admin-modal-backdrop" data-admin-modal-backdrop><section class="admin-modal" role="dialog" aria-modal="true"><header class="admin-modal-head"><div><h2>${esc(title)}</h2>${subtitle ? `<p>${esc(subtitle)}</p>` : ""}</div><button type="button" class="admin-modal-close" data-admin-modal-close aria-label="닫기">×</button></header><div class="admin-modal-body">${body}</div></section></div>`);
   }
 
   function openZoneDetail(key) {
@@ -311,44 +311,18 @@
   }
 
   async function loadSnapshot() {
-    if (loading) return;
-    loading = true;
     connection.textContent = "SYNC";
-    try {
-      const response = await fetch(API_URL, { method: "GET", credentials: "same-origin", cache: "no-store" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.ok) {
-        payload = { code: data?.code || `HTTP_${response.status}` };
-        connection.textContent = response.status === 503 ? "SETUP" : "LOCKED";
-        render();
-        return;
-      }
-      payload = data;
-      render();
-    } catch {
-      payload = { code: "ADMIN_SNAPSHOT_OFFLINE" };
-      connection.textContent = "OFFLINE";
-      render();
-    } finally {
-      loading = false;
-      clearTimeout(pollTimer);
-      if (payload?.state) pollTimer = setTimeout(loadSnapshot, POLL_MS);
-    }
+    payload = await shell.snapshot.refresh();
   }
 
-  document.addEventListener("click", (event) => {
+  shell.onCaptureClick((event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
     const tab = target.closest("[data-admin-tab]");
-    if (tab && TABS.has(tab.dataset.adminTab)) {
-      currentTab = tab.dataset.adminTab;
-      render();
-      return;
-    }
+    if (tab && shell.tabs.set(tab.dataset.adminTab)) return;
     if (target.closest("[data-admin-refresh]")) return void loadSnapshot();
     const detail = target.closest("[data-admin-detail]");
     if (detail) return openDetail(detail.dataset.adminDetail, detail.dataset.adminId);
-    if (target.closest("[data-admin-modal-close]") || target.matches("[data-admin-modal-backdrop]")) modalRoot.replaceChildren();
   });
 
   document.addEventListener("input", (event) => {
@@ -357,9 +331,8 @@
   document.addEventListener("change", (event) => {
     if (event.target?.matches?.("[data-log-party], [data-log-type]")) applyLogFilters();
   });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") modalRoot.replaceChildren();
-  });
+  shell.tabs.subscribe((tab) => { currentTab = tab; render(); });
+  shell.snapshot.subscribe((next) => { payload = next; render(); });
 
   window.__BAEKJI_ADMIN_DASHBOARD_TEST__ = Object.freeze({
     sessionScope,
