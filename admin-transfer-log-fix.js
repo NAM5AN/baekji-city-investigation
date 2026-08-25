@@ -1,7 +1,6 @@
 (() => {
   "use strict";
 
-  const API_URL = "/api/admin-snapshot";
   const DEMO_NAMES = new Map([
     ["test_a", "테스트 캐릭터 A"],
     ["test_b", "테스트 캐릭터 B"],
@@ -33,6 +32,10 @@
 
   function canonicalTransferText(moverName, sourceParty, targetParty) {
     return `${moverName}${subjectParticle(moverName)} ${sourceParty}에서 ${targetParty} 소속으로 이동했다.`;
+  }
+
+  function unpairedTransferText(moverName, direction) {
+    return `${moverName}의 조사조 소속이 ${direction === "out" ? "다른 조사조로 이동되었다." : "이 조사조로 이동되었다."}`;
   }
 
   function pairTransferRecords(records, lookup = new Map()) {
@@ -84,7 +87,6 @@
   if (typeof document === "undefined") return;
 
   let directory = new Map(DEMO_NAMES);
-  let loading = false;
   let refreshQueued = false;
 
   const esc = (value) => String(value ?? "")
@@ -94,25 +96,20 @@
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
-  async function loadDirectory() {
-    if (loading) return;
-    loading = true;
-    try {
-      const response = await fetch(API_URL, { method: "GET", cache: "no-store", credentials: "same-origin" });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data?.state) {
-        const next = new Map(DEMO_NAMES);
-        (data.directory || []).forEach((entry) => {
-          if (entry?.id && (entry.name || entry.character_name)) next.set(String(entry.id), String(entry.name || entry.character_name));
-        });
-        directory = next;
-        scheduleRefresh();
-      }
-    } catch {
-      // 관제판 본 기능은 그대로 유지합니다.
-    } finally {
-      loading = false;
-    }
+  function sameDirectory(next) {
+    if (directory.size !== next.size) return false;
+    return [...next].every(([id, name]) => directory.get(id) === name);
+  }
+
+  function receiveSnapshot(snapshot) {
+    if (!snapshot?.state) return;
+    const next = new Map(DEMO_NAMES);
+    (snapshot.directory || []).forEach((entry) => {
+      if (entry?.id && (entry.name || entry.character_name)) next.set(String(entry.id), String(entry.name || entry.character_name));
+    });
+    if (sameDirectory(next)) return;
+    directory = next;
+    scheduleRefresh();
   }
 
   function rowRecord(row) {
@@ -125,13 +122,18 @@
     };
   }
 
-  function renderCanonicalRow(row, text, sourceParty, targetParty) {
+  function renderCanonicalRow(row, text, sourceParty, targetParty, moverId = "", direction = "") {
     const p = row.querySelector("p");
-    if (p) p.innerHTML = `<strong>SYSTEM</strong> · ${esc(text)}`;
+    const renderedText = `SYSTEM · ${text}`;
+    if (p && p.textContent !== renderedText) p.innerHTML = `<strong>SYSTEM</strong> · ${esc(text)}`;
     const spans = [...row.querySelectorAll("header span")];
-    if (spans[2] && sourceParty && targetParty) spans[2].textContent = `${sourceParty} → ${targetParty}`;
+    if (spans[2] && sourceParty && targetParty && spans[2].textContent !== `${sourceParty} → ${targetParty}`) spans[2].textContent = `${sourceParty} → ${targetParty}`;
     row.dataset.logSearchText = `${text} ${sourceParty || ""} ${targetParty || ""}`.toLowerCase();
     row.dataset.partyTransferCanonical = "true";
+    if (moverId) row.dataset.partyTransferMoverId = moverId;
+    if (sourceParty) row.dataset.partyTransferSourceParty = sourceParty;
+    if (targetParty) row.dataset.partyTransferTargetParty = targetParty;
+    if (direction) row.dataset.partyTransferDirection = direction;
   }
 
   function refresh() {
@@ -139,6 +141,16 @@
     const list = document.querySelector("[data-admin-log-list]");
     if (!list) return;
     const rows = [...list.querySelectorAll(".admin-log-row")];
+    rows.forEach((row) => {
+      const moverId = row.dataset.partyTransferMoverId;
+      const sourceParty = row.dataset.partyTransferSourceParty;
+      const targetParty = row.dataset.partyTransferTargetParty;
+      if (moverId && sourceParty && targetParty) {
+        renderCanonicalRow(row, canonicalTransferText(displayName(directory, moverId), sourceParty, targetParty), sourceParty, targetParty, moverId);
+      } else if (moverId && row.dataset.partyTransferDirection) {
+        renderCanonicalRow(row, unpairedTransferText(displayName(directory, moverId), row.dataset.partyTransferDirection), "", "", moverId, row.dataset.partyTransferDirection);
+      }
+    });
     const records = rows.map(rowRecord);
     const paired = pairTransferRecords(records, directory);
     const keepRows = new Set(paired.map((entry) => entry.row));
@@ -150,7 +162,14 @@
 
     paired.forEach((entry) => {
       if (!entry.canonical || !entry.row?.isConnected) return;
-      renderCanonicalRow(entry.row, entry.text, entry.sourceParty, entry.targetParty);
+      const moverId = entry.row.dataset.partyTransferMoverId || entry.parsed?.moverId || "";
+      const direction = entry.row.dataset.partyTransferDirection || entry.parsed?.direction || "";
+      const sourceParty = entry.row.dataset.partyTransferSourceParty || entry.sourceParty || "";
+      const targetParty = entry.row.dataset.partyTransferTargetParty || entry.targetParty || "";
+      const text = sourceParty && targetParty && moverId
+        ? canonicalTransferText(displayName(directory, moverId), sourceParty, targetParty)
+        : (moverId && direction ? unpairedTransferText(displayName(directory, moverId), direction) : entry.text);
+      renderCanonicalRow(entry.row, text, sourceParty, targetParty, moverId, direction);
     });
   }
 
@@ -166,11 +185,13 @@
   }
   document.addEventListener("click", (event) => {
     if (event.target instanceof Element && event.target.closest('[data-admin-tab="logs"]')) {
-      loadDirectory();
       setTimeout(scheduleRefresh, 0);
     }
   });
-  setInterval(loadDirectory, 10000);
-  loadDirectory();
+  const shell = window.__BAEKJI_ADMIN_SHELL__;
+  if (shell?.snapshot) {
+    receiveSnapshot(shell.snapshot.latest());
+    shell.snapshot.subscribe(receiveSnapshot);
+  }
   scheduleRefresh();
 })();
