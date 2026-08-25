@@ -20,14 +20,20 @@ const orderedScripts = [
   "admin-zone-topology.js?v=0.1.0&stage4b=1",
   "admin-zone-map.js?v=0.6.1&stage4b=1",
   "admin-live-render.js?v=0.6.4&stage4b=1",
-  "admin-observation-mvp2.js?v=0.2.1&shell-runtime=1",
+  "admin-observation-mvp2.js?v=0.2.2&shell-runtime=1&stage4c=1",
   "admin-communications-mvp3.js?v=0.3.0",
   "admin-control-mvp4.js?v=0.4.7&stage4-item-transfer=1&lazy-entry=1&async-entry=1&shell-capture=1&item-disposition=1&field-item-management=1",
   "admin-session-ops-mvp5.js?v=0.5.1&shell-runtime=1",
 ];
-for (const script of orderedScripts) assert.match(html, new RegExp(script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `dashboard loads ${script}`);
+const scriptIndexes = new Map();
+for (const script of orderedScripts) {
+  assert.match(html, new RegExp(script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `dashboard loads ${script}`);
+  const index = html.indexOf(script);
+  assert.ok(index >= 0, `${script} must exist before load order is checked`);
+  scriptIndexes.set(script, index);
+}
 for (let index = 1; index < orderedScripts.length; index += 1) {
-  assert.ok(html.indexOf(orderedScripts[index - 1]) < html.indexOf(orderedScripts[index]), `${orderedScripts[index - 1]} loads before ${orderedScripts[index]}`);
+  assert.ok(scriptIndexes.get(orderedScripts[index - 1]) < scriptIndexes.get(orderedScripts[index]), `${orderedScripts[index - 1]} loads before ${orderedScripts[index]}`);
 }
 assert.doesNotMatch(html, /admin-modal-reopen-guard\.js/, "legacy modal guard cannot reintroduce a second modal owner");
 
