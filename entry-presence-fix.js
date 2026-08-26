@@ -7,6 +7,8 @@
   const POLL_MS = 280;
   const GUEST_POLL_MS = 1000;
   const data = window.DAY1_DATA || { places: {} };
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
+  if (!persistence) return;
   let writing = false;
   let timer = 0;
 
@@ -216,7 +218,5 @@
     hasRecentDepartureLog,
     hasDeparturePresenceToken,
   });
-  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
-  if (!persistence) return;
   reconcile();
 })();
