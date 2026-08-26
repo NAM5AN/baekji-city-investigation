@@ -62,6 +62,7 @@ const GROUPS = Object.freeze({
     "multi-tab-movement-completion-check.mjs",
     "movement-cloud-sync-check.mjs",
     "entry-movement-presence-exact-once-check.mjs",
+    "entry-presence-boot-baseline-check.mjs",
     "observation-ai-check.mjs",
     "sound-event-sync-check.mjs",
     "runtime-baseline-stability-check.mjs",

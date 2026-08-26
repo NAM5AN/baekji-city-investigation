@@ -190,7 +190,7 @@ assert.match(entryPresence, /movementEffect: "departure-presence"/);
 assert.match(entryPresence, /hasRecentMeetingLog/);
 assert.match(entryPresence, /hasRecentDepartureLog/);
 assert.match(entryPresence, /a\.variant !== b\.variant/);
-assert.match(index, /entry-presence-fix\.js\?v=0\.3\.90&isolation=1&movement-departure-presence=1&stage6b=1/);
+assert.match(index, /entry-presence-fix\.js\?v=0\.3\.91&isolation=1&movement-departure-presence=1&stage6b=1&stage8a=1/);
 
 assert.match(adminJs, /DEFAULT_SENDER_LABEL = "SYSTEM"/);
 assert.match(adminJs, /SENDER_PRESETS = \["SYSTEM", "운영 SYSTEM", "안내방송"/);
