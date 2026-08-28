@@ -8,8 +8,7 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const JOIN_INTENT_KEY = "baekji_city_party_join_intent_v1";
-  const VERSION = "0.3.89";
+  const VERSION = "0.3.90";
 
   function reinviteState(snapshot, partyId, memberId, actorId, at = Date.now()) {
     const draft = clone(snapshot);
@@ -155,61 +154,16 @@
     window.dispatchEvent(new CustomEvent("baekji-party-reinvite-fix", { detail: { reason, version: VERSION } }));
   }
 
-  function writeState(snapshot, reason) {
-    if (!snapshot?.version) return false;
-    const oldRaw = persistence.readRaw();
-    const newRaw = JSON.stringify(snapshot);
-    if (oldRaw === newRaw) return false;
-    persistence.writeRaw(newRaw);
-    dispatchStateUpdate(oldRaw, newRaw, reason);
-    return true;
-  }
-
   function closeInviteModal() {
     const root = document.getElementById("modal-root");
     if (root?.querySelector("[data-party-flow-modal]")) root.replaceChildren();
     document.querySelectorAll(".retro-invite-backdrop[data-party-flow-modal]").forEach((node) => node.remove());
   }
 
-  function handleReinvite(memberId) {
-    const [page, partyId] = routeParts();
-    const actorId = currentUserId();
-    if (page !== "party" || !partyId || !memberId || !actorId) return false;
-    const snapshot = readState();
-    if (!snapshot) return false;
-    const next = reinviteState(snapshot, partyId, memberId, actorId, Date.now());
-    if (JSON.stringify(next) === JSON.stringify(snapshot)) return false;
-    writeState(next, "reinvite-atomic");
-    return true;
-  }
-
-  function handleAcceptReinvite(partyId) {
-    const memberId = currentUserId();
-    if (!partyId || !memberId) return false;
-    const snapshot = readState();
-    if (!snapshot) return false;
-    const next = acceptReinviteState(snapshot, partyId, memberId, Date.now());
-    if (JSON.stringify(next) === JSON.stringify(snapshot)) return false;
-    sessionStorage.removeItem(JOIN_INTENT_KEY);
-    closeInviteModal();
-    writeState(next, "reinvite-accept-atomic");
-    if (location.hash !== "#/home") location.hash = "#/home";
-    return true;
-  }
-
   function refresh() {
     refreshQueued = false;
-    if (repairing) return;
     const snapshot = readState();
     if (!snapshot) return;
-    const repaired = repairRejoinedState(snapshot);
-    if (!repaired.changed) {
-      document.documentElement.dataset.partyReinviteFixVersion = VERSION;
-      return;
-    }
-    repairing = true;
-    try { writeState(repaired.snapshot, "rejoin-invariant-repair"); }
-    finally { repairing = false; }
     document.documentElement.dataset.partyReinviteFixVersion = VERSION;
   }
 
@@ -218,24 +172,6 @@
     refreshQueued = true;
     setTimeout(refresh, 16);
   }
-
-  window.addEventListener("click", (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
-
-    const invite = target.closest("[data-invite]");
-    if (invite && handleReinvite(invite.dataset.invite)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
-
-    const accept = target.closest("[data-party-flow-accept], [data-accept]");
-    if (accept && handleAcceptReinvite(accept.dataset.partyFlowAccept || accept.dataset.accept)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-  }, true);
 
   window.addEventListener("storage", (event) => { if (!event.key || event.key === GLOBAL_KEY) scheduleRefresh(); });
   window.addEventListener("baekji-cloud-sync", scheduleRefresh);

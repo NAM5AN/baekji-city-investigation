@@ -129,7 +129,7 @@ assert.match(source, /party-membership-ready-only/, "leader participant status m
 assert.doesNotMatch(source, /function decorateInviteVisibility|function normalizeMemberHomeButtons/, "membership runtime must not post-process home UI");
 assert.doesNotMatch(source, /queueMicrotask\(refresh\)/, "membership observer refresh must yield to the browser instead of creating an unbounded microtask chain");
 assert.match(source, /setTimeout\(refresh, 16\)/, "membership observer refresh should be frame-throttled");
-assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.88&stage3a=1&stage3b=1&stage6b=1/, "membership UX fix must be cache-bumped after guarded-departure membership rendering");
+assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.89&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1/, "B4 membership marker repair boundary must use a fresh exact cache key");
 
 const reinviteSource = fs.readFileSync(new URL("../party-reinvite-runtime-fix.js", import.meta.url), "utf8");
 const reinviteSandbox = { window: {}, localStorage: { getItem() { return null; }, setItem() {} }, queueMicrotask(callback) { callback(); }, console, structuredClone };
@@ -187,11 +187,12 @@ const secondLeaveRepair = reinviteApi.repairRejoinedState(laterSecondLeave);
 assert.equal(secondLeaveRepair.snapshot.partyMembershipRemovals["p1:member_b"].active, true, "an older joinedAt must never undo a later leave");
 assert.equal(secondLeaveRepair.snapshot.parties.p1.memberIds.includes("member_b"), false);
 
-assert.match(reinviteSource, /reinvite-atomic/, "same-party invite click must be owned by the atomic runtime path");
-assert.match(reinviteSource, /reinvite-accept-atomic/, "same-party accept click must be owned by the atomic runtime path");
-assert.match(reinviteSource, /rejoin-invariant-repair/, "post-join cloud merge repair must stay wired");
-assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.90&stage3a=1&stage3b=1&stage6b=1/, "reinvite runtime fix must be loaded with a fresh cache key");
-assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1") < index.indexOf("party-membership-ux-fix.js?v=0.3.88&stage3a=1&stage3b=1&stage6b=1"), "atomic reinvite capture must run before the guarded-departure membership sidecar capture listener");
+assert.doesNotMatch(reinviteSource, /target\.closest\(\s*["']\[data-invite\]["']\s*\)[\s\S]{0,600}?(?:handleReinvite|writeState|persistence\.writeRaw)|(?:handleReinvite|stampReinvite)[\s\S]{0,600}?writeState\(\s*next\s*,\s*["']reinvite-atomic["']/, "B4 moves the production same-party invite click and marker stamp to the authoritative command; pure fixture helpers remain");
+assert.doesNotMatch(reinviteSource, /target\.closest\(\s*["'](?:\[data-party-flow-accept\]|\[data-accept\])/, "B5 removes the reinvite sidecar accept capture; the server command is the only production acceptance writer");
+assert.doesNotMatch(reinviteSource, /acceptReinviteState[\s\S]{0,500}writeState\(/, "B5 retains the pure reinvite reducer but cannot locally persist its acceptance result");
+assert.doesNotMatch(reinviteSource, /rejoin-invariant-repair|persistence\.writeRaw/, "post-join repair is no longer a browser writer after command settlement");
+assert.match(index, /party-reinvite-runtime-fix\.js\?v=0\.3\.90&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1/, "B4 reinvite sidecar must be loaded with a fresh exact cache key");
+assert.ok(index.indexOf("party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1") < index.indexOf("party-membership-ux-fix.js?v=0.3.89&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1"), "reinvite repair must run before guarded-departure membership repair");
 
 class MembershipClickTarget {
   constructor(matches = {}, dataset = {}) { this.matches = matches; this.dataset = dataset; }
@@ -204,6 +205,7 @@ const runtimeSession = new Map([["baekji_city_mvp_current_user_v034", "member_b"
 const runtimeHandlers = new Map();
 let membershipClickHandler = null;
 let membershipWrites = 0;
+const dispatchedMembershipCommands = [];
 const membershipModal = {
   children: [],
   _html: "",
@@ -242,6 +244,7 @@ const membershipRuntime = vm.createContext({
   clearTimeout() {},
 });
 membershipRuntime.window = membershipRuntime;
+membershipRuntime.__BAEKJI_PLAYER_WORLD_COMMANDS__ = { dispatch(command, payload) { dispatchedMembershipCommands.push({ command, payload }); return Promise.resolve({ status: "APPLIED" }); } };
 membershipRuntime.addEventListener = (type, handler) => runtimeHandlers.set(type, handler);
 membershipRuntime.dispatchEvent = () => true;
 vm.runInContext(runtimeUtils, membershipRuntime, { filename: "runtime-utils.js" });
@@ -268,11 +271,13 @@ assert.ok(membershipModal.children.length, "self-leave must open the existing co
 assert.equal(leaveClick.prevented, true);
 assert.equal(leaveClick.stopped, true);
 const leaveConfirm = membershipClick(new MembershipClickTarget({ "[data-party-membership-confirm-ok]": true }));
+await Promise.resolve();
 const runtimeAfterLeave = JSON.parse(runtimeLocal.get("baekji_city_mvp_state_v3"));
-assert.equal(membershipWrites, 1, "confirmed self-leave must commit exactly one state write");
-assert.equal(runtimeAfterLeave.characters.member_b.currentPartyId, null);
-assert.ok(!runtimeAfterLeave.parties.p1.memberIds.includes("member_b"));
-assert.deepEqual(Array.from(runtimeAfterLeave.parties.p1.readyBy), ["leader"], "self-leave must retain only automatic leader readiness after membership cleanup");
+assert.equal(membershipWrites, 0, "confirmed self-leave must not write a browser world snapshot");
+assert.equal(dispatchedMembershipCommands.length, 1, "confirmed self-leave dispatches one actor-bound command");
+assert.equal(dispatchedMembershipCommands[0].command, "LEAVE_PARTY_V1");
+assert.equal(dispatchedMembershipCommands[0].payload.partyId, "p1");
+assert.equal(runtimeAfterLeave.characters.member_b.currentPartyId, "p1", "the browser waits for authoritative projection settlement");
 assert.equal(leaveConfirm.prevented, true);
 assert.equal(leaveConfirm.stopped, true);
 

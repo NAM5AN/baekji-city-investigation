@@ -26,13 +26,14 @@ assert.match(css, /retro-choice-no-enter/);
 assert.match(css, /body\[data-choice-motion-suppressed\] \.retro-choice-launch/);
 
 assert.doesNotMatch(testerAuth, /repairTesterCharacters\(\{ touchCurrent: true \}\)/, "directory polling must not write onlineAt into shared world state");
-assert.match(testerAuth, /function canRepairSharedWorld\(\) \{[\s\S]*?Boolean\(currentUserId\(\)\)/, "shared-world tester repair must require an authenticated tab");
-assert.match(testerAuth, /if \(repairingState \|\| !canRepairSharedWorld\(\)\) return false;/, "logged-out tester directory polling must stay read-only against the shared world");
+assert.match(testerAuth, /Character creation is performed by baekji_player_character_bootstrap_v1/, "character bootstrap belongs to the authenticated server path");
+assert.match(testerAuth, /function repairTesterCharacters\([\s\S]*?return false;/, "directory refresh has no browser repair writer");
+assert.doesNotMatch(testerAuth, /(?:writeRaw|replaceRemoteRaw|baekji_mvp_put_state)\s*\(/, "logged-out or authenticated directory polling cannot mutate a world snapshot");
 assert.match(testerAuth, /setInterval\(\(\) => loadDirectory\(false\)/);
 
 assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.52/);
 assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.53/);
-assert.match(index, /tester-auth\.js\?v=0\.3\.89&stage6b=1/);
+assert.match(index, /tester-auth\.js\?v=0\.3\.90&stage6b=1&stage8b=1/);
 assert.ok(index.indexOf("retro-sound-boost.js?v=0.3.50") < index.indexOf("investigation-visual-polish.js?v=0.3.53"));
 
 console.log("investigation visual polish checks passed with stable invite rendering and guest-safe directory polling");

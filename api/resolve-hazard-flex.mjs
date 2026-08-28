@@ -113,44 +113,41 @@ function extractOutputText(payload) {
   return "";
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") return sendJson(res, 405, { error: "METHOD_NOT_ALLOWED" });
+export async function resolveFlexibleHazardDecision(body, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
+  const payload = cleanPayload(body);
+  if (!payload.action || !payload.currentHazard.id) throw Object.assign(new Error("INVALID_HAZARD_REQUEST"), { statusCode: 400 });
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) throw Object.assign(new Error("AI_NOT_CONFIGURED"), { statusCode: 503 });
+  const baseUrl = String(env.OPENAI_API_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const body = await readBody(req);
-    const payload = cleanPayload(body);
-    if (!payload.action || !payload.currentHazard.id) return sendJson(res, 400, { error: "INVALID_HAZARD_REQUEST" });
-
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return sendJson(res, 503, { error: "AI_NOT_CONFIGURED" });
-    const baseUrl = String(process.env.OPENAI_API_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const response = await fetch(`${baseUrl}/responses`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-          input: [
-            { role: "developer", content: SYSTEM_PROMPT },
-            { role: "user", content: JSON.stringify(payload) },
-          ],
-          text: { format: { type: "json_schema", name: "flexible_hazard_resolution", strict: true, schema: RESPONSE_SCHEMA } },
-          max_output_tokens: 900,
-        }),
-        signal: controller.signal,
-      });
-      const responsePayload = await response.json().catch(() => ({}));
-      if (!response.ok) return sendJson(res, 502, { error: "AI_REQUEST_FAILED", detail: cleanText(responsePayload?.error?.message, 240) });
-      const outputText = extractOutputText(responsePayload);
-      const decision = JSON.parse(outputText || "null");
-      if (!decision) return sendJson(res, 502, { error: "AI_EMPTY_RESULT" });
-      return sendJson(res, 200, decision);
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch (error) {
-    const status = Number(error?.statusCode) || (error?.name === "AbortError" ? 504 : 500);
-    return sendJson(res, status, { error: error?.name === "AbortError" ? "AI_TIMEOUT" : cleanText(error?.message || "UNKNOWN_ERROR", 120) });
+    const response = await fetchImpl(`${baseUrl}/responses`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: env.OPENAI_MODEL || DEFAULT_MODEL,
+        input: [
+          { role: "developer", content: SYSTEM_PROMPT },
+          { role: "user", content: JSON.stringify(payload) },
+        ],
+        text: { format: { type: "json_schema", name: "flexible_hazard_resolution", strict: true, schema: RESPONSE_SCHEMA } },
+        max_output_tokens: 900,
+      }),
+      signal: controller.signal,
+    });
+    const responsePayload = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error("AI_REQUEST_FAILED"), { statusCode: 502, detail: cleanText(responsePayload?.error?.message, 240) });
+    const decision = JSON.parse(extractOutputText(responsePayload) || "null");
+    if (!decision) throw Object.assign(new Error("AI_EMPTY_RESULT"), { statusCode: 502 });
+    return decision;
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+export default async function handler(req, res) {
+  // Canonical state is assembled by /api/player-world-command.  This old
+  // public endpoint intentionally no longer accepts browser supplied context.
+  return sendJson(res, 410, { error: "USE_PLAYER_WORLD_COMMAND" });
 }

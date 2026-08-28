@@ -15,6 +15,7 @@
     } catch { /* 저장소를 사용할 수 없는 환경은 무시합니다. */ }
   };
   const pending = () => T.pending(UI.read(), T.uid())[0] || null;
+  let expiringId = "";
 
   function hide(id) {
     setHeld(id);
@@ -91,6 +92,21 @@
     actions?.before(timer);
   }
 
+  async function expire(offer) {
+    if (!offer?.id || expiringId === offer.id) return;
+    expiringId = offer.id;
+    try {
+      const result = await UI.dispatch("EXPIRE_ITEM_TRANSFER_V1", { transferId: offer.id });
+      if (result.status !== "APPLIED" && result.status !== "REPLAY") throw new Error(result.status || "TRANSFER_NOT_APPLIED");
+      setHeld();
+    } catch {
+      // Keep the modal available. A later interval retries only after this
+      // request has settled, and projection refresh remains authoritative.
+    } finally {
+      expiringId = "";
+    }
+  }
+
   function tick() {
     const state = UI.read();
     const offer = T.pending(state, T.uid())[0];
@@ -102,9 +118,7 @@
 
     const left = Math.max(0, Number(offer.expiresAt) - Date.now());
     if (left <= 0) {
-      T.resolveOffer(state, offer.id, T.uid(), "EXPIRE");
-      UI.write(state);
-      setHeld();
+      void expire(offer);
       drawButton();
       return;
     }

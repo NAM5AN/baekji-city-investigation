@@ -80,9 +80,10 @@ const responses = [
 const snapshotCalls = [];
 const authorizedResponse = responseCollector();
 await adminSnapshotHandler({ method: "GET", headers: { cookie: "baekji_admin_session=opaque-session-token" } }, authorizedResponse, {
-  env: {},
+  env: { SUPABASE_SECRET_KEY: "test-server-secret" },
   fetchImpl: async (url, options) => {
     snapshotCalls.push({ url: String(url), body: JSON.parse(options.body) });
+    assert.equal(options.headers.apikey, "test-server-secret", "admin snapshot RPCs must use the server-only credential");
     return responses.shift();
   },
 });

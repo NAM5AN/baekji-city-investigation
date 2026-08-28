@@ -35,17 +35,15 @@
     if (bar && bar.style.transform !== nextTransform) bar.style.transform = nextTransform;
   }
 
-  function cancelOffer(offer) {
-    const state = UI.read();
-    const giverId = T.uid();
-    if (!state || !giverId) return;
-    const result = L.cancel(state, offer.id, giverId);
-    if (!result.ok) {
-      UI.toast("전달을 취소할 수 없습니다.", result.error || "이미 처리된 요청입니다.", "error");
+  async function cancelOffer(offer) {
+    try {
+      const result = await UI.dispatch("CANCEL_ITEM_TRANSFER_V1", { transferId: offer.id });
+      if (result.status !== "APPLIED" && result.status !== "REPLAY") throw new Error(result.status || "TRANSFER_NOT_APPLIED");
+    } catch (error) {
+      UI.toast("전달을 취소할 수 없습니다.", String(error?.message || "TRANSFER_FAILED"), "error");
       clearSenderModal();
       return;
     }
-    UI.write(state);
     clearSenderModal();
     UI.toast("소지품 전달을 취소했습니다.", offer.itemSnapshot?.displayName || T.display(offer.itemSnapshot || {}));
   }
@@ -100,7 +98,7 @@
     modal.querySelector("#transfer-sender-modal-title").textContent = item.displayName || T.display(item);
     modal.querySelector(".retro-transfer-category").textContent = `${item.category || "일반"} · 기본 물품 ${item.baseItemId || offer.baseItemId || "-"}`;
     modal.querySelector("[data-transfer-sender-state]").textContent = item.stateLabel || T.label(item);
-    modal.querySelector("[data-transfer-cancel]").addEventListener("click", () => cancelOffer(offer));
+    modal.querySelector("[data-transfer-cancel]").addEventListener("click", () => { void cancelOffer(offer); });
     updateTimer(modal, offer);
     requestAnimationFrame(() => modal.querySelector("[data-transfer-cancel]")?.focus());
   }

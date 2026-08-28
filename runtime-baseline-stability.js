@@ -4,7 +4,7 @@
   const { spatialScopeKey } = window.__BAEKJI_DOMAIN_RULES__;
 
   const ROOT = typeof window !== "undefined" ? window : globalThis;
-  const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const persistence = ROOT.__BAEKJI_WORLD_PERSISTENCE__;
   const USER_KEY = "baekji_city_mvp_current_user_v034";
   const PENDING_KEY = "actionNarrationPending";
   const PENDING_AT_KEY = "actionNarrationPendingAt";
@@ -108,7 +108,7 @@
 
   function readState() {
     try {
-      const state = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const state = JSON.parse(persistence?.readRaw?.() || "null");
       return state?.version === 3 ? state : null;
     } catch {
       return null;

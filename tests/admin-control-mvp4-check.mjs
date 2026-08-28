@@ -176,8 +176,9 @@ assert.ok(vercel.functions["api/admin-audit.mjs"]);
 assert.ok(vercel.functions["api/admin-session-ops.mjs"]);
 assert.equal(vercel.functions["api/admin-reset.mjs"], undefined, "world reset must reuse an existing serverless function on Hobby");
 assert.ok(Object.keys(vercel.functions).length <= 12, "Hobby deployment must stay at or below the 12-function limit");
-assert.match(cloud, /reconcileAdminControl/);
-assert.match(cloud, /applyAdminControlPatch/);
-assert.match(cloud, /Number\(patch\.seq \|\| 0\) > localSeq/);
+assert.match(cloud, /\/api\/player-world-projection/);
+assert.match(cloud, /replaceRemoteRaw\(JSON\.stringify\(projection\.state\)\)/);
+assert.match(cloud, /finishCommand\(lease, status, minRevision/);
+assert.doesNotMatch(cloud, /(?:reconcileAdminControl|applyAdminControlPatch|baekji_mvp_(?:get_state|get_revision|put_state))/);
 
 console.log("PASS: MVP4 admin control plus authenticated demo-equivalent world reset through the existing operations API, audit history, atomic writes, and non-shifting sync status");

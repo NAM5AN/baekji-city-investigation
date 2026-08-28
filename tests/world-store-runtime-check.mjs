@@ -11,14 +11,15 @@ const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 
 assert.doesNotMatch(source, /\b(?:localStorage|sessionStorage|Storage|fetch|document|addEventListener|setTimeout|setInterval|cloud|api|log)\b/i, "WorldStore must own only in-memory snapshots, never persistence, ingress, DOM, timers, cloud, APIs, or logs");
 assert.match(index, /world-store\.js\?v=0\.1\.0&stage5=1/, "WorldStore must load with its Stage 5 cache key");
-assert.match(index, /app\.js\?v=0\.4\.15&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1&stage6b=1/, "app must retain the Stage 5 world-store cache key and append Stage 6A");
+assert.match(index, /app\.js\?v=0\.4\.18&fix=0b1[^"']*stage5-world-store=1[^"']*stage6a=1[^"']*stage6b=1[^"']*stage8b=1[^"']*stage8b-b5=1/, "app must retain the Stage 5 world-store cache key and append Stage 8B");
 assert.ok(index.indexOf("runtime-baseline-stability.js?v=0.4.5&stage3a=1&stage3b=1&transfer-privacy=1") < index.indexOf("world-store.js?v=0.1.0&stage5=1"), "WorldStore must load after the existing baseline runtime");
-assert.ok(index.indexOf("world-store.js?v=0.1.0&stage5=1") < index.indexOf("app.js?v=0.4.15"), "WorldStore must load before app owns the in-memory world");
+assert.ok(index.indexOf("world-store.js?v=0.1.0&stage5=1") < index.indexOf("app.js?v=0.4.18"), "WorldStore must load before app owns the in-memory world");
 assert.doesNotMatch(app, /\blet\s+state\s*=/, "app must not retain a second mutable world-state owner");
 assert.match(app, /__BAEKJI_WORLD_STORE__/, "app must bootstrap through the WorldStore runtime");
-assert.match(app, /\.transact\(/, "ordinary app mutations must commit through WorldStore");
-assert.match(app, /persistence\.writeRaw\(JSON\.stringify\(currentState\(\)\)\)/, "existing persistence write path must delegate raw bytes through WorldPersistence");
-assert.match(app, /addEventListener\("storage"/, "existing two-tab storage ingress must remain in app");
+assert.match(app, /\.transact\(/, "app still uses WorldStore only to install immutable snapshots for rendering");
+assert.match(app, /persistence\.subscribe\(/, "app must render authoritative projection replacements through WorldPersistence");
+assert.doesNotMatch(app, /persistence\.writeRaw\(JSON\.stringify\(currentState\(\)\)\)/, "authenticated world changes must not be persisted from the browser");
+assert.match(app, /addEventListener\("storage", \(event\) => \{ if \(event\.key === GLOBAL_KEY\) ingestWorldRaw\(event\.newValue\); \}\)/, "guest-local fallback retains a narrowly scoped storage ingress; authenticated projections stay memory-only");
 
 const window = {};
 const context = vm.createContext({ window, Object, Array, String, Number, Boolean, Set, Map, JSON, Error, TypeError, structuredClone, console });

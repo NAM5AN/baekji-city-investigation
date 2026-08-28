@@ -4,7 +4,7 @@
   const UI = window.BAEKJI_ITEM_TRANSFER_UI;
   if (!T || !UI) return;
 
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
     const button = event.target?.closest?.("[data-transfer-item-button]");
     if (!button) return;
     event.preventDefault();
@@ -20,18 +20,19 @@
       return;
     }
 
-    const result = T.createOffer(state, {
-      giverId,
+    try {
+      const result = await UI.dispatch("OFFER_ITEM_TRANSFER_V1", {
       receiverId,
       inventoryKey: item.inventoryKey,
       quantity: 1,
+      actionText: "",
       source: "inventory-button",
     });
-    if (!result.ok) {
-      UI.toast("소지품을 건넬 수 없습니다.", result.error, "error");
+    if (result.status !== "APPLIED" && result.status !== "REPLAY") throw new Error(result.status || "TRANSFER_NOT_APPLIED");
+    } catch (error) {
+      UI.toast("소지품을 건넬 수 없습니다.", String(error?.message || "TRANSFER_FAILED"), "error");
       return;
     }
-    UI.write(state);
     UI.toast("전달 제안을 보냈습니다.", `${T.uname(receiverId)}가 수락해야 소지품이 이동합니다.`);
   }, true);
 })();

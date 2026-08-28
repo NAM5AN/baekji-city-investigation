@@ -37,6 +37,7 @@ const initialWorld = {
 };
 
 const localValues = new Map([[globalKey, JSON.stringify(initialWorld)]]);
+let localWrites = 0;
 // This regression covers the authenticated path. Logged-out read-only behavior is
 // covered separately by cross-tab-guest-world-write-check.mjs.
 const sessionValues = new Map([[userKey, testerId]]);
@@ -61,8 +62,8 @@ const context = vm.createContext({
   dispatchEvent() { return true; },
   localStorage: {
     getItem(key) { return localValues.has(key) ? localValues.get(key) : null; },
-    setItem(key, value) { localValues.set(key, String(value)); },
-    removeItem(key) { localValues.delete(key); },
+    setItem(key, value) { localWrites += 1; localValues.set(key, String(value)); },
+    removeItem(key) { localWrites += 1; localValues.delete(key); },
   },
   sessionStorage: {
     getItem(key) { return sessionValues.has(key) ? sessionValues.get(key) : null; },
@@ -125,16 +126,19 @@ const result = JSON.parse(vm.runInContext(`JSON.stringify((() => {
   };
 })())`, context));
 
-assert.equal(result.characterCount, 4, "world characters should come only from the four Supabase tester rows");
-assert.equal(result.validCharacterCount, 4, "every Supabase tester must have a valid character state");
-assert.equal(result.legacyWorldCount, 0, "legacy test_a/test_b/test_c world records must be pruned when they are not referenced");
+assert.equal(result.characterCount, 3, "directory refresh must leave the browser's existing projection untouched");
+assert.equal(result.validCharacterCount, 3, "directory discovery must not synthesize client-side characters");
+assert.equal(result.legacyWorldCount, 3, "legacy-shaped records are read-only until the server returns an actor projection");
 assert.equal(result.registryCount, 4, "app user registry should expose one unified Supabase tester category");
 assert.equal(result.registryTesterName, "신규 테스터");
 assert.equal(result.registryAName, "테스트 캐릭터 A", "A/B/C must be real Supabase directory accounts");
 assert.equal(result.legacyRegistryCount, 0, "legacy built-in demo registry entries must be suppressed after matching Supabase rows load");
 assert.equal(result.ordinaryTesterLookup, null, "ordinary objects must not inherit tester account records");
-assert.equal(result.testerCharacterId, testerId);
-assert.equal(result.demoACharacterId, demoAId);
+assert.equal(result.testerCharacterId, null, "the authenticated tester character is bootstrapped server-side, not locally repaired");
+assert.equal(result.demoACharacterId, null, "directory identities cannot be written into a browser world snapshot");
+assert.equal(localWrites, 0, "tester directory refresh must not persist or prune the world in the browser");
 
 assert.doesNotMatch(source, /requiredIds = new Set\(\[\.\.\.DEMO_USER_IDS/, "tester auth must not force legacy demo IDs into every world state");
-console.log("PASS: authenticated A/B/C and newly signed-up users share one Supabase tester directory and one UUID character path");
+assert.match(source, /function repairTesterCharacters[\s\S]*?return false;/, "browser repair hook is deliberately inert after server bootstrap");
+assert.doesNotMatch(source, /persistence\.writeRaw/, "tester auth must not retain a whole-world writer");
+console.log("PASS: tester directory is read-only; server bootstrap and actor projection own character state");

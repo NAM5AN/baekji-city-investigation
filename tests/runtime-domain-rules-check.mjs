@@ -76,13 +76,10 @@ const utilsScript = '<script src="runtime-utils.js?v=0.1.0&stage3a=1"></script>'
 assert.ok(index.includes(domainScript), "domain rules must use the exact Stage 3-B cache key");
 assert.ok(index.indexOf(domainScript) > index.indexOf(utilsScript), "domain rules must load after Stage 3-A runtime utilities");
 for (const consumer of [
-  "action-log-sync.js?v=0.4.2&stage3a=1&stage3b=1&transfer-privacy=1",
-  "sound-event-sync.js?v=0.3.35&stage3b=1",
-  "runtime-baseline-stability.js?v=0.4.5&stage3a=1&stage3b=1&transfer-privacy=1",
-  "app.js?v=0.4.15&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1&stage6b=1",
+  "app.js?v=0.4.18&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1&stage6b=1&stage8b=1&stage8b-b5=1&toggle-party-ready-command=1&lock-party-composition-command=1",
   "party-flow-ux-fix.js?v=0.3.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1",
-  "party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1",
-  "party-membership-ux-fix.js?v=0.3.88&stage3a=1&stage3b=1&stage6b=1",
+  "party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1",
+  "party-membership-ux-fix.js?v=0.3.89&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1",
   "party-preflight-flow-fix.js?v=0.3.97&stage3a=1&stage3b=1&stage6b=1",
   "party-member-home-roster.js?v=0.3.98&stage3a=1&stage3b=1",
   "character-interaction-ai.js?v=0.4.3&stage3a=1&stage3b=1&stage6b=1",
@@ -112,11 +109,13 @@ for (const [file, localDefinition] of [
 }
 for (const [file, localDefinition] of [
   ["foundation-rule-fixes.js", /function contaminationStage\(/],
-  ["cloud-state-sync.js", /function contaminationStage\(/],
   ["entry-presence-fix.js", /function scopeKey\(/],
 ]) {
   const consumer = fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
   assert.match(consumer, localDefinition, `${file} remains a deliberate local-domain exclusion in Stage 3-B`);
 }
+
+const cloudSync = fs.readFileSync(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
+assert.doesNotMatch(cloudSync, /function contaminationStage\(/, "projection-only cloud sync must not retain a local world-domain rule");
 
 console.log("PASS: Stage 3-B frozen pure domain rules, golden boundaries, exact load order, and deliberate migration boundaries");

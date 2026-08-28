@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import { derivePlayerWorldEffects as derive } from "../lib/player-world-derived-effects.mjs";
+let n = 0; const ids = (prefix) => `${prefix}-${++n}`;
+const state = { version: 3, characters: { test_a: {}, test_b: {}, test_c: {} }, sessions: { a: { id: "a", status: "ACTIVE", variant: "a", currentNode: "E_ENTRY", logs: [{ id: "act-1", type: "action-input", actorId: "test_a", text: "폭발을 일으킨다", at: 1 }] }, b: { id: "b", status: "ACTIVE", variant: "a", currentNode: "E_G_PLAZA", logs: [] }, c: { id: "c", status: "ACTIVE", variant: "a", currentNode: "E_ENTRY", logs: [] } } };
+let result = derive({ state, effect: "ACTION_FANOUT", context: { sessionId: "a", actionLogId: "act-1" }, nowMs: 2, idFactory: ids });
+assert.equal(result.applied, true); assert.equal(result.state.sessions.c.logs[0].type, "field-action"); assert.equal(state.sessions.c.logs.length, 0, "input remains immutable");
+result = derive({ state: result.state, effect: "SOUND_FANOUT", context: { sessionId: "a", actionLogId: "act-1" }, nowMs: 3, idFactory: ids });
+assert.equal(result.state.soundEvents.length, 1); assert.equal(result.state.sessions.b.logs.filter((entry) => entry.type === "field-sound").length, 1);
+result = derive({ state: result.state, effect: "FINALIZE_OBSERVATION", context: { sourceActionLogId: "act-1", observation: "관찰문", status: "final" }, nowMs: 4, idFactory: ids });
+assert.equal(result.state.sessions.c.logs.find((entry) => entry.type === "field-action").observationTextVersion, 3);
+result = derive({ state: result.state, effect: "CHARACTER_INTERACTION_RESULT", context: { sessionId: "a", targetSessionId: "b", eventId: "i-1", narration: "상호작용 결과", actorId: "test_a", targetId: "test_b", visibility: "TARGET_ONLY" }, nowMs: 5, idFactory: ids });
+assert.equal(result.state.sessions.b.logs.filter((entry) => entry.kind === "CHARACTER_INTERACTION_RESULT").length, 1);
+console.log("PASS: pure derived effects fan out action, sound, observation finalization, and interaction visibility exactly once");

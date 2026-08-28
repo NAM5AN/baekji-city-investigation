@@ -87,12 +87,12 @@ assert.equal(blocked.parties.party_other, undefined);
 assert.match(source, /data-party-leadership-warning/);
 assert.match(source, /조사조를 생성하면 이번 조사조의 조장이 됩니다/);
 assert.match(source, /data-member-confirm-composition/);
-assert.match(source, /data-member-ready/);
+assert.doesNotMatch(source, /data-member-ready/, "leadership must not retain a shadow readiness click owner");
 assert.match(source, /currentPartyId\) card\.remove\(\)/, "busy invite candidates should be removed from leader invite list");
 assert.match(source, /replaceChildren\(\)/, "warning modal must be fully cleared instead of leaving a click-blocking backdrop");
 assert.doesNotMatch(source, /new MutationObserver/, "leadership UI must not self-trigger through a DOM observer");
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.69&stage3a=1&stage6b=1/);
-assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.69&stage3a=1&stage6b=1") < index.indexOf("party-flow-sync.js?v=0.3.68&stage3a=1&stage6b=1"), "leadership interception must load before party-flow-sync");
+assert.ok(index.indexOf("party-leadership-flow.js?v=0.3.69&stage3a=1&stage6b=1") < index.indexOf("party-flow-sync.js?v=0.3.69&stage3a=1&stage6b=1&stage8b-b5=1"), "leadership interception must load before party-flow-sync");
 assert.doesNotMatch(source, /function decorateMemberHome/, "member home must render directly in app.js");
 
 console.log("PASS: leader warning, member confirmation/ready flow, stable navigation, and busy invite filtering");

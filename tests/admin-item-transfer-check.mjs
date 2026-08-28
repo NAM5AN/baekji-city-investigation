@@ -100,7 +100,7 @@ assert.throws(() => applyOperation(claimed.state, {
 function response() { return { statusCode: 0, headers: {}, body: "", setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, end(v = "") { this.body += v; } }; }
 function request(body, cookie = "baekji_admin_session=token") { const bytes = Buffer.from(JSON.stringify(body)); return { method: "POST", headers: cookie ? { cookie } : {}, async *[Symbol.asyncIterator]() { yield bytes; } }; }
 const noCookie = response();
-await adminControlHandler(request({ operation: "INVENTORY_TRANSFER" }, ""), noCookie, { env: {}, fetchImpl: async () => { throw new Error("must not fetch"); } });
+await adminControlHandler(request({ operation: "INVENTORY_TRANSFER" }, ""), noCookie, { env: { SUPABASE_SECRET_KEY: "test" }, fetchImpl: async () => { throw new Error("must not fetch"); } });
 assert.equal(noCookie.statusCode, 401);
 assert.equal(JSON.parse(noCookie.body).code, "ADMIN_SESSION_REQUIRED");
 
@@ -111,7 +111,7 @@ await adminControlHandler(request({
   requestId: "cas-move", operation: "INVENTORY_TRANSFER", mode: "CHARACTER_MOVE", targetCharacterId: "b",
   sourceCharacterId: "a", sourceInventoryKey: "lamp",
 }), casResponse, {
-  env: {},
+  env: { SUPABASE_SECRET_KEY: "test" },
   fetchImpl: async (url, options) => {
     const rpcName = String(url).split("/").pop();
     const body = JSON.parse(options.body);
@@ -139,7 +139,7 @@ assert.equal(casWrites[1].body.p_after_state.target.characterId, "b");
 
 const invalid = response();
 let invalidReads = 0;
-await adminControlHandler(request({ requestId: "invalid", operation: "INVENTORY_TRANSFER" }), invalid, { env: {}, fetchImpl: async () => { invalidReads += 1; return { ok: true, status: 200, json: async () => [] }; } });
+await adminControlHandler(request({ requestId: "invalid", operation: "INVENTORY_TRANSFER" }), invalid, { env: { SUPABASE_SECRET_KEY: "test" }, fetchImpl: async () => { invalidReads += 1; return { ok: true, status: 200, json: async () => [] }; } });
 assert.equal(invalid.statusCode, 401);
 assert.equal(JSON.parse(invalid.body).code, "ADMIN_SESSION_INVALID");
 assert.equal(invalidReads, 1, "invalid authentication must stop before any world/CAS write");
@@ -164,24 +164,17 @@ assert.match(adminUi, /Object\.values\(DATA\.objectsByDetail \|\| \{\}\)\.flat\(
 assert.match(adminUi, /data-object-id="\$\{esc\(entry\.objectId\)\}"/, "world item options must retain the object ID in data attributes, not visible copy");
 assert.match(adminUi, /data-control-inventory-transfer[\s\S]*operation: "INVENTORY_TRANSFER"/, "the actual delegated click path must send one transfer operation");
 assert.match(adminUi, /busy\) return/);
-assert.match(cloudSource, /action === "INVENTORY_TRANSFER"/);
+assert.match(cloudSource, /\/api\/player-world-projection/);
+assert.match(cloudSource, /finishCommand\(lease, status, minRevision/);
+assert.doesNotMatch(cloudSource, /(?:applyAdminControlPatch|action === "INVENTORY_TRANSFER")/);
 const adminHtml = fs.readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 assert.match(adminHtml, /admin-control-mvp4\.css\?v=0\.4\.3&stage4-item-transfer=1&item-disposition=1&field-item-management=1/);
 assert.match(adminHtml, /admin-control-mvp4\.js\?v=0\.4\.7&stage4-item-transfer=1&lazy-entry=1&async-entry=1&shell-capture=1&item-disposition=1&field-item-management=1/);
 assert.match(indexHtml, /cloud-state-sync\.js\?v=0\.4\.5&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1&stage6c-ingress=1/);
 
-const Storage = class { getItem() { return null; } setItem() {} removeItem() {} };
-const cloudContext = { console, window: { addEventListener() {}, dispatchEvent() {} }, document: { hidden: false, documentElement: { dataset: {} }, addEventListener() {} }, Storage, localStorage: new Storage(), sessionStorage: new Storage(), CustomEvent: class {}, Event: class {}, StorageEvent: class {}, AbortController, setTimeout: () => 0, clearTimeout() {}, fetch: async () => ({ ok: true, status: 200, json: async () => [] }), Math, Date, JSON, Object, Array, Number, String, Boolean, Set, Map };
-cloudContext.globalThis = cloudContext;
-vm.createContext(cloudContext);
-vm.runInContext(cloudSource, cloudContext, { filename: "cloud-state-sync.js" });
-const replay = world();
-cloudContext.window.__BAEKJI_CLOUD_SYNC_TEST__.applyAdminControlPatch(replay, moved.patch);
-assert.equal(replay.characters.a.inventory.lamp, undefined, "cloud replay must delete MOVE source");
-assert.deepEqual(replay.characters.b.inventory[moveKey], moved.state.characters.b.inventory[moveKey], "cloud replay must insert the exact MOVE target");
-cloudContext.window.__BAEKJI_CLOUD_SYNC_TEST__.applyAdminControlPatch(replay, moved.patch);
-assert.equal(Object.keys(replay.characters.b.inventory).length, 1, "replaying the same transfer patch must be idempotent");
+assert.equal(moved.state.characters.a.inventory.lamp, undefined, "the committed admin snapshot itself carries the MOVE source deletion");
+assert.deepEqual(moved.state.characters.b.inventory[moveKey], sourceItem, "the next server snapshot carries the exact MOVE target item");
 
 class FakeElement {
   constructor(dataset = {}) { this.dataset = dataset; this.isConnected = true; this.disabled = false; this.childElementCount = 1; this.selectedOptions = []; this.value = ""; }

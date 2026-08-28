@@ -44,8 +44,7 @@
   <div id="app" aria-live="polite"></div>
   <div id="toast-root" aria-live="assertive" aria-atomic="true"></div>
   <div id="modal-root"></div>
-  <script src="guest-world-isolation.js?v=0.4.1"></script>
-  <script src="world-persistence.js?v=0.1.1&stage6a=1&stage6b=1"></script>
+  <script src="world-persistence.js?v=0.1.2&stage8b-projection=1"></script>
   <script src="runtime-utils.js?v=0.1.0&stage3a=1"></script>
   <script src="runtime-domain-rules.js?v=0.1.0&stage3b=1"></script>
   <script src="data/day1-data.js?v=0.3.18"></script>
@@ -53,20 +52,15 @@
   <script src="github-pages-test-environment.js?v=0.3.38"></script>
   <script src="tester-registry-guard.js?v=0.3.99"></script>
   <script src="admin-login-bridge.js?v=0.1.0"></script>
-  <script src="tester-login-stable.js?v=0.3.96&stage6b=1"></script>
-  <script src="tester-auth.js?v=0.3.89&stage6b=1"></script>
+  <script src="tester-login-stable.js?v=0.3.97&stage6b=1&stage8b=1"></script>
+  <script src="player-session-bootstrap.js?v=0.1.0&stage8b=1"></script>
+  <script src="tester-auth.js?v=0.3.90&stage6b=1&stage8b=1"></script>
   <script src="profile-photo-editor.js?v=0.3.104"></script>
-  <script src="tester-signup-complete.js?v=0.3.107"></script>
-  <script src="cloud-state-sync.js?v=0.4.5&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1&stage6c-ingress=1"></script>
+  <script src="tester-signup-complete.js?v=0.3.108&stage8b=1"></script>
+  <script src="cloud-state-sync.js?v=0.4.5&fix=0b1&movement-terminal=1&result-party-disband=1&stage4-item-transfer=1&item-disposition=1&field-item-management=1&stage6c-ingress=1&stage8b-b1=1"></script>
+  <script src="player-world-command-catalog.js?v=0.1.0&stage8b-command-catalog=1"></script>
+  <script src="player-world-commands.js?v=0.1.3&stage8b-command-catalog=1"></script>
   <script src="tester-identity-state-repair.js?v=0.3.97&stage6b=1"></script>
-  <script src="gameplay-variance.js?v=0.3.31&stage3a=1"></script>
-  <script src="storage-sync-bridge.js?v=0.3.34"></script>
-  <script src="observation-ai-sync.js?v=0.4.3"></script>
-  <script src="final-observation-write-canonicalizer.js?v=0.4.2"></script>
-  <script src="action-log-sync.js?v=0.4.2&stage3a=1&stage3b=1&transfer-privacy=1"></script>
-  <script src="observation-final-guard.js?v=0.3.34"></script>
-  <script src="sound-event-sync.js?v=0.3.35&stage3b=1"></script>
-  <script src="sound-event-inflection-fix.js?v=0.3.36"></script>
   <script src="item-transfer-core.js?v=0.3.42&stage3c=1&transfer-privacy=1"></script>
   <script src="item-transfer-modal.js?v=0.3.43&transfer-privacy=1&stage6b=1"></script>
   <script src="item-transfer-timeout.js?v=0.3.43"></script>
@@ -74,30 +68,26 @@
   <script src="item-transfer-sender.js?v=0.3.43&transfer-privacy=1"></script>
   <script src="item-transfer-input.js?v=0.3.36"></script>
   <script src="item-transfer-button.js?v=0.3.36"></script>
-  <script src="foundation-rule-fixes.js?v=0.4.3"></script>
   <script src="runtime-baseline-stability.js?v=0.4.5&stage3a=1&stage3b=1&transfer-privacy=1"></script>
   <script src="world-store.js?v=0.1.0&stage5=1"></script>
-  <script src="app.js?v=0.4.15&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1&stage6b=1"></script>
-  <script src="entry-presence-fix.js?v=0.3.91&isolation=1&movement-departure-presence=1&stage6b=1&stage8a=1"></script>
+  <script src="app.js?v=0.4.18&fix=0b1&local-chat=1&movement-terminal=1&flex-hazard-terminal=1&topbar=1&stage2-foundation-ui=1&stage2-briefing-ui=1&stage2-party-ui=1&stage2-home-briefing-party-ui=1&pending-party-invites=1&party-member-readiness-ux=1&party-invite-grid-stability=1&party-confirmed-ready-collapse=1&pending-departure-set-guard=1&result-party-disband=1&departure-guards=1&stage3a=1&stage3b=1&stage3c=1&transfer-privacy=1&movement-departure-presence=1&item-disposition=1&stage5-world-store=1&stage6a=1&stage6b=1&stage8b=1&stage8b-b5=1&toggle-party-ready-command=1&lock-party-composition-command=1"></script>
   <script src="investigation-feedback-ui.js?v=0.3.49"></script>
   <script src="investigation-log-render-flush.js?v=0.3.49"></script>
-  <script src="admin-system-feed.js?v=0.3.88"></script>
-  <script src="party-flow-ux-fix.js?v=0.3.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1"></script>
-  <script src="party-leadership-flow.js?v=0.3.69&stage3a=1&stage6b=1"></script>
+  <script src="admin-system-feed.js?v=0.3.89&stage8b=1"></script>
+  <script src="party-flow-ux-fix.js?v=0.3.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1&toggle-party-ready-command=1&lock-party-composition-command=1"></script>
+  <script src="party-leadership-flow.js?v=0.3.69&stage3a=1&stage6b=1&stage8b-b5=1&create-party-command=1&toggle-party-ready-command=1"></script>
   <script src="party-roster-modal.js?v=0.3.72&stage3a=1"></script>
-  <script src="party-flow-sync.js?v=0.3.68&stage3a=1&stage6b=1"></script>
+  <script src="party-flow-sync.js?v=0.3.69&stage3a=1&stage6b=1&stage8b-b5=1"></script>
   <script src="tester-party-profile-sync.js?v=0.3.65"></script>
-  <script src="party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1"></script>
-  <script src="party-membership-ux-fix.js?v=0.3.88&stage3a=1&stage3b=1&stage6b=1"></script>
-  <script src="party-preflight-flow-fix.js?v=0.3.97&stage3a=1&stage3b=1&stage6b=1"></script>
-  <script src="party-ui-stability.js?v=0.3.94&stage3a=1&stage6b=1"></script>
+  <script src="party-reinvite-runtime-fix.js?v=0.3.90&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1"></script>
+  <script src="party-membership-ux-fix.js?v=0.3.89&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1"></script>
+  <script src="party-preflight-flow-fix.js?v=0.3.97&stage3a=1&stage3b=1&stage6b=1&toggle-party-ready-command=1&lock-party-composition-command=1"></script>
+  <script src="party-ui-stability.js?v=0.3.95&stage3a=1&stage6b=1&rename-party-command=1"></script>
   <script src="party-member-home-roster.js?v=0.3.98&stage3a=1&stage3b=1"></script>
-  <script src="entry-presence-party-label-fix.js?v=0.3.92&stage6b=1"></script>
   <script src="party-invite-search.js?v=0.3.86"></script>
   <script src="mobile-investigation-ui.js?v=0.3.26"></script>
   <script src="choice-chat-feedback.js?v=0.3.74"></script>
   <script src="character-interaction-ai.js?v=0.4.3&stage3a=1&stage3b=1&stage6b=1"></script>
-  <script src="character-interaction-result-visibility-fix.js?v=0.4.1"></script>
   <script src="cross-party-hazard-interaction.js?v=0.3.78&stage3a=1&stage3b=1&stage6b=1"></script>
   <script src="party-transfer-flow.js?v=0.3.79&stage3a=1&stage3b=1&stage6b=1"></script>
   <script src="party-transfer-runtime-fix.js?v=0.3.83&stage3a=1"></script>
@@ -110,7 +100,7 @@
   <script src="retro-sound.js?v=0.3.41"></script>
   <script src="retro-sound-boost.js?v=0.3.50"></script>
   <script src="investigation-visual-polish.js?v=0.3.53"></script>
-  <script src="player-admin-ops-mvp5.js?v=0.5.0"></script>
-  <script src="home-navigation-recovery.js?v=0.3.96"></script>
+  <script src="player-admin-ops-mvp5.js?v=0.5.1&stage8b=1"></script>
+  <script src="home-navigation-recovery.js?v=0.3.97&stage8b=1"></script>
 </body>
 </html>

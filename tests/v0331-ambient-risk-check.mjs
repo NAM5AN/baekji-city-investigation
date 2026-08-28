@@ -80,7 +80,7 @@ assert.match(motionCss, /retro-ambient-breathe/);
 assert.match(motionCss, /retro-dissolve-flow/);
 assert.match(motionCss, /retro-map-unfold/);
 assert.match(motionCss, /retro-type-caret/);
-assert.match(index, /gameplay-variance\.js\?v=0\.3\.31/);
+assert.doesNotMatch(index, /gameplay-variance\.js/, "the legacy Storage-transforming gameplay wrapper must stay outside the Stage 8B runtime");
 assert.match(index, /retro-ambient-type\.css\?v=0\.3\.31/);
 
-console.log("v0.3.31 ambient, persistent choice, and chance-risk checks passed");
+console.log("v0.3.31 ambient/chance fixtures remain valid and the legacy gameplay wrapper is retired from Stage 8B");

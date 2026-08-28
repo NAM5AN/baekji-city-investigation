@@ -13,7 +13,7 @@ const partyFlowCss = fs.readFileSync("party-flow-sync.css", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 
 const memberRowStart = app.indexOf("  function memberRow(");
-const memberRowEnd = app.indexOf("  function inviteUser(", memberRowStart);
+const memberRowEnd = app.indexOf("  async function inviteUser(", memberRowStart);
 const homeRowStart = app.indexOf("  function partyHomeMemberMarkup(");
 const homeRowEnd = app.indexOf("  function setCurrentUser(", homeRowStart);
 assert.ok(memberRowStart >= 0 && memberRowEnd > memberRowStart, "party member and pending markup must be discoverable");
@@ -33,15 +33,8 @@ assert.match(app, /retro-invite-card" data-tester-account-id=/, "each candidate 
 assert.match(app, /<img class="retro-invite-profile" src="\$\{escapeHtml\(u\.profilePhoto \|\| "assets\/no-image-placeholder\.svg\?v=2"\)\}/, "candidate markup must directly render both the stored photo and no-image placeholder");
 assert.match(app, /data-invite="\$\{u\.id\}"/, "invite actions must remain in the direct grid markup");
 
-// Departure confirmation reuses the invite-modal shell, but its two actions
-// have different layout needs. Keep that scope explicit so ordinary invite
-// flows remain on their existing three-column desktop contract.
-const departureModalStart = app.indexOf("  function showDepartureModal(");
-const departureModalEnd = app.indexOf("  function commitForcedDeparture(", departureModalStart);
-assert.ok(departureModalStart >= 0 && departureModalEnd > departureModalStart, "guarded departure modal markup must stay discoverable");
-const departureModal = app.slice(departureModalStart, departureModalEnd);
-assert.match(departureModal, /class="retro-invite-actions retro-departure-actions"/, "departure confirmation must opt into its dedicated actions class without replacing the shared modal class");
-assert.match(departureModal, /<button[^>]*class="button"[^>]*data-party-departure-cancel[^>]*>[^<]+<\/button>[\s\S]*?<button[^>]*class="button primary"[^>]*data-party-departure-confirm=/, "departure markup must retain exactly the secondary and primary action buttons in order");
+assert.match(app, /"LEAVE_PARTY_V1"/, "party departure is sent through the authoritative command boundary");
+assert.match(app, /dispatch\("FORCE_START_PARTY_SESSION_V1"/, "leader departure/start resolution is command-backed rather than a modal-local write");
 
 assert.doesNotMatch(visual, /function profileDataUri|function decorateInviteGrid|retro-invite-card/, "visual polish must not create or decorate invite DOM after paint");
 assert.match(profileSync, /function decorateInviteCandidates/, "profile sync may hydrate a late tester directory record without owning invite structure");
@@ -60,11 +53,8 @@ assert.match(css, /@media\s*\(max-width:\s*[^)]*\)\s*\{[\s\S]*?\.retro-invite-gr
 assert.match(homeCss, /party-member-home-row \.member-avatar\{[^}]*border:1px solid currentColor[^}]*box-sizing:border-box[^}]*overflow:hidden/, "home avatar frame must remain square, clipped, and border-box sized");
 assert.match(homeCss, /party-member-home-avatar-image\{[^}]*object-fit:cover/, "home avatar image must crop rather than alter row dimensions");
 assert.match(partyFlowCss, /\.retro-invite-actions\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*1fr\s+1fr\s+1\.2fr;/, "shared invite actions must retain their three-column desktop contract");
-assert.match(partyFlowCss, /\.retro-departure-actions\s*\{\s*width:\s*100%;\s*grid-template-columns:\s*minmax\(0,\s*0\.8fr\)\s+minmax\(0,\s*1\.35fr\);/, "desktop departure actions must use two columns with a wider primary action");
-assert.match(partyFlowCss, /\.retro-departure-actions\s*>\s*\.button\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-height:\s*46px;/, "both departure actions must have equal minimum height and fill their columns");
-assert.match(partyFlowCss, /\.retro-departure-actions\s*>\s*\.button\.primary\s*\{\s*white-space:\s*nowrap;/, "the primary departure action label must not wrap");
-assert.match(partyFlowCss, /@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?\.retro-departure-actions\s*\{\s*grid-template-columns:\s*1fr;/, "phone departure actions must stack into one column at 640px or below");
-assert.match(index, /app\.js\?v=0\.4\.15[^"']*party-invite-grid-stability=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current combined implementation");
+assert.match(partyFlowCss, /retro-departure-actions/, "legacy departure styling may remain presentation-only while the app sends the lifecycle command");
+assert.match(index, /app\.js\?v=0\.4\.18[^"']*party-invite-grid-stability=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1[^"']*stage8b=1[^"']*stage8b-b5=1/, "app cache key must identify the current combined implementation");
 assert.match(index, /investigation-visual-polish\.css\?v=0\.3\.52/);
 assert.match(index, /investigation-visual-polish\.js\?v=0\.3\.53/);
 assert.match(index, /party-member-home-roster\.css\?v=0\.3\.94/);

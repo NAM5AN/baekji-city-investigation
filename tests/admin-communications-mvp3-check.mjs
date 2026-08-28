@@ -64,7 +64,7 @@ assert.deepEqual(resolveSystemRecipients(worldState, "ALL", "").characterIds.sor
 
 const chatGet = responseCollector();
 await adminCommunicationsHandler(request("GET", null, { url: "/api/admin-communications?afterChat=4&afterSystem=8" }), chatGet, {
-  env: {},
+  env: { SUPABASE_SECRET_KEY: "test-server-secret" },
   fetchImpl: async (url, options) => {
     const body = JSON.parse(options.body);
     if (url.includes("baekji_admin_session_verify")) return okJson([{ login_id: "AD1", display_name: "관리자 AD1" }]);
@@ -93,8 +93,9 @@ await adminCommunicationsHandler(request("POST", {
   senderLabel: "안내방송",
   message: "즉시 뒤를 확인하세요.",
 }), systemPost, {
-  env: {},
+  env: { SUPABASE_SECRET_KEY: "test-server-secret" },
   fetchImpl: async (url, options) => {
+    assert.equal(options.headers.apikey, "test-server-secret", "admin system recipient reads must use the server-only credential");
     const body = JSON.parse(options.body);
     if (url.includes("baekji_admin_session_verify")) return okJson([{ login_id: "AD1", display_name: "관리자 AD1" }]);
     if (url.includes("baekji_mvp_get_state")) return okJson([{ state: worldState, revision: 12 }]);
@@ -120,7 +121,7 @@ await adminCommunicationsHandler(request("POST", {
   targetLabel: "캐릭터 B",
   message: "기본 발신 테스트",
 }), defaultSenderPost, {
-  env: {},
+  env: { SUPABASE_SECRET_KEY: "test-server-secret" },
   fetchImpl: async (url, options) => {
     const body = JSON.parse(options.body);
     if (url.includes("baekji_admin_session_verify")) return okJson([{ login_id: "AD1", display_name: "관리자 AD1" }]);
@@ -133,7 +134,7 @@ assert.equal(JSON.parse(defaultSenderPost.body).event.sender_label, "SYSTEM", "a
 
 const noRecipient = responseCollector();
 await adminCommunicationsHandler(request("POST", { kind: "system", targetKind: "CHARACTER", targetId: "missing", targetLabel: "없음", message: "test" }), noRecipient, {
-  env: {},
+  env: { SUPABASE_SECRET_KEY: "test-server-secret" },
   fetchImpl: async (url) => {
     if (url.includes("baekji_admin_session_verify")) return okJson([{ login_id: "AD1", display_name: "관리자 AD1" }]);
     if (url.includes("baekji_mvp_get_state")) return okJson([{ state: worldState, revision: 12 }]);
@@ -145,21 +146,23 @@ assert.equal(JSON.parse(noRecipient.body).code, "ADMIN_SYSTEM_NO_RECIPIENTS");
 
 let playerRpcBody = null;
 const playerFeed = responseCollector();
-await playerAdminSystemHandler(request("GET", null, { url: "/api/player-admin-system?characterId=b&after=7", cookie: "" }), playerFeed, {
-  env: {},
+await playerAdminSystemHandler(request("GET", null, { url: "/api/player-admin-system?after=7", cookie: "baekji_player_session=player-b" }), playerFeed, {
+  env: { SUPABASE_SECRET_KEY: "test-server-secret" },
   fetchImpl: async (_url, options) => {
-    playerRpcBody = JSON.parse(options.body);
-    return okJson([{ id: 10, admin_name: "관리자 AD1", sender_label: "안내방송", target_kind: "CHARACTER", target_label: "캐릭터 B", message: "즉시 뒤를 확인하세요.", recipient_session_ids: ["s1"], created_at: "2026-08-10T00:00:02Z" }]);
+    const body = JSON.parse(options.body);
+    if (String(_url).endsWith("baekji_player_session_verify_v2")) return okJson([{ account_id: "account-b", character_id: "b", character_name: "캐릭터 B", profile_photo: "", session_id: "s1" }]);
+    playerRpcBody = body;
+    return okJson([{ id: 10, admin_name: "관리자 AD1", sender_label: "안내방송", target_kind: "CHARACTER", target_label: "캐릭터 B", message: "즉시 뒤를 확인하세요.", created_at: "2026-08-10T00:00:02Z" }]);
   },
 });
 assert.equal(playerFeed.statusCode, 200);
-assert.deepEqual(playerRpcBody, { p_character_id: "b", p_after_id: 7, p_limit: 100 });
-assert.equal(JSON.parse(playerFeed.body).events[0].recipient_session_ids[0], "s1");
+assert.deepEqual(playerRpcBody, { p_session_token: "player-b", p_after_id: 7, p_limit: 100 });
+assert.deepEqual(Object.keys(JSON.parse(playerFeed.body).events[0]).sort(), ["created_at", "id", "message", "sender_label", "target_kind", "target_label"]);
 assert.equal(JSON.parse(playerFeed.body).events[0].sender_label, "안내방송");
 
 const adminJs = await readFile(new URL("../admin-communications-mvp3.js", import.meta.url), "utf8");
 const canonicalZones = await readFile(new URL("../admin-canonical-zones.js", import.meta.url), "utf8");
-const entryPresence = await readFile(new URL("../entry-presence-fix.js", import.meta.url), "utf8");
+const partyReducer = await readFile(new URL("../server/player-world-party-reducer.mjs", import.meta.url), "utf8");
 const playerJs = await readFile(new URL("../admin-system-feed.js", import.meta.url), "utf8");
 const playerCss = await readFile(new URL("../admin-system-feed.css", import.meta.url), "utf8");
 const motionJs = await readFile(new URL("../render-motion-stability.js", import.meta.url), "utf8");
@@ -183,14 +186,9 @@ const canonicalZonesIndex = adminHtml.indexOf("admin-canonical-zones.js?v=0.5.4"
 const communicationsIndex = adminHtml.indexOf("admin-communications-mvp3.js?v=0.3.1&stage7b=1");
 assert.ok(canonicalZonesIndex >= 0 && communicationsIndex >= 0 && canonicalZonesIndex < communicationsIndex, "canonical E_ENTRY must exist before SYSTEM target options are built");
 
-assert.match(entryPresence, /ENTRY_NODE = "E_ENTRY"/);
-assert.match(entryPresence, /entry_meet_/);
-assert.match(entryPresence, /movement:\$\{token\}:\$\{witness\.id\}:departure-presence/);
-assert.match(entryPresence, /movementEffect: "departure-presence"/);
-assert.match(entryPresence, /hasRecentMeetingLog/);
-assert.match(entryPresence, /hasRecentDepartureLog/);
-assert.match(entryPresence, /a\.variant !== b\.variant/);
-assert.match(index, /entry-presence-fix\.js\?v=0\.3\.91&isolation=1&movement-departure-presence=1&stage6b=1&stage8a=1/);
+assert.match(partyReducer, /function addEntryPresence\(/, "entry co-location must be derived inside the authoritative party activation reducer");
+assert.match(partyReducer, /witness\.variant !== session\.variant/);
+assert.doesNotMatch(index, /entry-presence-fix\.js/, "the legacy polling writer must remain retired");
 
 assert.match(adminJs, /DEFAULT_SENDER_LABEL = "SYSTEM"/);
 assert.match(adminJs, /SENDER_PRESETS = \["SYSTEM", "운영 SYSTEM", "안내방송"/);
@@ -203,7 +201,7 @@ assert.match(migration, /p_scope_snapshot->>'senderLabel'/);
 assert.match(migration, /baekji_player_admin_system_list/);
 
 assert.match(playerJs, /\/api\/player-admin-system/);
-assert.match(playerJs, /recipient_session_ids/);
+assert.doesNotMatch(playerJs, /recipient_session_ids/);
 assert.match(playerJs, /event\?\.sender_label \|\| "SYSTEM"/);
 assert.match(playerJs, /data-timeline-at/);
 assert.match(playerJs, /function annotateNativeTimelines/);
@@ -214,7 +212,7 @@ assert.doesNotMatch(playerJs, /localStorage\.setItem/);
 assert.match(motionJs, /\.retro-system-line:not\(\.retro-admin-system-line\)/);
 assert.match(playerCss, /retro-admin-system-line/);
 assert.match(playerCss, /retro-admin-system-chat/);
-assert.match(index, /admin-system-feed\.js\?v=0\.3\.88/);
+assert.match(index, /admin-system-feed\.js\?v=0\.3\.89&stage8b=1/);
 assert.match(index, /render-motion-stability\.js\?v=0\.3\.89&transfer-privacy=1/);
 
 assert.match(adminHtml, /admin-communications-mvp3\.js\?v=0\.3\.1&stage7b=1/);

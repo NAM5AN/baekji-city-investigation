@@ -37,13 +37,13 @@
 
   async function heartbeat() {
     clearTimeout(heartbeatTimer);
-    const characterId = currentUserId();
-    if (characterId) {
+    if (currentUserId()) {
       fetch("/api/player-presence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId, clientId: clientId() }),
+        body: JSON.stringify({ clientId: clientId() }),
         cache: "no-store",
+        credentials: "same-origin",
         keepalive: true,
       }).catch(() => {});
     }

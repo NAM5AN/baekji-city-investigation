@@ -72,7 +72,7 @@ assert.match(adminHtml, /OPERATIONS · MVP 5/);
 assert.match(adminHtml, /admin-session-ops-mvp5\.css\?v=0\.5\.0/);
 assert.match(adminHtml, /admin-session-ops-mvp5\.js\?v=0\.5\.1&shell-runtime=1/);
 assert.match(indexHtml, /player-admin-ops-mvp5\.css\?v=0\.5\.0/);
-assert.match(indexHtml, /player-admin-ops-mvp5\.js\?v=0\.5\.0/);
+assert.match(indexHtml, /player-admin-ops-mvp5\.js\?v=0\.5\.1&stage8b=1/);
 assert.match(adminUi, /운영 점검/);
 assert.match(adminUi, /SESSION_PAUSE/);
 assert.match(adminUi, /SESSION_RESUME/);
@@ -88,7 +88,8 @@ assert.match(playerCss, /조사|pause|admin-session-paused-mvp5/);
 assert.match(migration, /create table if not exists public\.baekji_player_presence/);
 assert.match(migration, /baekji_player_presence_ping/);
 assert.match(migration, /baekji_admin_presence_list/);
-assert.match(cloud, /if \(hasOwn\(data, "status"\)\)/, "existing admin control conflict replay must preserve PAUSED/ACTIVE/COMPLETED status writes");
+assert.match(cloud, /\/api\/player-world-projection/, "a player tab obtains pause/resume/end status only from the server projection");
+assert.doesNotMatch(cloud, /(?:applyAdminControlPatch|reconcileAdminControl|hasOwn\(data, "status"\))/, "status controls must not be locally replayed into a stale player snapshot");
 assert.ok(vercel.rewrites.some((row) => row.source === "/api/admin-session-ops" && row.destination === "/api/admin-session-ops.mjs"));
 assert.ok(vercel.rewrites.some((row) => row.source === "/api/player-presence" && row.destination === "/api/player-presence.mjs"));
 

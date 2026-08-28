@@ -102,31 +102,10 @@
   }
 
   function repairNow() {
-    if (repairing) return false;
-    const currentId = String(sessionStorage.getItem(USER_KEY) || "");
-    if (!UUID_RE.test(currentId)) return false;
-    const legacyId = currentLegacyId(currentId);
-    if (!legacyId) return false;
-    const oldRaw = persistence.readRaw();
-    let snapshot;
-    try { snapshot = JSON.parse(oldRaw || "null"); } catch { snapshot = null; }
-    if (!snapshot || snapshot.version !== 3) return false;
-
-    const hasLegacyReference = oldRaw?.includes(`\"${legacyId}\"`);
-    const currentCharacter = snapshot.characters?.[currentId];
-    const legacyCharacter = snapshot.characters?.[legacyId];
-    const needsPartyRecovery = !currentCharacter?.currentPartyId && legacyCharacter?.currentPartyId;
-    const needsSessionRecovery = !currentCharacter?.currentSessionId && legacyCharacter?.currentSessionId;
-    if (!hasLegacyReference && !needsPartyRecovery && !needsSessionRecovery) return false;
-
-    const next = repairSnapshot(snapshot, currentId, legacyId);
-    const newRaw = JSON.stringify(next);
-    if (newRaw === oldRaw) return false;
-    repairing = true;
-    try { persistence.writeRaw(newRaw); }
-    finally { repairing = false; }
-    dispatchUpdate(oldRaw, newRaw);
-    return true;
+    // Legacy identity migration is no longer a browser writer. Historical
+    // helpers remain testable for recovery tooling, but runtime state is read
+    // only and comes from the actor-bound projection.
+    return false;
   }
 
   function scheduleRepair() {

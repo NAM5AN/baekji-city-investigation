@@ -1,7 +1,6 @@
 import { adminSessionTokenFromRequest } from "./_admin-auth.mjs";
+import { playerAuthRpc } from "./_player-auth.mjs";
 
-const DEFAULT_SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
-const DEFAULT_SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
 const STATE_KEY = "day1_world";
 const MAX_BODY_BYTES = 8192;
 
@@ -13,27 +12,8 @@ function sendJson(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function config(env) {
-  return {
-    url: env.SUPABASE_URL || DEFAULT_SUPABASE_URL,
-    key: env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY,
-  };
-}
-
 async function rpc(env, name, body, fetchImpl = globalThis.fetch) {
-  const { url, key } = config(env);
-  const response = await fetchImpl(`${url}/rest/v1/rpc/${name}`, {
-    method: "POST",
-    headers: { apikey: key, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw Object.assign(new Error(`${name}_${response.status}`), { statusCode: response.status, detail });
-  }
-  if (response.status === 204) return null;
-  return response.json();
+  return playerAuthRpc(env, name, body, fetchImpl);
 }
 
 async function readBody(request) {

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const GLOBAL_KEY = "baekji_city_mvp_state_v3";
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
   const toastRoot = document.getElementById("toast-root");
   const app = document.getElementById("app");
   if (!app) return;
@@ -21,7 +21,7 @@
 
   function readState() {
     try {
-      const value = JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null");
+      const value = JSON.parse(persistence?.readRaw?.() || "null");
       return value?.version === 3 ? value : null;
     } catch {
       return null;
@@ -247,12 +247,12 @@
     ) validateBeforeSubmit(event);
   }, true);
 
-  const nativeSetItem = Storage.prototype.setItem;
-  Storage.prototype.setItem = function patchedInvestigationFeedbackSetItem(key, value) {
-    const result = nativeSetItem.call(this, key, value);
-    if (this === localStorage && key === GLOBAL_KEY && processing) queueProcessingStateCheck();
-    return result;
-  };
+  // Projection updates enter through the persistence adapter.  A global
+  // Storage.prototype patch used to make this UI state depend on semantic
+  // writer load order and exposed projection bytes to every interceptor.
+  persistence?.subscribe?.(() => {
+    if (processing) queueProcessingStateCheck();
+  });
 
   const nativeFetch = typeof window.fetch === "function" ? window.fetch.bind(window) : null;
   if (nativeFetch) {

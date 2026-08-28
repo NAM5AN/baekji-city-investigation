@@ -77,8 +77,8 @@ const worldPersistence = fs.readFileSync(new URL("../world-persistence.js", impo
 const worldStore = fs.readFileSync(new URL("../world-store.js", import.meta.url), "utf8");
 const domainRules = fs.readFileSync(new URL("../runtime-domain-rules.js", import.meta.url), "utf8");
 const dataSource = fs.readFileSync(new URL("../data/day1-data.js", import.meta.url), "utf8");
-const end = appSource.indexOf("  function endSession(");
-assert.ok(end > 0, "field item runtime seam precedes session result rendering");
+const end = appSource.indexOf("  async function endSession(");
+assert.ok(end > 0, "field item presentation helpers precede the authoritative command entry points");
 const appContext = vm.createContext({
   window: {}, document: { getElementById() { return null; } },
   localStorage: { getItem() { return null; } }, sessionStorage: { getItem() { return "test_b"; } },
@@ -125,32 +125,8 @@ assert.equal(collisionState.characters.test_b.inventory[collisionPickup.targetIn
 assert.deepEqual(collisionState.characters.test_b.inventory[collisionPickup.targetInventoryKey].nested, item.nested);
 
 const cloudSource = fs.readFileSync(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
-class Storage { getItem() { return null; } setItem() {} removeItem() {} }
-const cloudWindow = { addEventListener() {}, dispatchEvent() {} };
-const cloudContext = vm.createContext({ window: cloudWindow, document: { hidden: false, documentElement: { dataset: {} }, addEventListener() {} }, Storage, localStorage: new Storage(), sessionStorage: new Storage(), CustomEvent: class {}, Event: class {}, StorageEvent: class {}, AbortController, setTimeout: () => 0, clearTimeout() {}, fetch: async () => ({ ok: true, status: 200, json: async () => [] }), console, Date, Math, JSON, Object, Array, Number, String, Boolean, Set, Map });
-cloudContext.globalThis = cloudContext;
-vm.runInContext(cloudSource, cloudContext, { filename: "cloud-state-sync.js" });
-const cloudApi = cloudWindow.__BAEKJI_CLOUD_SYNC_TEST__;
-const replay = world();
-cloudApi.applyAdminControlPatch(replay, placed.patch);
-assert.equal(replay.characters.test_a.inventory.pen, undefined);
-assert.deepEqual(JSON.parse(JSON.stringify(replay.fieldItemPlacementsByVariant.c[placementId])), placement, "stale tabs replay field placement with source deletion");
-
-const remoteWinner = activeFieldState();
-fieldApi.takeFieldPlacementItemState(remoteWinner, { sessionId: "s1", objectId: "E_OBJ_002", placementId, characterId: "test_b", at: 3000 });
-const staleLoser = activeFieldState();
-fieldApi.takeFieldPlacementItemState(staleLoser, { sessionId: "s1", objectId: "E_OBJ_002", placementId, characterId: "test_c", at: 3001 });
-const converged = cloudApi.reconcileFieldItemPlacements(remoteWinner, staleLoser, cloudApi.mergeValues(remoteWinner, staleLoser));
-assert.equal(converged.fieldItemPlacementClaimsByVariant.c[placementId].characterId, "test_b", "server-known remote claim wins a stale competing pickup");
-assert.ok(Object.values(converged.characters.test_b.inventory).some((entry) => entry._fieldPlacementId === placementId));
-assert.equal(Object.values(converged.characters.test_c.inventory).some((entry) => entry._fieldPlacementId === placementId), false, "losing stale inventory copy is removed during convergence");
-
-const resetRemote = world();
-resetRemote.fieldItemPlacementsByVariant = { a: {}, b: {}, c: {}, d: {} };
-resetRemote.fieldItemPlacementClaimsByVariant = { a: {}, b: {}, c: {}, d: {} };
-const resetRebase = cloudApi.rebaseUnsyncedOverlay(placed.state, placed.state, resetRemote);
-assert.deepEqual(JSON.parse(JSON.stringify(resetRebase.fieldItemPlacementsByVariant)), resetRemote.fieldItemPlacementsByVariant, "admin reset deletion is not resurrected by an unchanged stale overlay");
-assert.deepEqual(JSON.parse(JSON.stringify(resetRebase.fieldItemPlacementClaimsByVariant)), JSON.parse(JSON.stringify(resetRemote.fieldItemPlacementClaimsByVariant)), "admin reset also clears field pickup tombstones");
+assert.match(cloudSource, /\/api\/player-world-projection/);
+assert.doesNotMatch(cloudSource, /(?:applyAdminControlPatch|reconcileFieldItemPlacements|rebaseUnsyncedOverlay)/, "stale tabs must replace their view from the authoritative projection rather than replaying local field-item patches");
 
 const adminUi = fs.readFileSync(new URL("../admin-control-mvp4.js", import.meta.url), "utf8");
 assert.match(adminUi, /data-control-item-remove/);

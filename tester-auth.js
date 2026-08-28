@@ -15,12 +15,12 @@
   const hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
   const toUser = (row) => ({
     id: String(row?.id || ""),
-    loginId: String(row?.character_name || ""),
-    name: String(row?.character_name || ""),
+    loginId: String(row?.character_name || row?.characterName || ""),
+    name: String(row?.character_name || row?.characterName || ""),
     password: "",
-    initial: Array.from(String(row?.character_name || "?"))[0] || "?",
+    initial: Array.from(String(row?.character_name || row?.characterName || "?"))[0] || "?",
     note: "초대 테스터 계정",
-    profilePhoto: String(row?.profile_photo || ""),
+    profilePhoto: String(row?.profile_photo || row?.profilePhoto || ""),
     isTestOnly: true,
   });
 
@@ -86,6 +86,23 @@
     return payload;
   }
 
+  async function accountRequest(path, body) {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.ok || !payload?.user?.id) {
+      const error = new Error(payload?.error || `ACCOUNT_${response.status}`);
+      error.code = payload?.error || "UNKNOWN";
+      throw error;
+    }
+    return payload.user;
+  }
+
   function repairCharacter(character, userId) {
     const next = character && typeof character === "object" && !Array.isArray(character)
       ? character : blankCharacter(userId);
@@ -131,63 +148,15 @@
   }
 
   function repairTesterCharacters({ touchCurrent = false } = {}) {
-    if (repairingState || !canRepairSharedWorld()) return false;
-    const oldRaw = persistence.readRaw();
-    let state;
-    try { state = JSON.parse(oldRaw || "null"); } catch { state = null; }
-    if (!state || state.version !== 3) state = blankWorld();
-    state.characters ||= {};
-    state.parties ||= {};
-    state.sessions ||= {};
-    state.itemClaimsByVariant ||= { a: {}, b: {}, c: {}, d: {} };
-    let changed = !oldRaw;
-
-    users.forEach((user, userId) => {
-      const current = hasOwn(state.characters, userId) ? state.characters[userId] : null;
-      const repaired = repairCharacter(current, userId);
-      state.characters[userId] = repaired.character;
-      changed ||= repaired.changed;
-    });
-
-    LEGACY_DEMO_IDS.forEach((legacyId) => {
-      if (!hasOwn(state.characters, legacyId) || legacyIdReferenced(state, legacyId)) return;
-      delete state.characters[legacyId];
-      changed = true;
-    });
-
-    const currentId = currentUserId();
-    if (touchCurrent && currentId && users.has(currentId)) {
-      const character = state.characters[currentId];
-      const now = Date.now();
-      if (!Number.isFinite(Number(character.onlineAt)) || now - Number(character.onlineAt || 0) > 30000) {
-        character.onlineAt = now;
-        changed = true;
-      }
-    }
-    if (!changed) return false;
-
-    const newRaw = JSON.stringify(state);
-    repairingState = true;
-    try { persistence.writeRaw(newRaw); }
-    finally { repairingState = false; }
-    dispatchWorldUpdate(oldRaw, newRaw);
-    return true;
+    void touchCurrent;
+    // Character creation is performed by baekji_player_character_bootstrap_v1
+    // during the authenticated login/signup response. Directory refreshes are
+    // read-only and must never repair the canonical world in the browser.
+    return false;
   }
 
   function ensureCharacter(userId) {
-    repairTesterCharacters();
-    const oldRaw = persistence.readRaw();
-    let state;
-    try { state = JSON.parse(oldRaw || "null"); } catch { state = null; }
-    if (!state || state.version !== 3) state = blankWorld();
-    state.characters ||= {};
-    const current = hasOwn(state.characters, userId) ? state.characters[userId] : null;
-    const repaired = repairCharacter(current, userId);
-    state.characters[userId] = repaired.character;
-    state.characters[userId].onlineAt = Date.now();
-    const newRaw = JSON.stringify(state);
-    persistence.writeRaw(newRaw);
-    dispatchWorldUpdate(oldRaw, newRaw);
+    return Boolean(userId);
   }
 
   function finishLogin(user) {
@@ -196,6 +165,16 @@
     ensureCharacter(user.id);
     window.__BAEKJI_TESTER_REGISTRY_GUARD__?.rememberCurrentTester?.();
     location.hash = "#/home";
+  }
+
+  function adoptPlayerSession(user) {
+    const next = toUser(user);
+    if (!next.id || !next.name) return;
+    install(next);
+    sessionStorage.setItem(USER_KEY, next.id);
+    ensureCharacter(next.id);
+    window.__BAEKJI_TESTER_REGISTRY_GUARD__?.rememberCurrentTester?.();
+    scheduleRefresh();
   }
 
   async function compress(file) {
@@ -268,12 +247,11 @@
       const message = login.querySelector("[data-login-error]");
       if (message) message.textContent = "계정을 확인하고 있습니다…";
       try {
-        const rows = await rpc("baekji_tester_login", {
-          p_character_name: name,
-          p_pin: login.querySelector("[data-login-password]")?.value || "",
+        const user = await accountRequest("/api/tester-login", {
+          characterName: name,
+          pin: login.querySelector("[data-login-password]")?.value || "",
         });
-        if (!rows?.[0]) throw new Error("LOGIN_FAILED");
-        finishLogin(toUser(rows[0]));
+        finishLogin(toUser(user));
       } catch {
         if (message) message.textContent = "캐릭터 이름 또는 비밀번호가 일치하지 않습니다.";
       } finally {
@@ -322,13 +300,12 @@
         if (!name) throw Object.assign(new Error("INVALID_CHARACTER_NAME"), { code: "INVALID_CHARACTER_NAME" });
         if (!/^\d{4}$/.test(pin)) throw Object.assign(new Error("INVALID_PIN"), { code: "INVALID_PIN" });
         const photoData = photo && photo === selectedFile && selectedPhotoData ? selectedPhotoData : await compress(photo);
-        const rows = await rpc("baekji_tester_signup", {
-          p_character_name: name,
-          p_pin: pin,
-          p_profile_photo: photoData,
+        const user = await accountRequest("/api/tester-signup", {
+          characterName: name,
+          pin,
+          profilePhoto: photoData,
         });
-        if (!rows?.[0]) throw new Error("SIGNUP_FAILED");
-        finishLogin(toUser(rows[0]));
+        finishLogin(toUser(user));
         loadDirectory(true).catch(() => {});
       } catch (error) {
         if (message) message.textContent = errorText(error.code || error.message);
@@ -458,6 +435,7 @@
   new MutationObserver(scheduleRefresh).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) scheduleRefresh(); });
   window.addEventListener("baekji-cloud-sync", scheduleRefresh);
+  window.addEventListener("baekji-player-session-adopted", (event) => adoptPlayerSession(event.detail?.user));
   window.addEventListener("baekji-tester-directory-refresh", () => loadDirectory(true).catch((error) => console.warn("[tester-auth]", error)));
 
   loadDirectory(true).catch((error) => console.warn("[tester-auth]", error));

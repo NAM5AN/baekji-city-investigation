@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { createAppServer, resolveRuntimeEnvironment } from "../server.mjs";
+import { generateObservation } from "../api/narrate-observation.mjs";
 
 const registryCalls = [];
 const registryEnvironment = resolveRuntimeEnvironment({}, {
@@ -51,6 +52,10 @@ const mockOpenAI = http.createServer(async (request, response) => {
   };
   const userContent = capturedRequest.body.input.find((item) => item.role === "user")?.content || "{}";
   const userPayload = JSON.parse(userContent);
+  if (capturedRequest.body.text?.format?.name === "field_observation") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    return response.end(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ observation: "테스트 캐릭터 A가 방송 잡음 쪽으로 고개를 기울인다." }) }] }] }));
+  }
   if (capturedRequest.body.text?.format?.name === "action_narration") {
     const narration = userPayload.interpretation?.intent === "LISTEN"
       ? "테스트 캐릭터 A는 방송 잡음에 귀를 기울인다. 치직거리는 숨 사이로 몇 음절이 겹쳐 들리지만 온전한 문장은 잡히지 않는다."
@@ -210,27 +215,17 @@ try {
   assert.equal(listen.sensoryMode, "LISTEN");
   assert.equal(listen.hazardRelevance, "IRRELEVANT");
 
-  const narrationResponse = await fetch(`${aiBase}/api/narrate-action`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Origin": aiBase },
-    body: JSON.stringify({
-      text: "방송 잡음을 듣는다",
-      interpretation: listen,
-      event: { kind: "LISTEN", outcome: "NO_PROGRESS", hazardId: "HZ_TEMP_04", fallback: "테스트 캐릭터 A는 방송 잡음에 귀를 기울인다." },
-      context: { phase: "hazard", currentLocation: "동부 출입구", visibleSituation: "흰 잔상이 통로를 가로지른다.", routes: [], details: [], objects: [], inventory: [], characterStatus: { contamination: 3, symptom: "TRACE" } },
-    }),
-  });
-  assert.equal(narrationResponse.status, 200);
-  const narration = await narrationResponse.json();
-  assert.match(narration.narration, /귀를 기울/);
-  assert.doesNotMatch(narration.narration, /가까이서 보/);
-  assert.equal(capturedRequest.body.text.format.name, "action_narration");
-  assert.ok(JSON.stringify(capturedRequest.body.input).includes("감각 양식"));
+  const observation = await generateObservation({
+    actorName: "테스트 캐릭터 A", actionText: "방송 잡음을 듣는다", fallback: "테스트 캐릭터 A는 방송 잡음에 귀를 기울인다.",
+  }, { env: { OPENAI_API_KEY: "test-key-never-return", OPENAI_MODEL: "test-model", OPENAI_API_BASE_URL: `${mockBase}/v1` }, fetchImpl: fetch });
+  assert.match(observation.observation, /고개를 기울/);
+  assert.equal(capturedRequest.body.text.format.name, "field_observation");
+  assert.ok(!JSON.stringify(observation).includes("test-key-never-return"));
 
   const indexResponse = await fetch(`${aiBase}/`);
   assert.equal(indexResponse.status, 200);
   assert.match(indexResponse.headers.get("content-type"), /text\/html/);
-  assert.match(await indexResponse.text(), /app\.js\?v=0\.4\.15[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/);
+  assert.match(await indexResponse.text(), /app\.js\?v=0\.4\.18[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1[^"']*stage8b=1[^"']*stage8b-b5=1/);
 } finally {
   await close(aiServer);
   await close(mockOpenAI);
@@ -253,13 +248,18 @@ try {
 }
 
 const browserSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const commandApiSource = fs.readFileSync(new URL("../api/index.mjs", import.meta.url), "utf8");
 const runBatch = fs.readFileSync(new URL("../run.bat", import.meta.url), "utf8");
 assert.ok(!browserSource.includes("OPENAI_API_KEY"), "브라우저 번들에 API 키 환경 변수 이름도 포함하지 않습니다.");
 assert.ok(browserSource.includes("/api/interpret-action"));
-assert.ok(browserSource.includes("/api/narrate-action"));
+assert.ok(!browserSource.includes("/api/narrate-action"), "browser action code cannot narrate then write a result itself");
 assert.ok(browserSource.includes("localActionInterpretation"));
 assert.ok(browserSource.includes("requestAIInterpretation(session, text, localInterpretation)"));
 assert.ok(browserSource.includes('return interpretation.intent !== "MAP"'));
+assert.match(commandApiSource, /resolveCharacterInteractionDecision/);
+assert.match(commandApiSource, /resolveFlexibleHazardDecision/);
+assert.match(commandApiSource, /finalizeNewActionObservations/);
+assert.match(commandApiSource, /baekji_player_world_command_commit_v1/);
 assert.ok(!/powershell/i.test(runBatch), "run.bat에는 즉시 종료 원인이 된 중첩 PowerShell 구문이 없어야 합니다.");
 assert.ok(runBatch.includes("goto node_missing"));
 assert.ok(runBatch.includes(":hold"));

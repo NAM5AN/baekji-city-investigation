@@ -4,12 +4,13 @@ import assert from "node:assert/strict";
 
 const source = fs.readFileSync("flexible-hazard-resolution.js", "utf8");
 const values = new Map();
-const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: (key) => values.delete(key) };
+let localWrites = 0;
+const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: () => { localWrites += 1; }, removeItem: () => { localWrites += 1; } };
 const sessionStorage = { getItem: (key) => values.get(`session:${key}`) ?? null, setItem: (key, value) => values.set(`session:${key}`, String(value)), removeItem: (key) => values.delete(`session:${key}`) };
 const listeners = new Map();
 const input = { value: "", disabled: false, matches: (selector) => selector === "[data-chat-input]", dispatchEvent() {} };
 const button = { disabled: false, textContent: "" };
-const commits = [];
+const dispatches = [];
 const document = {
   addEventListener(type, callback) { (listeners.get(type) || listeners.set(type, []).get(type)).push(callback); },
   querySelector(selector) { return selector === "[data-chat-input]" ? input : selector === "[data-send-chat]" ? button : null; },
@@ -27,7 +28,6 @@ const state = {
     },
   },
 };
-localStorage.setItem("baekji_city_mvp_state_v3", JSON.stringify(state));
 sessionStorage.setItem("baekji_city_mvp_current_user_v034", "test_a");
 
 const context = vm.createContext({
@@ -41,14 +41,17 @@ const context = vm.createContext({
 });
 context.window = context;
 context.dispatchEvent = () => true;
+context.__BAEKJI_WORLD_PERSISTENCE__ = { readRaw: () => JSON.stringify(state) };
+context.__BAEKJI_PLAYER_WORLD_COMMANDS__ = {
+  dispatch(command, payload) {
+    dispatches.push({ command, payload });
+    return Promise.resolve({ ok: true, status: "APPLIED", revision: 1, commandId: "cmd-flex" });
+  },
+};
 context.DAY1_DATA = {
   places: { A: { name: "A" }, B: { name: "B" } },
   hazardTemplates: { H1: { name: "H1", kind: "route" }, H2: { name: "H2", kind: "route" } },
 };
-context.__BAEKJI_FLEX_HAZARD_RUNTIME__ = Object.freeze({
-  commitDecision(inputValue) { commits.push(inputValue); return { applied: true }; },
-});
-
 vm.runInContext(source, context, { filename: "flexible-hazard-resolution.js" });
 const api = context.__BAEKJI_FLEX_HAZARD__;
 assert(api, "flex hazard capture API should be exposed");
@@ -66,17 +69,17 @@ const keydown = { type: "keydown", key: "Enter", shiftKey: false, isComposing: f
 document.dispatchEvent(keydown);
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(keydown.defaultPrevented, true, "the actual Enter capture path must intercept slash hazard input");
-assert.equal(commits.length, 1, "the capture layer must delegate exactly one atomic commit to app runtime");
+assert.equal(dispatches.length, 1, "the capture layer must delegate exactly one authoritative command");
 assert.deepEqual({
-  sessionId: commits[0].sessionId,
-  actorId: commits[0].actorId,
-  movementToken: commits[0].movementToken,
-  hazardId: commits[0].hazardId,
-  hazardIndex: commits[0].hazardIndex,
-  action: commits[0].action,
-}, { sessionId: "s1", actorId: "test_a", movementToken: "move-flex", hazardId: "H1", hazardIndex: 0, action: "careful crossing" });
-assert.equal(commits[0].decision.selfExposure, "NONE", "exposure remains independent from the success outcome");
-assert.equal(JSON.parse(localStorage.getItem("baekji_city_mvp_state_v3")).sessions.s1.logs.length, 0, "the capture layer must not mutate world state or append legacy random logs");
+  command: dispatches[0].command,
+  sessionId: dispatches[0].payload.sessionId,
+  movementToken: dispatches[0].payload.movementToken,
+  hazardId: dispatches[0].payload.hazardId,
+  hazardIndex: dispatches[0].payload.hazardIndex,
+  actionText: dispatches[0].payload.actionText,
+}, { command: "RESOLVE_FLEXIBLE_HAZARD_V1", sessionId: "s1", movementToken: "move-flex", hazardId: "H1", hazardIndex: 0, actionText: "careful crossing" });
+assert.equal(input.value, "", "composer clears only after APPLIED/REPLAY");
+assert.equal(localWrites, 0, "the capture layer must not write a local world snapshot");
 assert.equal(api.shouldHandle("/careful crossing", state, "test_a"), true);
 
-console.log("PASS: flexible hazard capture preserves fallbacks and delegates actual slash submission to one atomic movement-token commit");
+console.log("PASS: flexible hazard capture preserves fallbacks and dispatches one server-authoritative movement-token command");

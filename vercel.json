@@ -23,6 +23,7 @@
     { "source": "/api/interpret-transfer", "destination": "/api/interpret-transfer.mjs" },
     { "source": "/api/resolve-hazard-flex", "destination": "/api/resolve-hazard-flex.mjs" },
     { "source": "/api/tester-login", "destination": "/api/index.mjs" },
+    { "source": "/api/tester-signup", "destination": "/api/index.mjs" },
     { "source": "/api/admin-login", "destination": "/api/admin-login.mjs" },
     { "source": "/api/admin-snapshot", "destination": "/api/admin-snapshot.mjs" },
     { "source": "/api/admin-communications", "destination": "/api/admin-communications.mjs" },
@@ -31,6 +32,8 @@
     { "source": "/api/admin-session-ops", "destination": "/api/admin-session-ops.mjs" },
     { "source": "/api/player-presence", "destination": "/api/player-presence.mjs" },
     { "source": "/api/player-admin-system", "destination": "/api/player-admin-system.mjs" },
+    { "source": "/api/player-world-projection", "destination": "/api/index.mjs" },
+    { "source": "/api/player-session", "destination": "/api/index.mjs" },
     { "source": "/api/:path*", "destination": "/api/index.mjs" }
   ],
   "headers": [

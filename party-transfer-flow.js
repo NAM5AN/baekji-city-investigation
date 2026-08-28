@@ -300,17 +300,6 @@
     }
   }
 
-  function writeState(snapshot, reason = "party-transfer") {
-    const oldRaw = persistence.readRaw();
-    const newRaw = JSON.stringify(snapshot);
-    if (oldRaw === newRaw) return false;
-    persistence.writeRaw(newRaw);
-    dispatchStateUpdate(oldRaw, newRaw);
-    window.dispatchEvent(new CustomEvent("baekji-party-transfer", { detail: { reason, version: VERSION } }));
-    scheduleRefresh();
-    return true;
-  }
-
   function root() {
     let node = document.getElementById("party-transfer-root");
     if (!node) {
@@ -451,18 +440,15 @@
     </div>`;
   }
 
-  function submitRequest(targetPartyId) {
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !userId) return;
-    const next = createTransferRequestState(snapshot, userId, targetPartyId, requestId());
-    if (!pendingRequestForUser(next, userId) || pendingRequestForUser(snapshot, userId)) {
-      toast("이동 요청을 만들 수 없습니다.");
-      return;
+  async function submitRequest(targetPartyId) {
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("REQUEST_PARTY_TRANSFER_V1", { targetPartyId });
+      if (!["APPLIED", "REPLAY"].includes(result?.status)) return toast("이동 요청을 만들 수 없습니다.");
+      closeModal();
+      toast(`${partyName(readState() || {}, targetPartyId)} 조장에게 이동 승인을 요청했습니다.`);
+    } catch (error) {
+      toast(error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "이동 요청을 저장하지 못했습니다.");
     }
-    writeState(next, "request");
-    closeModal();
-    toast(`${partyName(next, targetPartyId)} 조장에게 이동 승인을 요청했습니다.`);
   }
 
   function seenStatuses() {
@@ -548,11 +534,6 @@
       let snapshot = readState();
       const userId = currentUserId();
       if (!snapshot || !userId) return;
-      const repaired = repairApprovedTransfers(snapshot);
-      if (repaired.changed) {
-        writeState(repaired.snapshot, "repair-approved-transfer");
-        snapshot = repaired.snapshot;
-      }
       decorateFieldCard(snapshot, userId);
       handleRequesterResolution(snapshot, userId);
       maybeAutoOpenApprovals(snapshot, userId);
@@ -589,7 +570,7 @@
       return;
     }
     const confirm = target.closest("[data-party-transfer-confirm]");
-    if (confirm) return submitRequest(confirm.dataset.partyTransferConfirm);
+    if (confirm) return void submitRequest(confirm.dataset.partyTransferConfirm);
     if (target.closest("[data-party-transfer-open-approvals]")) {
       const snapshot = readState();
       const userId = currentUserId();
@@ -601,25 +582,35 @@
       const snapshot = readState();
       const userId = currentUserId();
       if (!snapshot || !userId) return;
-      const next = approveTransferState(snapshot, approve.dataset.partyTransferApprove, userId);
-      const request = next.partyTransferRequests?.[approve.dataset.partyTransferApprove];
-      if (request?.status !== "APPROVED") {
-        toast("현재 위치나 위험 상태가 바뀌어 아직 승인할 수 없습니다.");
+      try {
+        const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("APPROVE_PARTY_TRANSFER_V1", { requestId: approve.dataset.partyTransferApprove });
+        if (!["APPLIED", "REPLAY"].includes(result?.status)) {
+          toast("현재 위치나 위험 상태가 바뀌어 아직 승인할 수 없습니다.");
+          return renderApprovalModal(snapshot, userId);
+        }
+        const settled = readState();
+        toast("조사조 이동을 승인했습니다.");
+        return renderApprovalModal(settled, userId);
+      } catch (error) {
+        toast(error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "이동 승인을 저장하지 못했습니다.");
         return renderApprovalModal(snapshot, userId);
       }
-      writeState(next, "approve");
-      toast("조사조 이동을 승인했습니다.");
-      return renderApprovalModal(next, userId);
     }
     const reject = target.closest("[data-party-transfer-reject]");
     if (reject) {
       const snapshot = readState();
       const userId = currentUserId();
       if (!snapshot || !userId) return;
-      const next = rejectTransferState(snapshot, reject.dataset.partyTransferReject, userId);
-      writeState(next, "reject");
-      toast("조사조 이동 요청을 거절했습니다.");
-      return renderApprovalModal(next, userId);
+      try {
+        const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("REJECT_PARTY_TRANSFER_V1", { requestId: reject.dataset.partyTransferReject });
+        if (!["APPLIED", "REPLAY"].includes(result?.status)) return renderApprovalModal(snapshot, userId);
+        const settled = readState();
+        toast("조사조 이동 요청을 거절했습니다.");
+        return renderApprovalModal(settled, userId);
+      } catch (error) {
+        toast(error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "이동 거절을 저장하지 못했습니다.");
+        return renderApprovalModal(snapshot, userId);
+      }
     }
   }, true);
 

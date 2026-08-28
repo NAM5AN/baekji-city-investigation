@@ -129,6 +129,8 @@
 
   let enhancementQueued = false;
   let routeSyncing = false;
+  const declineInvitationInFlight = new Set();
+  const acceptInvitationInFlight = new Set();
 
   function readState() {
     try {
@@ -150,16 +152,6 @@
 
   function userLabel(userId) {
     return registeredUserLabel(userId) || { name: userId || "알 수 없는 조사자", initial: "?" };
-  }
-
-  function writeState(snapshot) {
-    persistence.writeRaw(JSON.stringify(snapshot));
-    try {
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    } catch {
-      window.dispatchEvent(new Event("hashchange"));
-    }
-    scheduleEnhancement();
   }
 
   function deferredKey(userId) {
@@ -185,6 +177,17 @@
 
   function clearInvitationModal() {
     document.querySelector(".retro-invite-backdrop[data-party-flow-modal]")?.remove();
+  }
+
+  function showInvitationCommandNotice(message) {
+    const modal = document.querySelector(".retro-invite-backdrop[data-party-flow-modal] .retro-invite-modal");
+    if (!modal) return;
+    modal.querySelector("[data-party-flow-command-notice]")?.remove();
+    const notice = document.createElement("p");
+    notice.dataset.partyFlowCommandNotice = "";
+    notice.className = "muted small";
+    notice.textContent = message;
+    modal.append(notice);
   }
 
   function showInvitationModal(snapshot, userId) {
@@ -259,32 +262,70 @@
     queueMicrotask(enhance);
   }
 
-  function acceptInvitation(partyId) {
+  async function acceptInvitation(partyId) {
     const userId = currentUserId();
-    const snapshot = readState();
-    if (!snapshot || !userId) return;
-    const next = acceptInviteState(snapshot, partyId, userId);
-    if (next.characters?.[userId]?.currentPartyId !== partyId) return;
-    clearDeferredInvite(userId, partyId);
-    clearInvitationModal();
-    persistence.writeRaw(JSON.stringify(next));
-    location.hash = `#/party/${partyId}`;
+    if (!userId || acceptInvitationInFlight.has(partyId)) return;
+    acceptInvitationInFlight.add(partyId);
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("ACCEPT_PARTY_INVITE_V1", { partyId });
+      if (["APPLIED", "NOOP", "REPLAY"].includes(result?.status)) {
+        clearDeferredInvite(userId, partyId);
+        clearInvitationModal();
+        location.hash = `#/party/${partyId}`;
+      } else if (result?.status === "REVISION_CONFLICT") {
+        showInvitationCommandNotice("초대 상태가 변경되었습니다. 최신 상태를 확인한 뒤 다시 시도해 주세요.");
+      } else {
+        showInvitationCommandNotice("초대 상태가 이미 변경되었을 수 있습니다. 최신 상태를 확인해 주세요.");
+      }
+    } catch (error) {
+      if (error?.message === "WORLD_COMMAND_SYNC_NOT_READY") showInvitationCommandNotice("최신 상태를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.");
+      else {
+        console.warn("[party-flow] invitation accept unavailable", error?.message || error);
+        showInvitationCommandNotice("초대 수락을 저장하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
+      }
+    } finally { acceptInvitationInFlight.delete(partyId); }
   }
 
-  function declineInvitation(partyId) {
+  async function declineInvitation(partyId) {
     const userId = currentUserId();
     const snapshot = readState();
     if (!snapshot || !userId) return;
-    clearDeferredInvite(userId, partyId);
-    clearInvitationModal();
-    writeState(declineInviteState(snapshot, partyId, userId));
+    if (declineInvitationInFlight.has(partyId)) return;
+    declineInvitationInFlight.add(partyId);
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("DECLINE_PARTY_INVITE_V1", { partyId });
+      if (["APPLIED", "NOOP", "REPLAY"].includes(result?.status)) {
+        clearDeferredInvite(userId, partyId);
+        clearInvitationModal();
+      } else if (result?.status === "REVISION_CONFLICT") {
+        console.warn("[party-flow] invitation changed; authoritative refresh requested");
+        showInvitationCommandNotice("초대 상태가 변경되었습니다. 최신 상태를 확인한 뒤 다시 시도해 주세요.");
+      } else {
+        console.warn("[party-flow] invitation decline out of scope");
+        showInvitationCommandNotice("초대 상태가 이미 변경되었을 수 있습니다. 최신 상태를 확인해 주세요.");
+      }
+    } catch (error) {
+      if (error?.message === "WORLD_COMMAND_SYNC_NOT_READY") {
+        showInvitationCommandNotice("최신 상태를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      console.warn("[party-flow] invitation decline unavailable", error?.message || error);
+    } finally {
+      declineInvitationInFlight.delete(partyId);
+    }
   }
 
-  function confirmBriefing(sessionId) {
+  async function confirmBriefing(sessionId) {
     const userId = currentUserId();
     const snapshot = readState();
     if (!snapshot || !userId) return;
-    writeState(confirmBriefingState(snapshot, sessionId, userId));
+    const session = snapshot.sessions?.[sessionId];
+    if (!session || session.status !== "BRIEFING" || !unique(session.memberIds).includes(userId)) return;
+    try {
+      await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("CONFIRM_BRIEFING_V1", {});
+    } catch (error) {
+      console.warn("[party-flow] briefing confirmation unavailable", error?.message || error);
+    }
   }
 
   document.addEventListener("click", (event) => {
@@ -302,19 +343,19 @@
       return;
     }
 
-    const acceptButton = target.closest("[data-party-flow-accept], [data-accept]");
+    const acceptButton = target.closest("[data-party-flow-accept]");
     if (acceptButton) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      acceptInvitation(acceptButton.dataset.partyFlowAccept || acceptButton.dataset.accept);
+      void acceptInvitation(acceptButton.dataset.partyFlowAccept);
       return;
     }
 
-    const declineButton = target.closest("[data-party-flow-decline], [data-decline]");
+    const declineButton = target.closest("[data-party-flow-decline]");
     if (declineButton) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      declineInvitation(declineButton.dataset.partyFlowDecline || declineButton.dataset.decline);
+      void declineInvitation(declineButton.dataset.partyFlowDecline);
       return;
     }
 
@@ -322,7 +363,7 @@
     if (confirmButton) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      confirmBriefing(confirmButton.dataset.partyFlowConfirmBriefing);
+      void confirmBriefing(confirmButton.dataset.partyFlowConfirmBriefing);
       return;
     }
 

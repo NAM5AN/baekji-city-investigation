@@ -36,6 +36,8 @@ const local = new Map([[GLOBAL_KEY, JSON.stringify(baseState)]]);
 const session = new Map([[USER_KEY, "leader"]]);
 let warningActive = true;
 let clickHandler = null;
+let canonicalWrites = 0;
+let emittedEvents = 0;
 
 const warning = new FakeElement();
 const modalRoot = {
@@ -71,7 +73,7 @@ const context = vm.createContext({
   requestAnimationFrame(callback) { callback(); return 1; },
   localStorage: {
     getItem(key) { return local.has(key) ? local.get(key) : null; },
-    setItem(key, value) { local.set(key, String(value)); },
+    setItem(key, value) { canonicalWrites += 1; local.set(key, String(value)); },
   },
   sessionStorage: {
     getItem(key) { return session.has(key) ? session.get(key) : null; },
@@ -82,12 +84,32 @@ const context = vm.createContext({
 });
 context.window = context;
 context.addEventListener = (type, handler) => listeners.set(type, handler);
-context.dispatchEvent = () => true;
+context.dispatchEvent = () => { emittedEvents += 1; return true; };
 
 vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
 vm.runInContext(worldPersistence, context, { filename: "world-persistence.js" });
 vm.runInContext(source, context, { filename: "party-leadership-flow.js" });
 assert.equal(typeof clickHandler, "function", "party leadership click handler must be registered");
+let createPosts = 0;
+let settleCreate = null;
+context.__BAEKJI_PLAYER_WORLD_COMMANDS__ = {
+  dispatch(command, payload) {
+    createPosts += 1;
+    assert.equal(command, "CREATE_PARTY_V1", "leadership confirmation owns only the create command");
+    assert.equal(JSON.stringify(payload), "{}", "create command has no client-generated fields");
+    return new Promise((resolve) => {
+      settleCreate = () => {
+        const canonical = JSON.parse(local.get(GLOBAL_KEY));
+        canonical.characters.leader.currentPartyId = "server-party";
+        canonical.parties["server-party"] = {
+          id: "server-party", name: "해오름역 조사조 1", creatorId: "leader", destination: "E", status: "RECRUITING",
+          memberIds: ["leader"], invitedIds: [], declinedIds: [], confirmedBy: [], readyBy: [], sessionId: null, createdAt: 1700000000000,
+        };
+        local.set(GLOBAL_KEY, JSON.stringify(canonical)); resolve({ status: "APPLIED" });
+      };
+    });
+  },
+};
 
 const confirmButton = new FakeElement({ "[data-party-leadership-confirm]": true });
 const confirmEvent = {
@@ -98,13 +120,21 @@ const confirmEvent = {
   stopImmediatePropagation() { this.stopped = true; },
 };
 clickHandler(confirmEvent);
+assert.equal(createPosts, 1, "leader warning confirmation sends exactly one authoritative POST");
+assert.equal(warningActive, true, "warning remains visible until authoritative settlement");
+clickHandler(confirmEvent);
+assert.equal(createPosts, 1, "rapid duplicate warning confirmation is guarded before a second POST");
+settleCreate();
+await new Promise((resolve) => setTimeout(resolve, 0));
 
 const createdState = JSON.parse(local.get(GLOBAL_KEY));
 const partyId = createdState.characters.leader.currentPartyId;
-assert.ok(partyId, "leader confirmation must create a party immediately");
+assert.equal(partyId, "server-party", "leader navigation uses the refreshed canonical party id");
 assert.equal(createdState.parties[partyId]?.creatorId, "leader");
 assert.equal(location.hash, `#/party/${partyId}`, "leader confirmation must navigate to the party page");
 assert.equal(warningActive, false, "leadership warning overlay must be fully removed before navigation");
+assert.equal(canonicalWrites, 0, "leadership confirmation performs no local canonical write");
+assert.equal(emittedEvents, 0, "leadership confirmation emits no local creation event");
 assert.equal(confirmEvent.prevented, true);
 assert.equal(confirmEvent.stopped, true);
 
@@ -147,12 +177,24 @@ const acceptEvent = {
 };
 clickHandler(acceptEvent);
 const acceptedConfirmed = JSON.parse(local.get(GLOBAL_KEY));
-assert.equal(acceptedConfirmed.characters.member.currentPartyId, partyId, "capture click must accept an invite while composition is confirmed");
-assert.ok(acceptedConfirmed.parties[partyId].memberIds.includes("member"));
-assert.ok(!acceptedConfirmed.parties[partyId].invitedIds.includes("member"));
+assert.equal(acceptedConfirmed.characters.member.currentPartyId, null, "B5 leadership capture must not locally accept an invitation");
+assert.ok(!acceptedConfirmed.parties[partyId].memberIds.includes("member"));
+assert.ok(acceptedConfirmed.parties[partyId].invitedIds.includes("member"));
 assert.equal(acceptedConfirmed.parties[partyId].status, "COMPOSITION_CONFIRMED");
-assert.equal(acceptEvent.prevented, true);
-assert.equal(acceptEvent.stopped, true);
+assert.equal(acceptEvent.prevented, false, "B5 leaves acceptance to the authoritative home/modal command owners");
+assert.equal(acceptEvent.stopped, false);
+
+// A rejected command must leave the warning and route untouched. This uses the
+// same installed production click owner after returning to a no-party state.
+const retryState = JSON.parse(JSON.stringify(baseState));
+local.set(GLOBAL_KEY, JSON.stringify(retryState)); session.set(USER_KEY, "leader"); location.hash = "#/home"; warningActive = true;
+context.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch = () => Promise.reject(new Error("offline"));
+const writesBeforeFailure = canonicalWrites; const eventsBeforeFailure = emittedEvents;
+clickHandler(confirmEvent); await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(warningActive, true, "failed create keeps the leadership warning open");
+assert.equal(location.hash, "#/home", "failed create cannot route optimistically");
+assert.equal(canonicalWrites, writesBeforeFailure, "failed create makes no local canonical write");
+assert.equal(emittedEvents, eventsBeforeFailure, "failed create emits no local creation event");
 
 assert.doesNotMatch(source, /new MutationObserver/, "party leadership layer must not use a self-triggering DOM observer");
 console.log("PASS: leader warning clears and navigates; member open is blocked without page lock");

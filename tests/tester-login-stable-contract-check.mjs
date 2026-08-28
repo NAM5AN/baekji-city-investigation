@@ -14,6 +14,7 @@ let submitHandler = null;
 let initialFetchCount = 0;
 let lateFetchCount = 0;
 let reloadCount = 0;
+let localWrites = 0;
 const local = new Map([[GLOBAL_KEY, JSON.stringify({
   version: 3,
   storyDay: 1,
@@ -56,7 +57,7 @@ const context = vm.createContext({
   queueMicrotask(callback) { callback(); },
   localStorage: {
     getItem(key) { return local.has(key) ? local.get(key) : null; },
-    setItem(key, value) { local.set(key, String(value)); },
+    setItem(key, value) { localWrites += 1; local.set(key, String(value)); },
   },
   sessionStorage: {
     getItem(key) { return session.has(key) ? session.get(key) : null; },
@@ -139,7 +140,8 @@ assert.equal(first.message.textContent, "접속 중입니다…");
 assert.equal(session.get(USER_KEY), testerId);
 assert.equal(context.location.hash, "#/home");
 assert.equal(reloadCount, 1, "verified login must force a full document reload instead of an in-page hash render");
-assert.equal(JSON.parse(local.get(GLOBAL_KEY)).characters[testerId]?.id, testerId);
+assert.equal(JSON.parse(local.get(GLOBAL_KEY)).characters[testerId], undefined, "login bootstrap is server-authoritative and must not synthesize a browser character record");
+assert.equal(localWrites, 0, "verified login must not persist a whole-world snapshot before projection refresh");
 const savedProfile = JSON.parse(session.get(SESSION_PROFILE_KEY));
 assert.equal(savedProfile.id, testerId);
 assert.equal(savedProfile.name, "테스트 캐릭터 A");

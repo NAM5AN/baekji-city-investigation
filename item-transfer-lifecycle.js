@@ -20,137 +20,48 @@
       .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
   }
 
-  function appendLog(session, text, offer, decision, reason, visibility = {}) {
-    if (!session) return;
-    if (!Array.isArray(session.logs)) session.logs = [];
-    const audience = visibility.recipientCharacterIds ? "participants" : "observers";
-    const duplicate = session.logs.some((entry) => entry?.itemTransferOfferId === offer.id && entry?.itemTransferDecision === decision && entry?.itemTransferAudience === audience);
-    if (duplicate) return;
-    session.logs.push({
-      id: `item_transfer_${decision.toLowerCase()}_${offer.id}_${session.id}_${audience}`,
-      type: `item-transfer-${decision.toLowerCase()}`,
-      text,
-      actorId: null,
-      at: Date.now(),
-      scopeKey: offer.sourceScopeKey || "",
-      itemTransferOfferId: offer.id,
-      itemTransferDecision: decision,
-      itemTransferReason: reason || "",
-      itemTransferAudience: audience,
-      ...visibility,
-    });
-  }
-
-  function transferSessions(state, offer) {
-    const sourceSession = state?.sessions?.[offer.sourceSessionId] || T.sessionOf(state, offer.giverId);
-    const observerSessions = Object.values(state?.sessions || {}).filter((session) =>
-      session?.status === "ACTIVE" &&
-      session.variant === sourceSession?.variant &&
-      T.scope(session) === offer.sourceScopeKey
-    );
-    const sessions = [
-      state?.sessions?.[offer.sourceSessionId],
-      state?.sessions?.[offer.receiverSessionId],
-      T.sessionOf(state, offer.giverId),
-      T.sessionOf(state, offer.receiverId),
-      ...observerSessions,
-    ].filter(Boolean);
-    return [...new Map(sessions.map((session) => [session.id, session])).values()];
-  }
-
-  function finalizeCancellation(state, offer, reason, resolvedBy = "SYSTEM") {
-    if (!state || !offer || resolution(state, offer.id)) return false;
-    const itemName = offer.itemSnapshot?.displayName || T.display(offer.itemSnapshot || {}) || "물품";
-    const text = resolvedBy === offer.giverId
-      ? `${T.uname(offer.giverId, state)}가 ${T.uname(offer.receiverId, state)}에게 건네려던 ${itemName} ×${offer.quantity} 전달을 취소했다. 물품은 원래 소유자에게 그대로 남았다.`
-      : `${T.uname(offer.giverId, state)}와 ${T.uname(offer.receiverId, state)}가 서로 다른 장소로 이동해 ${itemName} ×${offer.quantity} 전달이 자동 취소됐다. 물품은 원래 소유자에게 그대로 남았다.`;
-
-    const result = {
-      id: `item_transfer_resolution_${offer.id}`,
-      transferId: offer.id,
-      decision: "CANCELLED",
-      receiverId: offer.receiverId,
-      resolvedBy,
-      resolvedAt: Date.now(),
-      reason,
-      version: 1,
-    };
-    (state.itemTransferResolutions || (state.itemTransferResolutions = [])).push(result);
-    transferSessions(state, offer).forEach((session) => {
-      T.transferLogEntries(session, text, "CANCELLED", offer.giverId, offer.receiverId, {
-        scopeKey: offer.sourceScopeKey || "",
-        itemTransferOfferId: offer.id,
-        itemTransferDecision: "CANCELLED",
-      }).forEach((entry) => appendLog(session, entry.text, offer, "CANCELLED", reason, entry));
-    });
-    return true;
-  }
-
-  function cancel(state, transferId, giverId, reason = "보낸 캐릭터가 전달을 취소했다.") {
-    const offer = (state?.itemTransferOffers || []).find((entry) => entry?.id === transferId);
-    if (!offer || offer.giverId !== giverId) return { ok: false, error: "OFFER_NOT_FOUND" };
-    if (resolution(state, transferId)) return { ok: false, error: "ALREADY_RESOLVED" };
-    const changed = finalizeCancellation(state, offer, reason, giverId);
-    return changed ? { ok: true, offer, resolution: resolution(state, transferId) } : { ok: false, error: "CANCEL_FAILED" };
-  }
-
   function colocated(state, offer) {
-    const giverSession = T.sessionOf(state, offer.giverId);
-    const receiverSession = T.sessionOf(state, offer.receiverId);
-    if (!giverSession || !receiverSession) return false;
-    if (giverSession.status !== "ACTIVE" || receiverSession.status !== "ACTIVE") return false;
-    return giverSession.variant === receiverSession.variant && T.scope(giverSession) === T.scope(receiverSession);
-  }
-
-  function reconcile(state) {
-    if (!state) return false;
-    let changed = false;
-    const now = Date.now();
-    unresolvedOffers(state).forEach((offer) => {
-      if (resolution(state, offer.id)) return;
-      if (now >= Number(offer.expiresAt || 0)) {
-        const result = T.resolveOffer(state, offer.id, offer.receiverId, "EXPIRE");
-        if (result.ok) changed = true;
-        return;
-      }
-      if (!colocated(state, offer)) {
-        changed = finalizeCancellation(
-          state,
-          offer,
-          "둘 중 한 명이 전달을 시작한 장소를 벗어났다.",
-          "SYSTEM",
-        ) || changed;
-      }
-    });
-    return changed;
-  }
-
-  function reconcileAndWrite() {
-    const state = UI.read();
-    if (!state || !reconcile(state)) return false;
-    UI.write(state);
-    try { sessionStorage.removeItem("baekji_transfer_held"); } catch { /* 무시 */ }
-    return true;
+    const giverSession = T.sessionOf(state, offer?.giverId);
+    const receiverSession = T.sessionOf(state, offer?.receiverId);
+    return Boolean(
+      giverSession?.status === "ACTIVE"
+      && receiverSession?.status === "ACTIVE"
+      && giverSession.variant === receiverSession.variant
+      && T.scope(giverSession) === T.scope(receiverSession)
+    );
   }
 
   let reconciling = false;
-  function queueReconcile() {
-    if (reconciling) return;
+  async function reconcile() {
+    if (reconciling) return false;
+    const state = UI.read();
+    const actorId = T.uid();
+    if (!state || !actorId) return false;
+    const now = Date.now();
+    const offer = unresolvedOffers(state).find((entry) => (
+      entry.giverId === actorId
+      && (now >= Number(entry.expiresAt || 0) || !colocated(state, entry))
+    ));
+    if (!offer) return false;
     reconciling = true;
-    queueMicrotask(() => {
-      reconciling = false;
-      reconcileAndWrite();
-    });
+    try {
+      const command = now >= Number(offer.expiresAt || 0)
+        ? "EXPIRE_ITEM_TRANSFER_V1"
+        : "CANCEL_ITEM_TRANSFER_V1";
+      const result = await UI.dispatch(command, { transferId: offer.id });
+      return result.status === "APPLIED" || result.status === "REPLAY";
+    } catch { return false; }
+    finally { reconciling = false; }
   }
+
+  function queueReconcile() { queueMicrotask(() => { void reconcile(); }); }
 
   window.BAEKJI_ITEM_TRANSFER_LIFECYCLE = Object.freeze({
     resolution,
     unresolvedOffers,
     outgoing,
-    cancel,
     colocated,
     reconcile,
-    reconcileAndWrite,
   });
 
   window.addEventListener("storage", (event) => {

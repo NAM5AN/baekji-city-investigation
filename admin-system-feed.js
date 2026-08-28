@@ -45,10 +45,6 @@
     return sessionId ? readState()?.sessions?.[sessionId] || null : null;
   }
 
-  function eventSessionIds(event) {
-    return Array.isArray(event?.recipient_session_ids) ? event.recipient_session_ids.map(String) : [];
-  }
-
   function eventTime(event) {
     const value = Date.parse(String(event?.created_at || ""));
     return Number.isFinite(value) ? value : 0;
@@ -61,7 +57,6 @@
   function relevantEvents(sessionId) {
     if (!sessionId) return [];
     return [...events.values()]
-      .filter((event) => eventSessionIds(event).includes(sessionId))
       .sort((a, b) => eventTime(a) - eventTime(b) || Number(a.id || 0) - Number(b.id || 0));
   }
 
@@ -212,7 +207,7 @@
 
     loading = true;
     try {
-      const query = new URLSearchParams({ characterId: userId, after: String(lastId) });
+      const query = new URLSearchParams({ after: String(lastId) });
       const response = await fetch(`${API_URL}?${query}`, { method: "GET", cache: "no-store", credentials: "same-origin" });
       const data = await response.json().catch(() => ({}));
       if (response.ok && data?.ok) {
@@ -237,7 +232,6 @@
   window.addEventListener("hashchange", scheduleInject);
 
   window.__BAEKJI_ADMIN_SYSTEM_FEED_TEST__ = Object.freeze({
-    eventSessionIds,
     eventTime,
     senderLabel,
     mergeIncoming,

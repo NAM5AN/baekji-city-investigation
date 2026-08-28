@@ -3,9 +3,6 @@
 
   if (window.__BAEKJI_TESTER_SIGNUP_COMPLETE__) return;
 
-  const SUPABASE_URL = "https://kfgtvifupumjuewwxzmz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_KROAv1c1eX3wlEt8Mog8OQ_jNTMJzoM";
-  const USER_KEY = "baekji_city_mvp_current_user_v034";
   let busy = false;
   let modal = null;
   let refreshQueued = false;
@@ -22,28 +19,28 @@
   }
 
   async function signup(name, pin, photoData) {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/baekji_tester_signup`, {
+    const response = await fetch("/api/tester-signup", {
       method: "POST",
       headers: {
-        apikey: SUPABASE_KEY,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify({
-        p_character_name: name,
-        p_pin: pin,
-        p_profile_photo: photoData,
+        characterName: name,
+        pin,
+        profilePhoto: photoData,
       }),
       cache: "no-store",
+      credentials: "same-origin",
     });
-    const payload = await response.json().catch(() => null);
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(payload?.message || `RPC_${response.status}`);
-      error.code = payload?.message || "UNKNOWN";
+      const error = new Error(payload?.error || `SIGNUP_${response.status}`);
+      error.code = payload?.error || "UNKNOWN";
       throw error;
     }
-    if (!payload?.[0]) throw Object.assign(new Error("SIGNUP_FAILED"), { code: "SIGNUP_FAILED" });
-    return payload[0];
+    if (!payload?.ok || !payload?.user?.id) throw Object.assign(new Error("SIGNUP_FAILED"), { code: "SIGNUP_FAILED" });
+    return payload.user;
   }
 
   function fileToDataUrl(file) {
@@ -84,8 +81,8 @@
             <strong data-signup-complete-name></strong>
           </div>
         </div>
-        <p class="tester-signup-complete__notice">등록한 캐릭터 이름과 비밀번호로 로그인해 주세요.</p>
-        <button type="button" class="button primary block" data-signup-complete-login>확인</button>
+        <p class="tester-signup-complete__notice">가입한 캐릭터로 바로 조사를 시작할 수 있습니다.</p>
+        <button type="button" class="button primary block" data-signup-complete-login>조사 홈으로</button>
       </section>`;
     (document.querySelector("#modal-root") || document.body).append(modal);
     modal.querySelector("[data-signup-complete-login]")?.addEventListener("click", finishCompletion);
@@ -112,21 +109,13 @@
 
   function finishCompletion() {
     if (!modal || modal.hidden) return;
-    const name = String(modal.dataset.characterName || "");
     modal.hidden = true;
     document.body.classList.remove("tester-signup-complete-open");
     const card = document.querySelector("[data-tester-card]");
     if (card) card.hidden = true;
     resetSignupForm();
 
-    const loginId = document.querySelector("[data-login-id]");
-    const loginPassword = document.querySelector("[data-login-password]");
-    const loginError = document.querySelector("[data-login-error]");
-    if (loginId) loginId.value = name;
-    if (loginPassword) loginPassword.value = "";
-    if (loginError) loginError.textContent = "";
-    loginPassword?.focus?.();
-    document.querySelector("[data-login-form]")?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    location.hash = "#/home";
   }
 
   function showCompletion({ name, photo }) {
@@ -177,11 +166,12 @@
       if (!/^\d{4}$/.test(pin)) throw Object.assign(new Error("INVALID_PIN"), { code: "INVALID_PIN" });
       const photoData = await photoDataFromForm(form);
       const row = await signup(name, pin, photoData);
-      const finalName = String(row?.character_name || name);
-      const finalPhoto = String(row?.profile_photo || photoData);
+      const finalName = String(row?.characterName || name);
+      const finalPhoto = String(row?.profilePhoto || photoData);
 
-      sessionStorage.removeItem(USER_KEY);
-      if (location.hash === "#/home") location.hash = "#/login";
+      const session = window.__BAEKJI_PLAYER_SESSION_BOOTSTRAP__;
+      const adopted = await session?.refresh?.();
+      if (!adopted) throw Object.assign(new Error("SIGNUP_SESSION_FAILED"), { code: "SIGNUP_FAILED" });
       if (message) message.textContent = "";
       window.dispatchEvent(new Event("baekji-tester-directory-refresh"));
       showCompletion({ name: finalName, photo: finalPhoto });

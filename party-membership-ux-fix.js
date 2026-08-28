@@ -9,10 +9,9 @@
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
-  const JOIN_INTENT_KEY = "baekji_city_party_join_intent_v1";
   const NOTICE_SEEN_KEY_PREFIX = "baekji_city_party_membership_notice_seen_v1:";
   const STYLE_ID = "baekji-party-membership-ux-style";
-  const VERSION = "0.3.87";
+  const VERSION = "0.3.89";
   const DEMO_NAMES = {
     test_a: "테스트 캐릭터 A",
     test_b: "테스트 캐릭터 B",
@@ -237,17 +236,6 @@
     window.dispatchEvent(new CustomEvent("baekji-party-membership", { detail: { reason, version: VERSION } }));
   }
 
-  function writeState(snapshot, reason = "party-membership") {
-    if (!snapshot?.version) return false;
-    const oldRaw = persistence.readRaw();
-    const newRaw = JSON.stringify(snapshot);
-    if (oldRaw === newRaw) return false;
-    persistence.writeRaw(newRaw);
-    dispatchStateUpdate(oldRaw, newRaw, reason);
-    scheduleRefresh();
-    return true;
-  }
-
   function forceRouteRefresh() {
     try { window.dispatchEvent(new HashChangeEvent("hashchange")); }
     catch { window.dispatchEvent(new Event("hashchange")); }
@@ -270,34 +258,6 @@
       @media(max-width:520px){.party-roster-member[data-party-membership-row]{grid-template-columns:50px minmax(0,1fr);}.party-roster-member[data-party-membership-row] .party-roster-self-leave{grid-column:1/-1;width:100%}.party-membership-backdrop{padding:14px}.party-membership-modal{padding:18px}.party-membership-actions{display:grid;grid-template-columns:1fr 1fr}.party-membership-actions .button{min-width:0}}
     `;
     document.head.appendChild(style);
-  }
-
-  function rememberJoinIntent(partyId) {
-    const userId = currentUserId();
-    if (!partyId || !userId) return;
-    sessionStorage.setItem(JOIN_INTENT_KEY, JSON.stringify({ partyId, userId, at: Date.now() }));
-  }
-
-  function readJoinIntent() {
-    try {
-      const value = JSON.parse(sessionStorage.getItem(JOIN_INTENT_KEY) || "null");
-      if (!value?.partyId || !value?.userId || Date.now() - Number(value.at || 0) > 15000) return null;
-      return value;
-    } catch {
-      return null;
-    }
-  }
-
-  function applyJoinIntent(snapshot, userId) {
-    const intent = readJoinIntent();
-    if (!intent || intent.userId !== userId) return snapshot;
-    const party = snapshot?.parties?.[intent.partyId];
-    const joined = party && unique(party.memberIds).includes(userId) && snapshot.characters?.[userId]?.currentPartyId === intent.partyId;
-    if (!joined) return snapshot;
-    const next = markMemberJoinedState(snapshot, intent.partyId, userId, Math.max(Number(intent.at || 0), Date.now()));
-    sessionStorage.removeItem(JOIN_INTENT_KEY);
-    if (JSON.stringify(next) !== JSON.stringify(snapshot)) writeState(next, "join-stamp");
-    return next;
   }
 
   function decorateLeaderParticipants(snapshot, userId) {
@@ -462,7 +422,7 @@
       </div>`;
   }
 
-  function performRemoval(partyId, memberId, mode, memberName = "") {
+  async function performRemoval(partyId, memberId, mode, memberName = "") {
     const snapshot = readState();
     const userId = currentUserId();
     if (!snapshot || !userId) return false;
@@ -472,42 +432,27 @@
     const isKick = mode === "kick" && party.creatorId === userId && party.creatorId !== memberId;
     if (!isSelf && !isKick) return false;
 
-    const next = removeMemberState(snapshot, partyId, memberId, userId, Date.now(), memberName);
-    if (JSON.stringify(next) === JSON.stringify(snapshot)) return false;
+    const command = isSelf ? "LEAVE_PARTY_V1" : "REMOVE_PARTY_MEMBER_V1";
+    const payload = isSelf ? { partyId } : { partyId, memberId };
+    let result;
+    try {
+      result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch(command, payload);
+    } catch {
+      return false;
+    }
+    if (!["APPLIED", "REPLAY"].includes(result?.status)) return false;
     clearMembershipModal();
     document.querySelector("[data-party-roster-modal]")?.remove();
-    writeState(next, isSelf ? "self-leave" : "leader-kick");
     forceRouteRefresh();
     setTimeout(scheduleRefresh, 32);
     return true;
   }
 
-  function stampReinvite(memberId) {
-    const [page, partyId] = routeParts();
-    if (page !== "party" || !partyId || !memberId) return false;
-    const snapshot = readState();
-    const party = snapshot?.parties?.[partyId];
-    if (!party || !unique(party.invitedIds).includes(memberId)) return false;
-    const next = markReinviteState(snapshot, partyId, memberId, Date.now());
-    if (JSON.stringify(next) === JSON.stringify(snapshot)) return false;
-    return writeState(next, "reinvite-stamp");
-  }
-
   function refresh() {
     refreshQueued = false;
-    if (repairing) return;
-    let snapshot = readState();
+    const snapshot = readState();
     const userId = currentUserId();
     if (!snapshot || !userId) return;
-
-    snapshot = applyJoinIntent(snapshot, userId);
-    const repaired = repairMembershipRemovals(snapshot);
-    if (repaired.changed) {
-      repairing = true;
-      try { writeState(repaired.snapshot, "membership-repair"); }
-      finally { repairing = false; }
-      snapshot = repaired.snapshot;
-    }
 
     ensureStyle();
     decorateLeaderParticipants(snapshot, userId);
@@ -521,15 +466,6 @@
     refreshQueued = true;
     setTimeout(refresh, 16);
   }
-
-  window.addEventListener("click", (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
-    const accept = target.closest("[data-party-flow-accept], [data-accept]");
-    if (accept) rememberJoinIntent(accept.dataset.partyFlowAccept || accept.dataset.accept);
-    const invite = target.closest("[data-invite]");
-    if (invite) setTimeout(() => stampReinvite(invite.dataset.invite), 0);
-  }, true);
 
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;

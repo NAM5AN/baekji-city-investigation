@@ -23,8 +23,9 @@ const playerDirectRuntimeFiles = [
   "party-transfer-runtime-fix.js",
   "tester-auth.js",
   "tester-party-profile-sync.js",
-  "tester-signup-complete.js",
 ];
+const playerApiBrowserClients = ["tester-signup-complete.js"];
+const playerSessionApiRuntimeFiles = ["api/player-admin-system.mjs", "api/player-presence.mjs", "api/index.mjs"];
 const browserEntryPages = ["index.html", "admin-dashboard.html"];
 const apiRuntimeFiles = [
   "api/admin-audit.mjs",
@@ -34,8 +35,6 @@ const apiRuntimeFiles = [
   "api/admin-session-ops.mjs",
   "api/admin-snapshot.mjs",
   "api/index.mjs",
-  "api/player-admin-system.mjs",
-  "api/player-presence.mjs",
 ];
 const serverRuntimeFiles = [
   "server.mjs",
@@ -209,11 +208,22 @@ for (const file of runtimeAndConfigFiles) {
   }
 }
 
-for (const file of playerDirectRuntimeFiles) {
+for (const file of [
+  "cloud-state-sync.js",
+  "character-interaction-ai.js",
+  "cross-party-hazard-interaction.js",
+  "flexible-hazard-resolution.js",
+  "party-transfer-flow.js",
+]) {
   const source = read(file);
-  if (!source.includes(canonicalUrl) || !source.includes(canonicalKey)) {
-    throw new Error(`${file} does not directly target the canonical Supabase backend`);
-  }
+  assert.doesNotMatch(source, /rest\/v1\/rpc\/(?:baekji_mvp_(?:get_state|get_revision|put_state)|baekji_player_world_command_commit_v1)/, `${file} must not bypass the server-authoritative player-world boundary`);
+}
+const cloudSource = read("cloud-state-sync.js");
+assert.match(cloudSource, /\/api\/player-world-projection/);
+assert.doesNotMatch(cloudSource, new RegExp(`${canonicalUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|${canonicalKey}`), "browser projection sync must not carry a Supabase credential or endpoint");
+for (const file of playerApiBrowserClients) {
+  assert.match(read(file), /\/api\/tester-signup/, `${file} must use the same-origin player signup boundary`);
+  assert.doesNotMatch(read(file), /rest\/v1\/rpc\//, `${file} must not bypass the player signup boundary`);
 }
 
 const browserAuthorizationViolations = browserRuntimeFiles()
@@ -224,16 +234,26 @@ if (browserAuthorizationViolations.length) {
 }
 
 const serverAuthorizationViolations = serverRuntimeFiles
+  .filter((file) => file !== "api/_player-auth.mjs")
   .filter((file) => isSupabaseDataApiServerClient(read(file)))
   .filter((file) => hasPublishableSupabaseBearerHeader(read(file)));
 if (serverAuthorizationViolations.length) {
   throw new Error(`server-side Supabase Data API calls must not send publishable keys as Authorization Bearer (${serverAuthorizationViolations.join(", ")})`);
 }
+const playerAuth = read("api/_player-auth.mjs");
+assert.match(playerAuth, /SUPABASE_SECRET_KEY/);
+assert.doesNotMatch(playerAuth, /SUPABASE_PUBLISHABLE_KEY \|\| env\.SUPABASE_ANON_KEY/);
+assert.match(playerAuth, /isLegacyServiceRole \? \{ Authorization: `Bearer \$\{key\}` \} : \{\}/);
 
 for (const file of apiRuntimeFiles) {
-  if (!read(file).includes(canonicalUrl)) {
-    throw new Error(`${file} does not directly target the canonical Supabase backend`);
-  }
+  const source = read(file);
+  assert.ok(
+    source.includes(canonicalUrl) || source.includes('from "./_player-auth.mjs"') || source.includes('from "./admin-snapshot.mjs"'),
+    `${file} must use the canonical backend itself or a server-side canonical client`,
+  );
+}
+for (const file of playerSessionApiRuntimeFiles) {
+  assert.match(read(file), /from "\.\/\_player-auth\.mjs"/, `${file} must use the shared player-session authorization boundary`);
 }
 
 const csp = vercel.headers?.flatMap((entry) => entry.headers || [])

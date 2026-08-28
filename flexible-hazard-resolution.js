@@ -3,6 +3,7 @@
 
   const DATA = window.DAY1_DATA;
   if (!DATA || window.__BAEKJI_FLEX_HAZARD__) return;
+  const persistence = window.__BAEKJI_WORLD_PERSISTENCE__;
 
   const GLOBAL_KEY = "baekji_city_mvp_state_v3";
   const USER_KEY = "baekji_city_mvp_current_user_v034";
@@ -18,7 +19,7 @@
   let resolving = false;
 
   function readState() {
-    try { return JSON.parse(localStorage.getItem(GLOBAL_KEY) || "null"); }
+    try { return JSON.parse(persistence?.readRaw?.() || "null"); }
     catch { return null; }
   }
 
@@ -163,24 +164,10 @@
     };
   }
 
-  async function resolveWithAI(context, fallback) {
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
-    const timeout = controller ? setTimeout(() => controller.abort(), 16000) : null;
-    try {
-      const response = await fetch("/api/resolve-hazard-flex", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(context),
-        cache: "no-store",
-        signal: controller?.signal,
-      });
-      if (!response.ok) throw new Error(`FLEX_HAZARD_${response.status}`);
-      return normalizeDecision(await response.json(), fallback);
-    } catch {
-      return fallback;
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
+  async function resolveWithAI(payload) {
+    const commands = window.__BAEKJI_PLAYER_WORLD_COMMANDS__;
+    if (!commands?.dispatch) throw new Error("PLAYER_WORLD_COMMANDS_UNAVAILABLE");
+    return commands.dispatch("RESOLVE_FLEXIBLE_HAZARD_V1", payload);
   }
 
   function clearComposer() {
@@ -224,30 +211,22 @@
       : "";
     const hazardIndex = encounter.currentIndex;
     const hazardId = encounter.hazards[hazardIndex];
-    const runtime = window.__BAEKJI_FLEX_HAZARD_RUNTIME__;
-    if (!movementToken || typeof runtime?.commitDecision !== "function") return false;
+    if (!movementToken) return false;
 
     resolving = true;
     setPending(true);
     try {
       const cleanAction = action.replace(/^\/+/, "").trim();
-      const fallback = fallbackDecision(cleanAction, session.activeEncounter.hazards.length - session.activeEncounter.currentIndex, session, uid);
-      const context = hazardContext(snapshot, session, uid, cleanAction);
-      const decision = await resolveWithAI(context, fallback);
-
-      const result = runtime.commitDecision({
+      const result = await resolveWithAI({
         sessionId,
-        actorId: uid,
         movementToken,
         hazardId,
         hazardIndex,
-        action: cleanAction,
-        decision,
-        targetId: resolvePartyTargetId(session, uid, decision.targetName),
+        actionText: cleanAction,
       });
-      if (!result?.applied) return true;
+      if (result?.status !== "APPLIED" && result?.status !== "REPLAY") return true;
       clearComposer();
-      window.dispatchEvent(new CustomEvent("baekji-flex-hazard-resolved", { detail: { sessionId, decision } }));
+      window.dispatchEvent(new CustomEvent("baekji-flex-hazard-resolved", { detail: { sessionId } }));
       return true;
     } finally {
       resolving = false;

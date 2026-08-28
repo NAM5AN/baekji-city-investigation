@@ -161,63 +161,67 @@
     window.dispatchEvent(new CustomEvent("baekji-party-preflight-flow", { detail: { reason, version: VERSION } }));
   }
 
-  function writeState(snapshot, reason) {
-    if (!snapshot?.version) return false;
-    const oldRaw = persistence.readRaw();
-    const newRaw = JSON.stringify(snapshot);
-    if (oldRaw === newRaw) return false;
-    persistence.writeRaw(newRaw);
-    dispatchStateUpdate(oldRaw, newRaw, reason);
-    return true;
+  const preflightReadyInFlight = new Set();
+  async function togglePreflightReady(partyId, control = null) {
+    const key = String(partyId || "");
+    if (!key || preflightReadyInFlight.has(key)) return false;
+    preflightReadyInFlight.add(key);
+    control?.setAttribute?.("aria-busy", "true");
+    if (control && "disabled" in control) control.disabled = true;
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("TOGGLE_PARTY_READY_V1", { partyId });
+      if (!["APPLIED", "REPLAY"].includes(result?.status)) {
+        control?.setAttribute?.("data-ready-command-error", String(result?.status || "OUT_OF_SCOPE"));
+        return false;
+      }
+      return true;
+    } catch (error) {
+      control?.setAttribute?.("data-ready-command-error", error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "SYNC_NOT_READY" : "UNAVAILABLE");
+      return false;
+    } finally {
+      preflightReadyInFlight.delete(key);
+      control?.removeAttribute?.("aria-busy");
+      if (control && "disabled" in control) control.disabled = false;
+    }
   }
 
-  function togglePreflightReady(partyId) {
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !partyId || !userId) return false;
-    const before = snapshot.parties?.[partyId];
-    const next = togglePreflightReadyState(snapshot, partyId, userId, Date.now());
-    const after = next.parties?.[partyId];
-    if (!before || !after || effectiveReady(before, userId) === effectiveReady(after, userId)) return false;
-    return writeState(next, "preflight-ready-toggle");
+  const compositionLockInFlight = new Set();
+  async function lockComposition(partyId, control = null) {
+    const key = String(partyId || "");
+    if (!key || compositionLockInFlight.has(key)) return false;
+    compositionLockInFlight.add(key);
+    control?.setAttribute?.("aria-busy", "true");
+    if (control && "disabled" in control) control.disabled = true;
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("LOCK_PARTY_COMPOSITION_V1", { partyId });
+      if (!["APPLIED", "REPLAY"].includes(result?.status)) {
+        control?.setAttribute?.("data-composition-lock-command-error", String(result?.status || "OUT_OF_SCOPE"));
+        return false;
+      }
+      return true;
+    } catch (error) {
+      control?.setAttribute?.("data-composition-lock-command-error", error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "SYNC_NOT_READY" : "UNAVAILABLE");
+      return false;
+    } finally {
+      compositionLockInFlight.delete(key);
+      control?.removeAttribute?.("aria-busy");
+      if (control && "disabled" in control) control.disabled = false;
+    }
   }
 
-  function lockComposition(partyId) {
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !partyId || !userId) return false;
-    const next = lockCompositionPreserveReadyState(snapshot, partyId, userId, Date.now());
-    if (next.parties?.[partyId]?.status !== "COMPOSITION_CONFIRMED") return false;
-    return writeState(next, "composition-lock-preserve-ready");
+  async function reopenRecruiting(partyId) {
+    if (!partyId) return false;
+    const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("REOPEN_PARTY_RECRUITING_V1", { partyId });
+    return ["APPLIED", "REPLAY"].includes(result?.status);
   }
 
-  function reopenRecruiting(partyId) {
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !partyId || !userId) return false;
-    const next = reopenRecruitingPreserveReadyState(snapshot, partyId, userId, Date.now());
-    if (next.parties?.[partyId]?.status !== "RECRUITING") return false;
-    return writeState(next, "composition-back-recruiting-preserve-ready");
-  }
+  function backToComposition() { return false; }
 
-  function backToComposition(partyId) {
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !partyId || !userId) return false;
-    const next = backToCompositionState(snapshot, partyId, userId, Date.now());
-    if (next.parties?.[partyId]?.status !== "COMPOSITION_CONFIRMED") return false;
-    return writeState(next, "ready-back-composition");
-  }
-
-  function rollbackBriefing(sessionId) {
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !sessionId || !userId) return false;
-    const session = snapshot.sessions?.[sessionId];
-    const partyId = session?.partyId;
-    const next = rollbackBriefingState(snapshot, sessionId, userId, Date.now());
-    if (!partyId || next.sessions?.[sessionId] || next.parties?.[partyId]?.sessionId) return false;
-    if (!writeState(next, "briefing-back-ready")) return false;
+  async function rollbackBriefing(sessionId) {
+    const partyId = readState()?.sessions?.[sessionId]?.partyId;
+    if (!partyId || !sessionId) return false;
+    const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("ROLLBACK_BRIEFING_V1", { sessionId });
+    if (!["APPLIED", "REPLAY"].includes(result?.status)) return false;
     location.hash = `#/party/${partyId}`;
     return true;
   }
@@ -230,7 +234,7 @@
     if (preflightReady) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      togglePreflightReady(preflightReady.dataset.preflightMemberReady);
+      togglePreflightReady(preflightReady.dataset.preflightMemberReady, preflightReady);
       return;
     }
 
@@ -242,7 +246,7 @@
       if (partyId && snapshot?.parties?.[partyId]?.creatorId === userId && snapshot.parties[partyId].status === "RECRUITING") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        lockComposition(partyId);
+        lockComposition(partyId, lock);
         return;
       }
     }
@@ -251,7 +255,7 @@
     if (backRecruiting) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      reopenRecruiting(backRecruiting.dataset.partyFlowBackRecruiting);
+      void reopenRecruiting(backRecruiting.dataset.partyFlowBackRecruiting);
       return;
     }
 
@@ -267,7 +271,7 @@
     if (briefingBack) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      rollbackBriefing(briefingBack.dataset.partyPreflightBriefingBack);
+      void rollbackBriefing(briefingBack.dataset.partyPreflightBriefingBack);
     }
   }, true);
 
