@@ -5,7 +5,7 @@ const migration = fs.readFileSync(new URL("../supabase/migrations/20260828055833
 const privacyCorrection = fs.readFileSync(new URL("../supabase/migrations/20260828062555_player_world_projection_variant_scope.sql", import.meta.url), "utf8");
 const api = fs.readFileSync(new URL("../server/player-world-projection-handler.mjs", import.meta.url), "utf8");
 const apiRouter = fs.readFileSync(new URL("../api/index.mjs", import.meta.url), "utf8");
-const vercel = fs.readFileSync(new URL("../vercel.json", import.meta.url), "utf8");
+const vercel = JSON.parse(fs.readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
 
 assert.match(migration, /create or replace function public\.baekji_player_world_projection_v1\(p_session_token text\)/i);
 assert.match(migration, /security invoker\s+set search_path = public, extensions/i, "projection must use caller privileges and a fixed search path");
@@ -46,6 +46,6 @@ assert.match(api, /Cache-Control", "no-store"/);
 assert.match(api, /actorId: verified\.identity\.characterId/, "response must identify the server-verified actor for multitab validation");
 assert.match(apiRouter, /import \{ playerWorldProjectionHandler \} from "\.\.\/server\/player-world-projection-handler\.mjs"/);
 assert.match(apiRouter, /url\.pathname === "\/api\/player-world-projection"/, "the authenticated API router must own the projection route");
-assert.match(vercel, /"source": "\/api\/player-world-projection", "destination": "\/api\/index\.mjs"/, "the deployed rewrite must preserve the authenticated router boundary");
+assert.ok(vercel.rewrites?.some((rule) => rule.source === "/api/player-world-projection" && rule.destination === "/api/index.mjs"), "the deployed rewrite must preserve the authenticated router boundary");
 
 console.log("PASS: player projection SQL is actor-bound, sparse, and service-role-only");
