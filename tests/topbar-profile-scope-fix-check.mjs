@@ -14,7 +14,7 @@ assert.doesNotMatch(auth, /querySelectorAll\("\.topbar-meta \.badge"\)/);
 assert.match(css, /\.topbar-meta \.tester-profile-avatar\{display:none!important\}/);
 assert.match(css, /\.topbar-meta \[data-current-user-badge\]>\.tester-profile-avatar\{display:inline-block!important\}/);
 assert.match(index, /topbar-profile-scope-fix\.css\?v=0\.3\.83/);
-assert.match(index, /tester-auth\.js\?v=0\.3\.89&stage6b=1/);
+assert.match(index, /tester-auth\.js\?v=0\.3\.90&stage6b=1&stage8b=1/);
 assert.match(index, /app\.js[^"\n]+topbar=1/);
 
 console.log("PASS: investigation topbar keeps only day and map controls, with profile photos scoped to the current user");

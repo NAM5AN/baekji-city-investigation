@@ -11,8 +11,8 @@ assert.match(source, /queueMicrotask/, "same-turn raw writes must coalesce their
 assert.match(app, /persistence\.subscribe\(/, "app must consume adapter same-tab raw ingress rather than relying only on native storage events");
 assert.match(app, /window\.addEventListener\("storage"/, "app must retain native cross-tab storage ingress");
 assert.doesNotMatch(app, /localStorage\.(?:getItem|setItem)\(GLOBAL_KEY/, "canonical world reads/writes must stay behind persistence");
-assert.match(index, /world-persistence\.js\?v=0\.1\.1&stage6a=1&stage6b=1/);
-assert.match(index, /app\.js\?v=0\.4\.15[^"']*stage5-world-store=1[^"']*stage6a=1[^"']*stage6b=1/);
+assert.match(index, /world-persistence\.js\?v=0\.1\.2&stage8b-projection=1/);
+assert.match(index, /app\.js\?v=0\.4\.18[^"']*stage5-world-store=1[^"']*stage6a=1[^"']*stage6b=1[^"']*stage8b=1[^"']*stage8b-b5=1/);
 
 function makeStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
@@ -36,7 +36,7 @@ vm.runInContext(source, context, { filename: "world-persistence.js" });
 const api = window.__BAEKJI_WORLD_PERSISTENCE__;
 
 assert.equal(Object.isFrozen(api), true, "public persistence API must be immutable");
-assert.deepEqual(Object.keys(api).sort(), ["key", "readRaw", "subscribe", "writeRaw"], "public persistence API must expose only its canonical raw writer/ingress surface");
+assert.deepEqual(Object.keys(api).sort(), ["clearRemoteRaw", "isRemoteActive", "key", "readRaw", "replaceRemoteRaw", "subscribe", "writeRaw"], "public persistence API must expose raw local ingress plus explicit in-memory projection replacement");
 assert.equal(api.key, "baekji_city_mvp_state_v3");
 
 const received = [];

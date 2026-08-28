@@ -137,56 +137,8 @@ assert.throws(() => applyOperation(placed.state, {
 }, "missing-placement"), /ADMIN_FIELD_ITEM_PLACEMENT_NOT_FOUND/);
 
 const cloudSource = fs.readFileSync(new URL("../cloud-state-sync.js", import.meta.url), "utf8");
-class Storage { getItem() { return null; } setItem() {} removeItem() {} }
-const cloudWindow = { addEventListener() {}, dispatchEvent() {} };
-const cloudContext = vm.createContext({
-  window: cloudWindow,
-  document: { hidden: false, documentElement: { dataset: {} }, addEventListener() {} },
-  Storage,
-  localStorage: new Storage(),
-  sessionStorage: new Storage(),
-  CustomEvent: class {}, Event: class {}, StorageEvent: class {}, AbortController,
-  setTimeout: () => 0, clearTimeout() {},
-  fetch: async () => ({ ok: true, status: 200, json: async () => [] }),
-  console, Date, Math, JSON, Object, Array, Number, String, Boolean, Set, Map,
-});
-cloudContext.globalThis = cloudContext;
-vm.runInContext(cloudSource, cloudContext, { filename: "cloud-state-sync.js" });
-const cloudApi = cloudWindow.__BAEKJI_CLOUD_SYNC_TEST__;
-
-const recallReplay = placed.state;
-cloudApi.applyAdminControlPatch(recallReplay, recalled.patch);
-assert.deepEqual(JSON.parse(JSON.stringify(recallReplay.characters.test_a.inventory.pen)), item, "stale tab replays recall inventory restoration");
-assert.equal(recallReplay.fieldItemPlacementClaimsByVariant.c[placementId].adminRecalled, true, "stale tab replays the recall tombstone");
-
-const deleteReplay = deletedPlaced.state;
-cloudApi.applyAdminControlPatch(deleteReplay, deleted.patch);
-assert.equal(deleteReplay.fieldItemPlacementClaimsByVariant.c[deletedPlacementId].adminDeleted, true, "stale tab replays the delete tombstone");
-assert.deepEqual(deleteReplay.characters.test_a.inventory, {});
-
-const staleDeletePickup = structuredClone(deletedPlaced.state);
-staleDeletePickup.fieldItemPlacementClaimsByVariant.c[deletedPlacementId] = {
-  placementId: deletedPlacementId, characterId: "test_b", targetInventoryKey: "picked-delete", sessionId: "s-delete", claimedAt: 2099,
-};
-staleDeletePickup.characters.test_b.inventory["picked-delete"] = { ...structuredClone(item), itemId: "picked-delete", _fieldPlacementId: deletedPlacementId };
-const convergedDelete = cloudApi.reconcileFieldItemPlacements(deleted.state, staleDeletePickup, cloudApi.mergeValues(deleted.state, staleDeletePickup));
-assert.equal(convergedDelete.fieldItemPlacementClaimsByVariant.c[deletedPlacementId].adminDeleted, true, "admin delete tombstone defeats a stale pickup");
-assert.equal(convergedDelete.characters.test_b.inventory["picked-delete"], undefined, "stale picked copy is removed after admin delete wins");
-
-const staleUnclaimed = placed.state;
-const convergedRecall = cloudApi.reconcileFieldItemPlacements(recalled.state, staleUnclaimed, cloudApi.mergeValues(recalled.state, staleUnclaimed));
-assert.equal(convergedRecall.fieldItemPlacementClaimsByVariant.c[placementId].adminRecalled, true, "remote admin recall defeats stale unclaimed state");
-assert.deepEqual(JSON.parse(JSON.stringify(convergedRecall.characters.test_a.inventory.pen)), item);
-assert.equal(convergedRecall.characters.test_a.inventory.pen._fieldPlacementId, undefined);
-
-const stalePickedSameKey = structuredClone(placed.state);
-stalePickedSameKey.fieldItemPlacementClaimsByVariant.c[placementId] = {
-  placementId, characterId: "test_a", targetInventoryKey: "pen", sessionId: "s-stale", claimedAt: 1999,
-};
-stalePickedSameKey.characters.test_a.inventory.pen = { ...structuredClone(item), _fieldPlacementId: placementId };
-const convergedSameKey = cloudApi.reconcileFieldItemPlacements(recalled.state, stalePickedSameKey, cloudApi.mergeValues(recalled.state, stalePickedSameKey));
-assert.equal(convergedSameKey.fieldItemPlacementClaimsByVariant.c[placementId].adminRecalled, true);
-assert.deepEqual(JSON.parse(JSON.stringify(convergedSameKey.characters.test_a.inventory.pen)), item, "admin recall removes a stale same-key pickup marker without changing item state");
+assert.match(cloudSource, /\/api\/player-world-projection/);
+assert.doesNotMatch(cloudSource, /(?:applyAdminControlPatch|reconcileFieldItemPlacements|mergeValues)/, "admin field-item changes converge through the next authoritative projection, never a client merge");
 
 const adminUi = fs.readFileSync(new URL("../admin-control-mvp4.js", import.meta.url), "utf8");
 const adminApi = fs.readFileSync(new URL("../api/admin-control.mjs", import.meta.url), "utf8");

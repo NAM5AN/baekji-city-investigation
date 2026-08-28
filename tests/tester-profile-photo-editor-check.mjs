@@ -41,19 +41,18 @@ assert(index.includes('profile-photo-editor.js?v=0.3.104'), "scoped-cursor crop 
 
 assert.doesNotThrow(() => new Function(signupSource), "signup completion runtime must parse as valid JavaScript");
 assert(signupSource.includes('event.stopImmediatePropagation()'), "signup completion gate must intercept the old auto-login click handler");
-assert(signupSource.includes('sessionStorage.removeItem(USER_KEY)'), "successful signup must leave the browser unauthenticated");
-assert(!signupSource.includes('sessionStorage.setItem(USER_KEY'), "signup completion must never create an authenticated session");
+assert(signupSource.includes('const adopted = await session?.refresh?.()'), "successful signup must adopt only the newly issued HttpOnly cookie through verified session refresh");
+assert(!signupSource.includes('sessionStorage.setItem(USER_KEY'), "signup completion must not forge an authenticated display cache directly");
 assert(signupSource.includes('showCompletion({ name: finalName, photo: finalPhoto })'), "successful signup must show the created profile before login");
 assert(signupSource.includes('data-signup-complete-photo'), "completion modal must display the chosen profile photo");
 assert(signupSource.includes('data-signup-complete-name'), "completion modal must display the character name");
 assert(signupSource.includes('<h2 id="tester-signup-complete-title">가입 완료</h2>'), "completion title should be simply 가입 완료");
-assert(!signupSource.includes('가입만으로 조사 화면에 접속되지 않습니다.'), "redundant signup-only access explanation should be removed");
-assert(signupSource.includes('등록한 캐릭터 이름과 비밀번호로 로그인해 주세요.'), "login instruction should remain");
-assert(signupSource.includes('data-signup-complete-login>확인</button>'), "completion modal CTA should be a simple confirmation button");
-assert(signupSource.includes('loginPassword?.focus?.()'), "completion modal should return the user to explicit login");
-assert(signupSource.includes('button.textContent = "가입하기"'), "signup CTA must no longer promise immediate access");
+assert(signupSource.includes('가입한 캐릭터로 바로 조사를 시작할 수 있습니다.'), "completion must explain immediate verified session availability");
+assert(signupSource.includes('data-signup-complete-login>조사 홈으로</button>'), "completion modal CTA should lead to the authenticated home");
+assert(signupSource.includes('location.hash = "#/home"'), "completion must enter the home after verified session adoption");
+assert(signupSource.includes('button.textContent = "가입하기"'), "signup CTA must keep its stable action label");
 assert(signupCss.includes('.tester-signup-complete__profile'), "signup completion profile card must be styled");
 assert(index.includes('tester-signup-complete.css?v=0.3.105'), "signup completion modal CSS must load in production");
-assert(index.includes('tester-signup-complete.js?v=0.3.107'), "simplified signup completion copy runtime must load in production");
+assert(index.includes('tester-signup-complete.js?v=0.3.108&stage8b=1'), "verified signup completion runtime must load in production");
 
-console.log("PASS: full-photo crop editor plus explicit signup-complete-to-login gate are wired without automatic home entry");
+console.log("PASS: full-photo crop editor plus verified signup session adoption and home entry are wired");

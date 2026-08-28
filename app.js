@@ -73,8 +73,6 @@
   };
   const MOVE_DELAY_MS = 1800;
   const movementTimers = new Map();
-  const pendingNarrationJobs = [];
-  let narrationFlushActive = false;
 
   const HAZARD_PHENOMENA = {
     HZ_CONT_01: "바닥 틈을 따라 젖은 흰 선이 천천히 넓어지며 마른 발판 사이를 가른다.",
@@ -237,37 +235,6 @@
     return commitState(reason, snapshot);
   }
 
-  function saveState(reason = "update") {
-    worldRaw = persistence.writeRaw(JSON.stringify(currentState()));
-  }
-
-  function mutate(reason, callback) {
-    store.transact(reason, () => {
-      const draft = loadState();
-      callback(draft);
-      return draft;
-    });
-    saveState(reason);
-    render(false);
-    flushPendingNarrations();
-  }
-
-  function mutateInvestigationChat(reason, callback, input) {
-    const previousState = loadState();
-    const nextState = store.transact(reason, () => {
-      const draft = clone(previousState);
-      callback(draft);
-      return draft;
-    });
-    saveState(reason);
-    if (!refreshMountedInvestigation(previousState, nextState)) render(false);
-    if (input?.isConnected) {
-      input.focus();
-      input.setSelectionRange?.(input.value.length, input.value.length);
-    }
-    flushPendingNarrations();
-  }
-
   function currentUserId() { return sessionStorage.getItem(USER_KEY); }
   function currentUser() { return DEMO_USERS[currentUserId()] || null; }
   function currentCharacter() { return currentState().characters[currentUserId()] || null; }
@@ -341,12 +308,27 @@
 
   function setCurrentUser(userId) {
     sessionStorage.setItem(USER_KEY, userId);
-    mutate("login", (draft) => { draft.characters[userId].onlineAt = Date.now(); });
     location.hash = "#/home";
   }
 
-  function logout() {
+  async function logout() {
+    let response;
+    let payload = {};
+    try {
+      response = await fetch("/api/player-session", { method: "DELETE", credentials: "same-origin", cache: "no-store" });
+      payload = await response.json().catch(() => ({}));
+    } catch {
+      toast("로그아웃하지 못했습니다.", "연결을 확인한 뒤 다시 시도해 주세요.", "error");
+      return;
+    }
+    const sessionAlreadyGone = response.status === 401 && ["PLAYER_SESSION_REQUIRED", "PLAYER_SESSION_INVALID"].includes(payload?.code);
+    if (!response.ok && !sessionAlreadyGone) {
+      toast("로그아웃하지 못했습니다.", "서버 응답을 확인한 뒤 다시 시도해 주세요.", "error");
+      return;
+    }
     sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(SESSION_PROFILE_KEY);
+    window.dispatchEvent(new Event("baekji-player-session-logged-out"));
     location.hash = "#/login";
   }
 
@@ -566,7 +548,6 @@
         </section>
       </main>`);
 
-    document.querySelector("[data-create-party]")?.addEventListener("click", createParty);
     document.querySelectorAll("[data-open-party]").forEach((el) => el.addEventListener("click", () => go(`party/${el.dataset.openParty}`)));
     document.querySelectorAll("[data-resume-session]").forEach((el) => el.addEventListener("click", () => {
       const s = currentState().sessions[el.dataset.resumeSession];
@@ -576,44 +557,50 @@
     document.querySelectorAll("[data-decline]").forEach((el) => el.addEventListener("click", () => declineInvite(el.dataset.decline)));
   }
 
-  function createParty() {
-    const uid = currentUserId();
-    if (getUserParty(uid)) return toast("이미 참여 중인 조사조가 있습니다.", "먼저 해당 조사조를 닫아 주세요.", "error");
-    const partyId = id("party");
-    mutate("create-party", (draft) => {
-      draft.parties[partyId] = {
-        id: partyId,
-        name: `해오름역 조사조 ${Object.keys(draft.parties).length + 1}`,
-        creatorId: uid,
-        destination: "E",
-        status: "RECRUITING",
-        memberIds: [uid],
-        invitedIds: [],
-        declinedIds: [],
-        confirmedBy: [],
-        readyBy: [],
-        sessionId: null,
-        createdAt: Date.now(),
-      };
-      draft.characters[uid].currentPartyId = partyId;
-    });
-    go(`party/${partyId}`);
+  const acceptInviteInFlight = new Set();
+  async function acceptInvite(partyId) {
+    if (acceptInviteInFlight.has(partyId)) return;
+    acceptInviteInFlight.add(partyId);
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("ACCEPT_PARTY_INVITE_V1", { partyId });
+      if (["APPLIED", "NOOP", "REPLAY"].includes(result?.status)) {
+        toast("초대를 수락했습니다.");
+        go(`party/${partyId}`);
+      } else if (result?.status === "REVISION_CONFLICT") {
+        toast("초대 상태가 변경되었습니다.", "최신 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+      } else {
+        toast("초대를 수락할 수 없습니다.", "초대 상태가 이미 변경되었을 수 있습니다.", "error");
+      }
+    } catch (error) {
+      if (error?.message === "WORLD_COMMAND_SYNC_NOT_READY") toast("최신 상태를 확인하는 중입니다.", "잠시 후 다시 시도해 주세요.");
+      else toast("초대 수락을 저장하지 못했습니다.", "연결 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+    } finally { acceptInviteInFlight.delete(partyId); }
   }
 
-  function acceptInvite(partyId) {
+  const declineInviteInFlight = new Set();
+  async function declineInvite(partyId) {
     const uid = currentUserId();
-    commitState("accept-invite", acceptInviteState(loadState(), partyId, uid));
-    saveState("accept-invite");
-    render(false);
-    go(`party/${partyId}`);
-  }
-
-  function declineInvite(partyId) {
-    const uid = currentUserId();
-    commitState("decline-invite", declineInviteState(loadState(), partyId, uid));
-    saveState("decline-invite");
-    render(false);
-    toast("초대를 거절했습니다.");
+    if (!uid || !loadState()?.parties?.[partyId]) return;
+    if (declineInviteInFlight.has(partyId)) return;
+    declineInviteInFlight.add(partyId);
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("DECLINE_PARTY_INVITE_V1", { partyId });
+      if (["APPLIED", "NOOP", "REPLAY"].includes(result?.status)) {
+        toast("초대를 거절했습니다.");
+      } else if (result?.status === "REVISION_CONFLICT") {
+        toast("초대 상태가 변경되었습니다.", "최신 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+      } else {
+        toast("초대를 거절할 수 없습니다.", "초대 상태가 이미 변경되었을 수 있습니다.", "error");
+      }
+    } catch (error) {
+      if (error?.message === "WORLD_COMMAND_SYNC_NOT_READY") {
+        toast("최신 상태를 확인하는 중입니다.", "잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      toast("초대 거절을 저장하지 못했습니다.", "연결 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+    } finally {
+      declineInviteInFlight.delete(partyId);
+    }
   }
 
   function partyStep(party) {
@@ -902,8 +889,7 @@
 
     document.querySelectorAll("[data-invite]").forEach((el) => el.addEventListener("click", () => inviteUser(partyId, el.dataset.invite)));
     document.querySelectorAll("[data-party-invite-cancel]").forEach((el) => el.addEventListener("click", () => cancelInvite(partyId, el.dataset.partyInviteCancel)));
-    document.querySelector("[data-confirm-composition]")?.addEventListener("click", () => confirmComposition(partyId));
-    document.querySelector("[data-ready]")?.addEventListener("click", () => setReady(partyId));
+    document.querySelector("[data-ready]")?.addEventListener("click", (event) => setReady(partyId, event.currentTarget));
     document.querySelector("[data-start-session]")?.addEventListener("click", () => startSession(partyId));
     document.querySelector("[data-open-session]")?.addEventListener("click", () => go(`briefing/${party.sessionId}`));
     document.querySelector("[data-leave-party]")?.addEventListener("click", () => leaveParty(partyId));
@@ -925,76 +911,104 @@
     return `<div class="member party-pending-invite-row" data-party-pending-invite="${escapeHtml(memberId)}"><div class="member-avatar ${account.profilePhoto ? "has-profile-photo" : ""}">${partyAvatarMarkup(account, "tester-member-avatar party-member-home-avatar-image")}</div><div><div class="list-title">${escapeHtml(account.name)}</div><div class="list-sub">초대 수락 대기</div></div><div class="status-pills">${cancelMarkup}<span class="party-ready-state is-waiting">${escapeHtml(pendingInviteLabel)}</span></div></div>`;
   }
 
-  function inviteUser(partyId, userId) {
-    if (currentState().characters[userId].currentPartyId) return toast("초대할 수 없습니다.", "이미 다른 조사조에 참여 중입니다.", "error");
-    const uid = currentUserId();
-    commitState("invite-user", inviteState(loadState(), partyId, userId, uid));
-    saveState("invite-user");
-    render(false);
-    toast("초대를 전송했습니다.", partyAccount(userId).name);
-  }
-
-  function cancelInvite(partyId, userId) {
-    commitState("cancel-invite", cancelInviteState(loadState(), partyId, userId, currentUserId()));
-    saveState("cancel-invite");
-    render(false);
-  }
-
-  function confirmComposition(partyId) {
-    const uid = currentUserId();
-    mutate("confirm-composition", (draft) => {
-      const party = draft.parties[partyId];
-      if (!party.confirmedBy.includes(uid)) party.confirmedBy.push(uid);
-      if (party.memberIds.every((id) => party.confirmedBy.includes(id))) {
-        party.status = "COMPOSITION_CONFIRMED";
-        party.readyStateBy ||= {};
-        party.readyStateBy[party.creatorId] = { ready: true, at: Date.now() };
-        party.readyBy = party.memberIds.filter((memberId) => effectivePartyReady(party, memberId));
-      }
-    });
-  }
-
-  function setReady(partyId) {
-    const uid = currentUserId();
-    const current = loadState();
-    if (current.parties?.[partyId]?.creatorId === uid) return;
-    mutate("ready", (draft) => {
-      const party = draft.parties[partyId];
-      if (!party || !party.memberIds.includes(uid)) return;
-      if (party.status === "READY_CHECK") party.status = "COMPOSITION_CONFIRMED";
-      party.readyStateBy ||= {};
-      const ready = !effectivePartyReady(party, uid);
-      party.readyStateBy[uid] = { ready, at: Date.now() };
-      party.readyBy = party.memberIds.filter((memberId) => effectivePartyReady(party, memberId));
-    });
-  }
-
-  function leaveParty(partyId) {
-    const uid = currentUserId();
-    mutate("leave-party", (draft) => {
-      const party = draft.parties[partyId];
-      if (!party) return;
-      if (party.creatorId === uid) {
-        party.memberIds.forEach((memberId) => { draft.characters[memberId].currentPartyId = null; });
-        delete draft.parties[partyId];
+  const inviteUserInFlight = new Set();
+  async function inviteUser(partyId, userId) {
+    const key = `${partyId}:${userId}`;
+    if (inviteUserInFlight.has(key)) return;
+    inviteUserInFlight.add(key);
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVITE_PARTY_MEMBER_V1", { partyId, inviteeId: userId });
+      if (["APPLIED", "NOOP", "REPLAY"].includes(result?.status)) {
+        toast("초대를 전송했습니다.", partyAccount(userId).name);
+      } else if (result?.status === "REVISION_CONFLICT") {
+        toast("초대 상태가 변경되었습니다.", "최신 상태를 확인한 뒤 다시 시도해 주세요.", "error");
       } else {
-        party.memberIds = party.memberIds.filter((id) => id !== uid);
-        party.confirmedBy = party.confirmedBy.filter((id) => id !== uid);
-        party.readyBy = party.readyBy.filter((id) => id !== uid);
-        draft.characters[uid].currentPartyId = null;
+        toast("초대를 처리할 수 없습니다.", "초대 상태가 이미 변경되었을 수 있습니다.", "error");
       }
-    });
-    go("home");
+    } catch (error) {
+      if (error?.message === "WORLD_COMMAND_SYNC_NOT_READY") {
+        toast("최신 상태를 확인하는 중입니다.", "잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      toast("초대를 저장하지 못했습니다.", "연결 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+    } finally {
+      inviteUserInFlight.delete(key);
+    }
   }
 
-  function startSession(partyId) {
-    const uid = currentUserId();
-    const snapshot = loadState();
-    const party = snapshot.parties?.[partyId];
-    if (!party || party.creatorId !== uid || !["COMPOSITION_CONFIRMED", "READY_CHECK"].includes(party.status)) return;
-    const blockers = departureBlockers(snapshot, partyId);
-    if (blockers.pendingIds.length || blockers.unreadyIds.length) return showDepartureModal(partyId, blockers);
-    return commitForcedDeparture(snapshot, partyId, uid, blockers);
+  const cancelInviteInFlight = new Set();
+  async function cancelInvite(partyId, userId) {
+    if (cancelInviteInFlight.has(`${partyId}:${userId}`)) return;
+    cancelInviteInFlight.add(`${partyId}:${userId}`);
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("CANCEL_PARTY_INVITE_V1", { partyId, inviteeId: userId });
+      if (["APPLIED", "NOOP", "REPLAY"].includes(result?.status)) {
+        toast("초대를 취소했습니다.");
+      } else if (result?.status === "REVISION_CONFLICT") {
+        toast("초대 상태가 변경되었습니다.", "최신 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+      } else {
+        toast("초대를 취소할 수 없습니다.", "초대 상태가 이미 변경되었을 수 있습니다.", "error");
+      }
+    } catch (error) {
+      if (error?.message === "WORLD_COMMAND_SYNC_NOT_READY") {
+        toast("최신 상태를 확인하는 중입니다.", "잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      toast("초대 취소를 저장하지 못했습니다.", "최신 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+    } finally {
+      cancelInviteInFlight.delete(`${partyId}:${userId}`);
+    }
+  }
+
+  const partyReadyInFlight = new Set();
+  async function setReady(partyId, control = null) {
+    const key = String(partyId || "");
+    if (!key || partyReadyInFlight.has(key)) return;
+    partyReadyInFlight.add(key);
+    control?.setAttribute?.("aria-busy", "true");
+    if (control && "disabled" in control) control.disabled = true;
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("TOGGLE_PARTY_READY_V1", { partyId });
+      if (result?.status === "REVISION_CONFLICT") {
+        toast("준비 상태가 변경되었습니다.", "최신 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+      } else if (!["APPLIED", "REPLAY"].includes(result?.status)) {
+        toast("준비 상태를 변경할 수 없습니다.", "현재 조사조 상태를 확인해 주세요.", "error");
+      }
+    } catch (error) {
+      if (error?.message === "WORLD_COMMAND_SYNC_NOT_READY") {
+        toast("최신 상태를 확인하는 중입니다.", "잠시 후 다시 시도해 주세요.");
+      } else {
+        toast("준비 상태를 저장하지 못했습니다.", "연결 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+      }
+    } finally {
+      partyReadyInFlight.delete(key);
+      control?.removeAttribute?.("aria-busy");
+      if (control && "disabled" in control) control.disabled = false;
+    }
+  }
+
+  async function leaveParty(partyId) {
+    const party = loadState().parties?.[partyId];
+    if (!party) return;
+    const command = party.creatorId === currentUserId() ? "DISBAND_RECRUITING_PARTY_V1" : "LEAVE_PARTY_V1";
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch(command, { partyId });
+      if (["APPLIED", "REPLAY"].includes(result?.status)) go("home");
+      else toast("조사조 상태가 변경되었습니다.", "최신 상태를 확인한 뒤 다시 시도해 주세요.", "error");
+    } catch (error) {
+      toast("조사조 변경을 저장하지 못했습니다.", error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "연결을 확인한 뒤 다시 시도해 주세요.", "error");
+    }
+  }
+
+  async function startSession(partyId) {
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("START_PARTY_SESSION_V1", { partyId });
+      if (["APPLIED", "REPLAY"].includes(result?.status)) return go(`briefing/${loadState().parties?.[partyId]?.sessionId || ""}`);
+      if (result?.metadata?.requiresConfirmation) return showDepartureModal(partyId, result.metadata);
+      toast("조사를 출발할 수 없습니다.", "준비 상태 또는 초대 상태를 확인해 주세요.", "error");
+    } catch (error) {
+      toast("조사 출발을 저장하지 못했습니다.", error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "연결을 확인한 뒤 다시 시도해 주세요.", "error");
+    }
   }
 
   function closeDepartureModal() { document.getElementById("modal-root")?.replaceChildren(); }
@@ -1029,28 +1043,29 @@
     root.querySelector("[data-party-departure-confirm]")?.addEventListener("click", (event) => {
       const targetPartyId = event.currentTarget.dataset.partyDepartureConfirm;
       closeDepartureModal();
-      commitForcedDeparture(loadState(), targetPartyId, currentUserId(), blockers);
+      void commitForcedDeparture(targetPartyId);
     });
     requestAnimationFrame(() => root.querySelector("[data-party-departure-cancel]")?.focus());
   }
 
-  function commitForcedDeparture(snapshot, partyId, leaderId, expectedBlockers) {
-    const shared = Object.values(snapshot.sessions || {}).find((candidate) => ["BRIEFING", "ACTIVE"].includes(candidate.status));
-    const result = forcedDepartureState(snapshot, partyId, leaderId, id("session"), Date.now(), shared?.variant || "c", expectedBlockers);
-    if (result.reason === "stale") return toast("조사조 상태가 변경되었습니다.", "최신 초대 및 준비 상태를 확인한 뒤 다시 출발해 주세요.", "error");
-    if (!result.ok) return toast("조사를 출발할 수 없습니다.", "준비 상태 또는 초대 상태가 변경되었습니다.", "error");
-    commitState("start-session", result.snapshot);
-    saveState("start-session");
-    render(false);
-    go(`briefing/${currentState().parties[partyId].sessionId}`);
+  async function commitForcedDeparture(partyId) {
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("FORCE_START_PARTY_SESSION_V1", { partyId });
+      if (["APPLIED", "REPLAY"].includes(result?.status)) return go(`briefing/${loadState().parties?.[partyId]?.sessionId || ""}`);
+      toast("조사조 상태가 변경되었습니다.", "최신 초대 및 준비 상태를 확인한 뒤 다시 출발해 주세요.", "error");
+    } catch (error) {
+      toast("조사 출발을 저장하지 못했습니다.", error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "연결을 확인한 뒤 다시 시도해 주세요.", "error");
+    }
   }
 
-  function disbandCompletedPartyAndGoHome(sessionId) {
-    const next = disbandCompletedPartyState(loadState(), sessionId, currentUserId(), Date.now());
-    if (!next.changed) return go("home");
-    commitState("result-party-disband", next.snapshot);
-    saveState("result-party-disband");
-    go("home");
+  async function disbandCompletedPartyAndGoHome(sessionId) {
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("DISBAND_COMPLETED_PARTY_V1", { sessionId });
+      if (["APPLIED", "REPLAY"].includes(result?.status)) go("home");
+      else toast("해산 상태가 변경되었습니다.", "최신 결과를 확인해 주세요.", "error");
+    } catch (error) {
+      toast("해산을 저장하지 못했습니다.", error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "연결을 확인한 뒤 다시 시도해 주세요.", "error");
+    }
   }
 
   function briefingHeadline(session) {
@@ -1112,7 +1127,6 @@
           <button type="button" class="button primary block" data-party-flow-confirm-briefing="${escapeHtml(sessionId)}" ${ownConfirmed ? "disabled" : ""}>${ownConfirmed ? "브리핑 확인 완료됨" : "브리핑 확인 완료"}</button>
           <p class="muted small briefing-member-help">확인 후 조장이 구역에 진입할 때까지 이 화면에서 기다려 주세요.</p>`}
       </section>` : "";
-    const v = DATA.variants[session.variant];
     shell(`
       <main class="container narrow">
         <section class="hero"><div class="eyebrow">Investigation briefing</div><h1 style="font-size:54px">해오름역</h1><p class="lead">도착한 시간 상태의 내부 코드는 공개되지 않습니다. 빛, 안내 설비의 어긋남, 공간의 흔적을 직접 보고 판단하세요.</p></section>
@@ -1124,16 +1138,14 @@
           <div class="button-row" style="margin-top:22px">${isLeader && session.status === "BRIEFING" ? `<button type="button" class="button party-flow-back party-preflight-back" data-party-preflight-briefing-back="${escapeHtml(sessionId)}">← 이전 단계</button>` : ""}<button class="button primary" data-enter-investigation ${!isLeader || !allConfirmed ? "disabled" : ""} aria-disabled="${!isLeader || !allConfirmed}" title="${isLeader ? allConfirmed ? "전원 확인 완료 · 구역에 진입합니다." : "조원들의 브리핑 확인을 기다리고 있습니다." : "구역 진입은 조장이 진행합니다."}">${isLeader ? "구역 진입" : "조장 진입 대기"}</button></div>
         </section>
       </main>`);
-    document.querySelector("[data-enter-investigation]").addEventListener("click", () => {
-      mutate("activate-session", (draft) => {
-        const s = draft.sessions[sessionId];
-        if (s.status === "BRIEFING") {
-          s.status = "ACTIVE";
-          appendLog(s, "scene", `${v.light}이 번지는 해오름역 구역 입구에 도착했다. 지상 환승광장으로 이어지는 통로가 앞에 놓여 있다.`);
-          appendChatDivider(s, "node:E_ENTRY", "해오름역 구역 입구");
-        }
-      });
-      go(`investigate/${sessionId}`);
+    document.querySelector("[data-enter-investigation]").addEventListener("click", async () => {
+      try {
+        const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("ACTIVATE_SESSION_V1", { sessionId });
+        if (["APPLIED", "REPLAY"].includes(result?.status)) go(`investigate/${sessionId}`);
+        else toast("구역에 진입할 수 없습니다.", "브리핑 확인 상태를 다시 확인해 주세요.", "error");
+      } catch (error) {
+        toast("구역 진입을 저장하지 못했습니다.", error?.message === "WORLD_COMMAND_SYNC_NOT_READY" ? "최신 상태를 확인하는 중입니다." : "연결을 확인한 뒤 다시 시도해 주세요.", "error");
+      }
     });
   }
 
@@ -1306,170 +1318,6 @@
     return parts.join(" ");
   }
 
-  function flexiblePartyTargetId(session, actorId, targetName) {
-    const normalizedTarget = normalizeLoginId(targetName);
-    if (!normalizedTarget) return "";
-    return (session.memberIds || []).find((memberId) => (
-      memberId !== actorId
-      && normalizeLoginId(DEMO_USERS[memberId]?.name || memberId) === normalizedTarget
-    )) || "";
-  }
-
-  function applyFlexibleExposure(character, exposure, seed) {
-    if (!character) return 0;
-    const ruleId = exposure === "HIGH"
-      ? "EXP_CONTACT_HIGH"
-      : exposure === "MEDIUM"
-        ? "EXP_CONTACT_MEDIUM"
-        : exposure === "LOW"
-          ? "EXP_CONTACT_LOW"
-          : "EXP_CONTACT_NONE";
-    const delta = deterministicDelta(ruleId, seed);
-    character.contamination = clamp((Number(character.contamination) || 0) + delta, 0, 100);
-    character.symptom = contaminationStage(character.contamination);
-    return delta;
-  }
-
-  function commitFlexibleHazardDecision(input = {}) {
-    const sessionId = String(input.sessionId || "");
-    const actorId = String(input.actorId || "");
-    const movementToken = String(input.movementToken || "");
-    const expectedHazardId = String(input.hazardId || "");
-    const expectedHazardIndex = Number(input.hazardIndex);
-    const action = String(input.action || "").trim();
-    const decision = input.decision && typeof input.decision === "object" ? input.decision : {};
-    const snapshot = loadState();
-    const session = snapshot.sessions?.[sessionId];
-    const encounter = session?.activeEncounter;
-    const transition = session?.lastMovementTransition;
-    const currentHazardId = encounter?.hazards?.[encounter.currentIndex];
-    if (!session || !encounter || !movementToken || !action) return { applied: false, reason: "missing-context" };
-    if (transition?.kind !== "ENCOUNTER" || transition.token !== movementToken || transition.routeId !== encounter.routeId) {
-      return { applied: false, reason: "movement-transition-changed" };
-    }
-    if (encounter.currentIndex !== expectedHazardIndex || currentHazardId !== expectedHazardId) {
-      return { applied: false, reason: "hazard-changed" };
-    }
-    if (currentUserId() !== actorId || !session.memberIds?.includes(actorId) || !snapshot.characters?.[actorId]) {
-      return { applied: false, reason: "actor-changed" };
-    }
-
-    const actionIdentity = hashNumber(action).toString(36);
-    const effectSuffix = `${expectedHazardIndex}:${expectedHazardId}:${actionIdentity}`;
-    const actionMeta = movementLogMeta(movementToken, sessionId, `flex-action:${effectSuffix}`);
-    if (session.logs?.some((entry) => entry.id === actionMeta.id)) return { applied: false, reason: "duplicate" };
-
-    const progress = ["NONE", "CURRENT", "ALL"].includes(decision.progress) ? decision.progress : "NONE";
-    const outcome = ["SUCCESS", "PARTIAL", "FAIL", "INFO"].includes(decision.outcome) ? decision.outcome : "PARTIAL";
-    const contaminationBefore = Object.fromEntries((session.memberIds || []).map((memberId) => [
-      memberId,
-      Number(snapshot.characters?.[memberId]?.contamination || 0),
-    ]));
-    session.choiceReveal = null;
-    encounter.flexInsights ||= [];
-    encounter.resolutions ||= [];
-    if (decision.observationNote) {
-      encounter.flexInsights.push(String(decision.observationNote).slice(0, 280));
-      if (encounter.flexInsights.length > 6) encounter.flexInsights.splice(0, encounter.flexInsights.length - 6);
-    }
-
-    const resolutionIndex = encounter.resolutions.length;
-    const selfDelta = applyFlexibleExposure(
-      snapshot.characters[actorId],
-      decision.selfExposure,
-      `${sessionId}:${currentHazardId}:${action}:self:${resolutionIndex}`,
-    );
-    const requestedTargetId = String(input.targetId || "");
-    const targetId = requestedTargetId !== actorId && session.memberIds?.includes(requestedTargetId)
-      ? requestedTargetId
-      : flexiblePartyTargetId(session, actorId, decision.targetName);
-    const targetDelta = targetId
-      ? applyFlexibleExposure(
-        snapshot.characters[targetId],
-        decision.targetExposure,
-        `${sessionId}:${currentHazardId}:${action}:target:${targetId}:${resolutionIndex}`,
-      )
-      : 0;
-    if (decision.usedItemId && decision.usedItemContaminated && snapshot.characters[actorId].inventory?.[decision.usedItemId]) {
-      snapshot.characters[actorId].inventory[decision.usedItemId].state = "CONTAMINATED";
-    }
-
-    appendLog(session, "action-input", action, actorId, {
-      scopeKey: `route:${encounter.fromNode}:${encounter.targetNode}`,
-      flexibleHazardAction: true,
-      ...actionMeta,
-    });
-    encounter.resolutions.push({
-      hazardId: currentHazardId,
-      actorId,
-      text: action,
-      outcome,
-      progress,
-      selfExposure: decision.selfExposure,
-      selfDelta,
-      targetId: targetId || null,
-      targetExposure: targetId ? decision.targetExposure : "NONE",
-      targetDelta,
-      flexible: true,
-    });
-
-    if (progress === "ALL") encounter.currentIndex = encounter.hazards.length;
-    else if (progress === "CURRENT") encounter.currentIndex += 1;
-
-    let arrived = false;
-    let narration = String(decision.narration || "조사자는 선언한 방식으로 위험에 대응한다.").trim();
-    if (progress !== "NONE" && encounter.currentIndex >= encounter.hazards.length) {
-      const targetName = nodeDisplayName(encounter.targetNode);
-      const arrival = applyArrival(snapshot, session, encounter.targetNode, encounter.ambientRuleId, movementToken);
-      narration = `${narration} ${DEMO_USERS[actorId]?.name || actorId} 일행은 ${targetName} 쪽으로 이동을 마친다. ${arrival}`;
-      session.activeEncounter = null;
-      arrived = true;
-    } else if (progress !== "NONE") {
-      narration = `${narration} 그러나 이동 경로에는 아직 ${DATA.hazardTemplates?.[encounter.hazards[encounter.currentIndex]]?.name || encounter.hazards[encounter.currentIndex]}이 남아 있다.`;
-    }
-
-    const contaminationBaselines = { ...(transition.contaminationBaselines || {}) };
-    const contaminationDeltas = { ...(transition.contaminationDeltas || {}) };
-    (session.memberIds || []).forEach((memberId) => {
-      if (!(memberId in contaminationBaselines)) contaminationBaselines[memberId] = contaminationBefore[memberId];
-      const change = Number(snapshot.characters?.[memberId]?.contamination || 0) - contaminationBefore[memberId];
-      if (change > 0) contaminationDeltas[memberId] = Number(contaminationDeltas[memberId] || 0) + change;
-    });
-    session.lastMovementTransition = {
-      ...transition,
-      kind: arrived ? "ARRIVED" : "ENCOUNTER",
-      completedAt: arrived ? Date.now() : transition.completedAt,
-      contaminationBaselines,
-      contaminationDeltas,
-    };
-
-    appendLog(session, outcome === "FAIL" ? "fail" : outcome === "INFO" ? "scene" : "success", narration, null, {
-      ...movementLogMeta(movementToken, sessionId, `flex-result:${effectSuffix}`),
-      kind: "FLEX_HAZARD_RESPONSE",
-      hazardActorId: actorId,
-      hazardId: currentHazardId,
-      outcome,
-      progress,
-      contaminationDelta: selfDelta,
-      targetId: targetId || null,
-      targetContaminationDelta: targetDelta,
-      arrived,
-      systemNarration: true,
-    });
-
-    commitState("resolve-flexible-hazard", snapshot);
-    ui.actionText = "";
-    requestLatestLogScroll({ system: true });
-    saveState("resolve-flexible-hazard");
-    render(false);
-    flushPendingNarrations();
-    return { applied: true, arrived, selfDelta, targetId, targetDelta };
-  }
-
-  window.__BAEKJI_FLEX_HAZARD_RUNTIME__ = Object.freeze({
-    commitDecision: commitFlexibleHazardDecision,
-  });
-
   function notifyDeparture(draft, session, route, token) {
     const originNode = session.currentNode;
     const witnesses = fieldSessions(draft, session, `node:${originNode}`);
@@ -1510,57 +1358,16 @@
     movementTimers.set(session.id, { token: movement.token, timerId });
   }
 
-  function completeMovement(sessionId, token) {
+  async function completeMovement(sessionId, token) {
     const latestSession = loadState().sessions?.[sessionId];
     if (!latestSession?.movement || latestSession.movement.token !== token || latestSession.lastMovementTransition?.token === token) {
       movementTimers.delete(sessionId);
       return;
     }
-    mutate("complete-movement", (draft) => {
-      const session = draft.sessions[sessionId];
-      const movement = session?.movement;
-      if (!session || !movement || movement.token !== token || session.lastMovementTransition?.token === token) return;
-      const route = DATA.routes.find((candidate) => candidate.id === movement.routeId);
-      const profile = DATA.riskProfiles[`${route.id}:${session.variant}`];
-      const hazards = profile?.hazards || [];
-      const itemLead = movement.itemUse
-        ? itemUseLeadText(DEMO_USERS[movement.actorId]?.name || joinNames(session.memberIds), movement.actionText || "", { ...movement.itemUse, status: "usable" })
-        : "";
-      const movementNarration = `${itemLead ? `${itemLead} ` : ""}${routePastNarration(route, session.memberIds)}`;
-      session.movement = null;
-      if (hazards.length) {
-        const overview = combinedHazardOverview(hazards);
-        session.activeEncounter = { routeId: route.id, fromNode: route.from, targetNode: route.to, overview, ambientRuleId: profile.ambientRuleId, hazards, currentIndex: 0, resolutions: [] };
-        appendChatDivider(session, `route:${route.from}:${route.to}`, `${nodeDisplayName(route.from)} → ${nodeDisplayName(route.to)} 이동 경로`, movementLogMeta(token, session.id, "encounter-divider"));
-        announceRouteEncounter(draft, session, route, token);
-        appendLog(session, "risk", `${movementNarration} 그 앞에서 ${overview}`, null, movementLogMeta(token, session.id, "encounter-risk"));
-        session.lastMovementTransition = {
-          token,
-          kind: "ENCOUNTER",
-          routeId: route.id,
-          fromNode: route.from,
-          targetNode: route.to,
-          completedAt: Date.now(),
-        };
-      } else {
-        const contaminationBefore = Object.fromEntries(session.memberIds.map((memberId) => [memberId, Number(draft.characters?.[memberId]?.contamination || 0)]));
-        const arrival = applyArrival(draft, session, route.to, profile?.ambientRuleId, token);
-        appendLog(session, "scene", `${movementNarration} ${arrival}`, null, movementLogMeta(token, session.id, "arrival-scene"));
-        const contaminationDeltas = Object.fromEntries(session.memberIds
-          .map((memberId) => [memberId, Number(draft.characters?.[memberId]?.contamination || 0) - contaminationBefore[memberId]])
-          .filter(([, delta]) => delta > 0));
-        session.lastMovementTransition = {
-          token,
-          kind: "ARRIVED",
-          routeId: route.id,
-          fromNode: route.from,
-          targetNode: route.to,
-          completedAt: Date.now(),
-          contaminationBaselines: contaminationBefore,
-          contaminationDeltas,
-        };
-      }
-    });
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("SETTLE_MOVEMENT_V1", { sessionId, movementToken: token });
+      if (!['APPLIED', 'REPLAY'].includes(result?.status)) toast("이동 상태가 변경되었습니다.", "최신 조사 기록을 확인해 주세요.", "error");
+    } catch (error) { toast("이동을 확정하지 못했습니다.", String(error?.message || "MOVEMENT_SETTLE_FAILED"), "error"); }
     movementTimers.delete(sessionId);
   }
 
@@ -3224,315 +3031,108 @@
     }
   }
 
-  function queueActionNarration(session, entry, text, interpretation, event = {}) {
-    if (ui.aiAvailable !== true || !entry?.id) return;
-    pendingNarrationJobs.push({
-      sessionId: session.id,
-      logId: entry.id,
-      text,
-      interpretation,
-      event: { ...event, fallback: entry.text },
-      context: actionAIContext(session),
-    });
-  }
-
-  async function flushPendingNarrations() {
-    if (narrationFlushActive || !pendingNarrationJobs.length) return;
-    narrationFlushActive = true;
-    try {
-      while (pendingNarrationJobs.length) {
-        const job = pendingNarrationJobs.shift();
-        try {
-          const response = await fetch("/api/narrate-action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(job),
-          });
-          if (!response.ok) throw new Error(`NARRATION_HTTP_${response.status}`);
-          const value = await response.json();
-          const narration = String(value.narration || "").trim().slice(0, 1200);
-          if (!narration) throw new Error("NARRATION_EMPTY");
-          requestLatestLogScroll({ system: true });
-          mutate("ai-action-narration", (draft) => {
-            const current = draft.sessions[job.sessionId];
-            const log = current?.logs?.find((entry) => entry.id === job.logId);
-            if (!log || log.aiNarrationFinal) return;
-            log.text = narration;
-            log.aiNarrationFinal = true;
-          });
-        } catch {
-          // 로컬 결과문을 그대로 유지합니다.
-        }
-      }
-    } finally {
-      narrationFlushActive = false;
-    }
-  }
-
   function applyActionInterpretation(sessionId, text, interpretation) {
     const snapshot = hydrateState("action-interpretation-hydrate", loadState());
     const session = snapshot.sessions[sessionId];
     if (!session || session.movement) return;
-    requestLatestLogScroll({ system: true });
     const uid = currentUserId();
-    const actorName = DEMO_USERS[uid].name;
-    const normalizedText = interpretation.normalizedAction || text;
-    const record = (current, type, copy, event = {}) => {
-      const entry = appendLog(current, type, copy);
-      queueActionNarration(current, entry, text, interpretation, event);
-      return entry;
-    };
     const itemUse = evaluateItemUse(snapshot.characters[uid], text, interpretation);
     if (itemUse && itemUse.status !== "usable") {
-      mutate("item-use-rejected", (draft) => {
-        const current = draft.sessions[sessionId];
-        if (current) record(current, "fail", itemUseFailureText(current, actorName, text, itemUse), { kind: "ITEM_UNAVAILABLE", outcome: "NO_PROGRESS", itemUse });
-      });
-      return;
+      return window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVESTIGATION_ACTION_V1", { sessionId, kind: "ITEM_UNAVAILABLE", text: String(text || "") });
     }
-    const itemLead = itemUseLeadText(actorName, text, itemUse);
-    const narrated = (result) => itemLead ? `${itemLead} ${result}` : result;
-
-    if (interpretation.intent === "MAP") {
-      mutate("map-request", (draft) => {
-        const current = draft.sessions[sessionId];
-        if (current) appendLog(current, "scene", `${actorName}는 접힌 해오름역 구역 지도를 펼쳐 현재 위치와 연결 통로를 대조한다.`);
-      });
-      showMapModal(sessionId);
-      return;
-    }
-
-    if (session.activeEncounter) {
-      if (interpretation.intent === "NAVIGATION_HINT") {
-        mutate("hazard-hint", (draft) => {
-          const current = draft.sessions[sessionId];
-          current.choiceReveal = { type: "hazard", at: Date.now(), actorId: uid };
-          const hazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex];
-          record(current, "scene", hintResponseText(current, hazardId ? DATA.hazardTemplates[hazardId] : null), { kind: "HAZARD_HINT", outcome: "NO_PROGRESS", hazardId });
-        });
-        return;
-      }
-      if (interpretation.intent === "LISTEN") {
-        mutate("listen-during-hazard", (draft) => {
-          const current = draft.sessions[sessionId];
-          const hazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex] || "";
-          record(current, "scene", narrated(listeningText(current, actorName, normalizedText)), { kind: "LISTEN", outcome: "NO_PROGRESS", hazardId, sensoryMode: "LISTEN" });
-        });
-        return;
-      }
-      if (interpretation.intent === "CHECK_SELF") {
-        mutate("self-check-during-hazard", (draft) => {
-          const current = draft.sessions[sessionId];
-          const character = draft.characters[uid];
-          const hazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex] || "";
-          record(current, "scene", selfStatusText(character, actorName), { kind: "CHECK_SELF", outcome: "NO_PROGRESS", hazardId, contamination: character.contamination, symptom: character.symptom });
-        });
-        return;
-      }
-      if (interpretation.intent === "WAIT") {
-        mutate("wait-during-hazard", (draft) => {
-          const current = draft.sessions[sessionId];
-          const hazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex] || "";
-          record(current, "scene", waitingText(current, actorName, normalizedText), { kind: "WAIT", outcome: "NO_PROGRESS", hazardId });
-        });
-        return;
-      }
-      if (["OBSERVE_SCENE", "OBSERVE_DETAIL", "INSPECT_OBJECT", "MUNDANE_INSPECTION"].includes(interpretation.intent)) {
-        mutate("observe-hazard", (draft) => {
-          const current = draft.sessions[sessionId];
-          const hazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex] || "";
-          record(current, "scene", narrated(hazardObservationText(current, actorName)), { kind: "OBSERVE_HAZARD", outcome: "NO_PROGRESS", hazardId });
-        });
-        return;
-      }
-      if (interpretation.intent === "HAZARD_RESPONSE" && interpretation.hazardRelevance === "RELEVANT" && interpretation.executable !== false) {
-        return resolveHazard(sessionId, text, false, itemUse, interpretation);
-      }
-      mutate("irrelevant-hazard-action", (draft) => {
-        const current = draft.sessions[sessionId];
-        const hazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex] || "";
-        record(current, "fail", irrelevantHazardActionText(current, actorName, normalizedText, interpretation.executable !== false), { kind: "IRRELEVANT_HAZARD_ACTION", outcome: "NO_PROGRESS", hazardId });
-      });
-      return;
-    }
-
-    if (interpretation.intent === "INSPECT_OBJECT") {
-      const object = findObject(interpretation.targetId);
-      if (object) {
-        mutate("chat-inspect-object", (draft) => {
-          const current = draft.sessions[sessionId];
-          if (!current.inspectedObjectIds.includes(object.id)) current.inspectedObjectIds.push(object.id);
-          record(current, "scene", narrated(`${actorName}는 ${object.name} 앞에 몸을 낮추고 세부를 확인한다. ${object.result} ${objectItemFindingText(draft, current, object.id)}`), { kind: "INSPECT_OBJECT", outcome: "OBSERVED", objectId: object.id, objectName: object.name });
-          current.choiceReveal = null;
-        });
-        showObjectModal(object.id);
-        return;
-      }
-    }
-
-    if (interpretation.intent === "OBSERVE_DETAIL") {
-      const detail = findDetail(interpretation.targetId);
-      mutate("chat-observe-detail", (draft) => {
-        const current = draft.sessions[sessionId];
-        record(current, "scene", narrated(sceneObservationText(current, actorName, detail)), { kind: "OBSERVE_DETAIL", outcome: "OBSERVED", detailId: detail?.id || "", detailName: detail?.name || "" });
-      });
-      return;
-    }
-
-    if (interpretation.intent === "OBSERVE_SCENE") {
-      mutate("chat-observe-scene", (draft) => {
-        const current = draft.sessions[sessionId];
-        record(current, "scene", narrated(sceneObservationText(current, actorName)), { kind: "OBSERVE_SCENE", outcome: "OBSERVED" });
-      });
-      return;
-    }
-
-    if (interpretation.intent === "MUNDANE_INSPECTION") {
-      mutate("mundane-inspection", (draft) => {
-        const current = draft.sessions[sessionId];
-        record(current, "scene", narrated(mundaneInspectionText(current, actorName, normalizedText)), { kind: "MUNDANE_INSPECTION", outcome: "NOTHING_FOUND" });
-      });
-      return;
-    }
-
-    if (interpretation.intent === "NAVIGATION_HINT") {
-      mutate("chat-hint", (draft) => {
-        const current = draft.sessions[sessionId];
-        current.choiceReveal = { type: "context", at: Date.now(), actorId: uid };
-        record(current, "scene", hintResponseText(current), { kind: "NAVIGATION_HINT", outcome: "NO_PROGRESS" });
-      });
-      return;
-    }
-
+    const commandKinds = Object.freeze({ MAP: "MAP", NAVIGATION_HINT: "NAVIGATION_HINT", LISTEN: "LISTEN", CHECK_SELF: "CHECK_SELF", WAIT: "WAIT", OBSERVE_SCENE: "OBSERVE_SCENE", OBSERVE_DETAIL: "OBSERVE_DETAIL", MUNDANE_INSPECTION: "MUNDANE_INSPECTION", INSPECT_OBJECT: "INSPECT", OTHER: "OTHER" });
+    if (interpretation.intent === "HAZARD_RESPONSE" && interpretation.hazardRelevance === "RELEVANT" && interpretation.executable !== false) return resolveHazard(sessionId, text, false, itemUse, interpretation);
     if (interpretation.intent === "MOVE") {
-      const actionContext = { actionText: text, itemUse };
-      const destinationNodeId = interpretation.destinationNodeId || "";
-      if (destinationNodeId === session.currentNode) {
-        mutate("already-at-destination", (draft) => {
-          const current = draft.sessions[sessionId];
-          current.choiceReveal = null;
-          appendLog(current, "scene", alreadyAtLocationText(actorName, destinationNodeId));
-        });
-        return;
+      if (interpretation.destinationNodeId === session.currentNode) {
+        return window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVESTIGATION_ACTION_V1", { sessionId, kind: "ALREADY_AT_DESTINATION", targetId: interpretation.destinationNodeId, text: String(text || "") });
       }
-      if (interpretation.targetId) return beginMove(sessionId, interpretation.targetId, actionContext);
-      const directRoute = destinationNodeId ? routesFrom(session.currentNode).find((route) => route.to === destinationNodeId) : null;
-      if (directRoute) return beginMove(sessionId, directRoute.id, actionContext);
-      if (destinationNodeId) {
-        mutate("route-guidance", (draft) => {
-          const current = draft.sessions[sessionId];
-          current.choiceReveal = null;
-          appendLog(current, "scene", routeGuidanceText(actorName, current.currentNode, destinationNodeId));
-        });
-        return;
-      }
-      const routes = routesFrom(session.currentNode);
-      if (routes.length === 1) return beginMove(sessionId, routes[0].id, actionContext);
-      mutate("ambiguous-movement", (draft) => {
-        const current = draft.sessions[sessionId];
-        current.choiceReveal = { type: "context", at: Date.now(), actorId: uid };
-        record(current, "scene", narrated(ambiguousMovementText(current, actorName)), { kind: "AMBIGUOUS_MOVE", outcome: "NO_PROGRESS" });
-      });
-      return;
+      const directRoute = interpretation.destinationNodeId ? routesFrom(session.currentNode).find((route) => route.to === interpretation.destinationNodeId) : null;
+      const routeId = interpretation.targetId || directRoute?.id || (routesFrom(session.currentNode).length === 1 ? routesFrom(session.currentNode)[0].id : "");
+      if (routeId) return beginMove(sessionId, routeId, { actionText: text, itemUse });
     }
-
-    if (interpretation.intent === "LISTEN") {
-      mutate("listen-action", (draft) => {
-        const current = draft.sessions[sessionId];
-        record(current, "scene", narrated(listeningText(current, actorName, normalizedText)), { kind: "LISTEN", outcome: "HEARD", sensoryMode: "LISTEN" });
+    const kind = session.activeEncounter
+      ? ({ NAVIGATION_HINT: "HAZARD_HINT", LISTEN: "LISTEN", CHECK_SELF: "CHECK_SELF", WAIT: "WAIT", OBSERVE_SCENE: "OBSERVE_HAZARD", OBSERVE_DETAIL: "OBSERVE_HAZARD", INSPECT_OBJECT: "OBSERVE_HAZARD", MUNDANE_INSPECTION: "OBSERVE_HAZARD" }[interpretation.intent] || "IRRELEVANT_HAZARD_ACTION")
+      : (commandKinds[interpretation.intent] || (interpretation.intent === "MOVE" ? (interpretation.destinationNodeId ? "ROUTE_GUIDANCE" : "AMBIGUOUS_MOVE") : "OTHER"));
+    const semanticTargetId = interpretation.targetId || interpretation.destinationNodeId || "";
+    if (kind) return window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVESTIGATION_ACTION_V1", { sessionId, kind, ...(semanticTargetId ? { targetId: semanticTargetId } : {}), text: String(text || "") })
+      .then((result) => {
+        if (!["APPLIED", "REPLAY"].includes(result?.status)) throw new Error(result?.status || "ACTION_NOT_APPLIED");
+        if (kind === "MAP") showMapModal(sessionId);
+        if (kind === "INSPECT" && interpretation.targetId) showObjectModal(interpretation.targetId);
+        return result;
       });
-      return;
-    }
-
-    if (interpretation.intent === "CHECK_SELF") {
-      mutate("self-check-action", (draft) => {
-        const current = draft.sessions[sessionId];
-        const character = draft.characters[uid];
-        record(current, "scene", selfStatusText(character, actorName), { kind: "CHECK_SELF", outcome: "OBSERVED", contamination: character.contamination, symptom: character.symptom });
-      });
-      return;
-    }
-
-    if (interpretation.intent === "WAIT") {
-      mutate("wait-action", (draft) => {
-        const current = draft.sessions[sessionId];
-        record(current, "scene", narrated(waitingText(current, actorName, normalizedText)), { kind: "WAIT", outcome: "WAITED" });
-      });
-      return;
-    }
-
-    mutate("unknown-action", (draft) => {
-      const current = draft.sessions[sessionId];
-      record(current, "fail", narrated(unknownActionText(current, actorName, normalizedText)), { kind: "OTHER", outcome: "NO_PROGRESS" });
-    });
   }
 
-  function handleChatInput(sessionId) {
+  async function handleChatInput(sessionId) {
     if (ui.aiPending) return;
     const input = document.querySelector("[data-chat-input]");
     const rawText = String(input?.value || "").trim();
     if (!rawText) return toast("입력 내용을 확인해 주세요.", "대화나 행동을 입력해 주세요.", "error");
     const session = loadState().sessions[sessionId];
     if (!session) return;
-    const uid = currentUserId();
     const isSystemAction = rawText.startsWith("/");
     const text = isSystemAction ? rawText.replace(/^\/+\s*/, "").trim() : rawText;
     if (isSystemAction && !text) return toast("행동 내용을 입력해 주세요.", "/ 뒤에 시스템이 판정할 행동을 적어 주세요.", "error");
     if (session.movement && !isMapRequest(text)) return;
     if (isSystemAction && isMultiAction(text)) return toast("ONE_ACTION_ONLY", "한 번의 /행동에는 한 가지 행동만 입력할 수 있습니다.", "error");
 
-    if (isSystemAction) {
-      clearChatComposer(input);
-      requestLatestLogScroll({ system: true });
-      mutate("action-input", (draft) => {
-        const current = draft.sessions[sessionId];
-        if (current) appendActionInput(current, text, uid);
-      });
-    }
-
     if (isMapRequest(text)) {
       if (!isSystemAction) {
-        clearChatComposer(input);
-        requestLatestLogScroll({ chat: true, system: false });
-        mutate("map-chat", (draft) => {
-          const current = draft.sessions[sessionId];
-          if (current) broadcastCharacterLine(draft, current, text, uid);
-        });
+        try {
+          const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("SEND_FIELD_CHAT_V1", { sessionId, text });
+          if (!["APPLIED", "REPLAY"].includes(result?.status)) throw new Error(result?.status || "CHAT_NOT_APPLIED");
+          clearChatComposer(input);
+          requestLatestLogScroll({ chat: true, system: false });
+          showMapModal(sessionId);
+        } catch (error) {
+          toast("대화를 전송하지 못했습니다.", String(error?.message || "FIELD_CHAT_FAILED"), "error");
+        }
+        return;
       }
-      return applyActionInterpretation(sessionId, text, localActionInterpretation(session, text));
+      try {
+        const result = await applyActionInterpretation(sessionId, text, localActionInterpretation(session, text));
+        if (!["APPLIED", "REPLAY"].includes(result?.status)) throw new Error(result?.status || "ACTION_NOT_APPLIED");
+        clearChatComposer(input);
+        requestLatestLogScroll({ system: true });
+      } catch (error) {
+        toast("행동을 확정하지 못했습니다.", String(error?.message || "ACTION_FAILED"), "error");
+      }
+      return;
     }
 
     // 일반 대화는 행동 판정을 발생시키지 않는다.
     // 단, 길을 잃었거나 다음 행동을 묻는 명백한 표현은 '힌트 요청'으로만 해석해 선택지를 연다.
     if (!isSystemAction) {
-      clearChatComposer(input);
-      requestLatestLogScroll({ chat: true, system: isNavigationHintRequest(text) });
-      mutateInvestigationChat("field-chat", (draft) => {
-        const current = draft.sessions[sessionId];
-        if (!current || current.movement) return;
-        broadcastCharacterLine(draft, current, text, uid);
+      try {
+        const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("SEND_FIELD_CHAT_V1", { sessionId, text });
+        if (!["APPLIED", "REPLAY"].includes(result?.status)) throw new Error(result?.status || "CHAT_NOT_APPLIED");
         if (isNavigationHintRequest(text)) {
-          current.choiceReveal = { type: current.activeEncounter ? "hazard" : "context", at: Date.now(), actorId: uid };
-          const currentHazardId = current.activeEncounter?.hazards?.[current.activeEncounter.currentIndex];
-          appendLog(current, "scene", hintResponseText(current, currentHazardId ? DATA.hazardTemplates[currentHazardId] : null));
+          const hint = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVESTIGATION_ACTION_V1", { sessionId, kind: session.activeEncounter ? "HAZARD_HINT" : "NAVIGATION_HINT", text });
+          if (!["APPLIED", "REPLAY"].includes(hint?.status)) throw new Error(hint?.status || "HINT_NOT_APPLIED");
         }
-      }, input);
+        clearChatComposer(input);
+        requestLatestLogScroll({ chat: true, system: isNavigationHintRequest(text) });
+      } catch (error) {
+        toast("대화를 전송하지 못했습니다.", String(error?.message || "FIELD_CHAT_FAILED"), "error");
+      }
       return;
     }
 
     const localInterpretation = localActionInterpretation(session, text);
-    if (!shouldUseAI(session, localInterpretation)) return applyActionInterpretation(sessionId, text, localInterpretation);
-
     setAIPending(true, sessionId);
-    requestAIInterpretation(session, text, localInterpretation)
-      .then((interpretation) => {
-        setAIPending(false, sessionId);
-        applyActionInterpretation(sessionId, text, interpretation);
-      })
-      .catch(() => {
-        setAIPending(false, sessionId);
-        applyActionInterpretation(sessionId, text, localInterpretation);
-      });
+    try {
+      const interpretation = shouldUseAI(session, localInterpretation)
+        ? await requestAIInterpretation(session, text, localInterpretation)
+        : localInterpretation;
+      const result = await applyActionInterpretation(sessionId, text, interpretation);
+      if (!["APPLIED", "REPLAY"].includes(result?.status)) throw new Error(result?.status || "ACTION_NOT_APPLIED");
+      clearChatComposer(input);
+      requestLatestLogScroll({ system: true });
+    } catch (error) {
+      toast("행동을 확정하지 못했습니다.", String(error?.message || "ACTION_FAILED"), "error");
+    } finally {
+      setAIPending(false, sessionId);
+    }
   }
 
   function bindInvestigationScene(session, root = document.querySelector(".retro-investigation")) {
@@ -3543,13 +3143,9 @@
     root.querySelectorAll("[data-move-route]").forEach((element) => element.addEventListener("click", () => { ui.choicePanelOpen = false; beginMove(session.id, element.dataset.moveRoute); }));
     root.querySelectorAll("[data-detail]").forEach((element) => element.addEventListener("click", () => {
       const detailId = element.dataset.detail;
-      ui.selectedDetailId = detailId;
-      mutate("enter-detail", (draft) => {
-        const current = draft.sessions[session.id];
-        if (!current || current.movement || current.activeEncounter) return;
-        current.currentDetailId = detailId;
-        appendChatDivider(current, `detail:${current.currentNode}:${detailId}`, chatScopeLabel(`detail:${current.currentNode}:${detailId}`));
-      });
+      window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVESTIGATION_ACTION_V1", { sessionId: session.id, kind: "DETAIL", targetId: detailId })
+        .then((result) => { if (['APPLIED', 'REPLAY'].includes(result?.status)) ui.selectedDetailId = detailId; })
+        .catch((error) => toast("조사 지점을 열 수 없습니다.", String(error?.message || "DETAIL_FAILED"), "error"));
     }));
     root.querySelectorAll("[data-inspect-object]").forEach((element) => element.addEventListener("click", () => inspectObject(session.id, element.dataset.inspectObject)));
     root.querySelectorAll("[data-take-item]").forEach((element) => element.addEventListener("click", () => { const [objectId, itemId] = element.dataset.takeItem.split("|"); takeItem(session.id, objectId, itemId); }));
@@ -3588,13 +3184,9 @@
     document.querySelectorAll("[data-move-route]").forEach((element) => element.addEventListener("click", () => { ui.choicePanelOpen = false; beginMove(session.id, element.dataset.moveRoute); }));
     document.querySelectorAll("[data-detail]").forEach((element) => element.addEventListener("click", () => {
       const detailId = element.dataset.detail;
-      ui.selectedDetailId = detailId;
-      mutate("enter-detail", (draft) => {
-        const current = draft.sessions[session.id];
-        if (!current || current.movement || current.activeEncounter) return;
-        current.currentDetailId = detailId;
-        appendChatDivider(current, `detail:${current.currentNode}:${detailId}`, chatScopeLabel(`detail:${current.currentNode}:${detailId}`));
-      });
+      window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVESTIGATION_ACTION_V1", { sessionId: session.id, kind: "DETAIL", targetId: detailId })
+        .then((result) => { if (['APPLIED', 'REPLAY'].includes(result?.status)) ui.selectedDetailId = detailId; })
+        .catch((error) => toast("조사 지점을 열 수 없습니다.", String(error?.message || "DETAIL_FAILED"), "error"));
     }));
     document.querySelectorAll("[data-inspect-object]").forEach((element) => element.addEventListener("click", () => inspectObject(session.id, element.dataset.inspectObject)));
     document.querySelectorAll("[data-take-item]").forEach((element) => element.addEventListener("click", () => { const [objectId, itemId] = element.dataset.takeItem.split("|"); takeItem(session.id, objectId, itemId); }));
@@ -3611,35 +3203,13 @@
     return null;
   }
 
-  function beginMove(sessionId, routeId, actionContext = null) {
-    const uid = currentUserId();
-    mutate("begin-move", (draft) => {
-      const session = draft.sessions[sessionId];
-      const route = DATA.routes.find((candidate) => candidate.id === routeId);
-      if (!session || !route || session.activeEncounter || session.movement) return;
-      if (route.from !== session.currentNode) {
-        appendLog(session, "fail", `${DEMO_USERS[uid].name}는 ${nodeDisplayName(route.to)} 방향으로 이동하려 한다. 그러나 눈앞의 통로는 그 장소와 이어져 있지 않아 발을 옮길 수 없다.`);
-        return;
-      }
-      const token = id("move");
-      notifyDeparture(draft, session, route, token);
-      session.choiceReveal = null;
-      session.movement = {
-        token, routeId: route.id, fromNode: route.from, targetNode: route.to,
-        actorId: uid, startedAt: Date.now(), resolveAt: Date.now() + MOVE_DELAY_MS,
-        actionText: actionContext?.actionText || "",
-        itemUse: actionContext?.itemUse?.status === "usable" ? {
-          itemId: actionContext.itemUse.itemId,
-          mentionedName: actionContext.itemUse.mentionedName,
-          item: {
-            itemId: actionContext.itemUse.item?.itemId || actionContext.itemUse.itemId,
-            name: actionContext.itemUse.item?.name || actionContext.itemUse.mentionedName,
-          },
-        } : null,
-      };
-    });
-    const movingSession = loadState().sessions[sessionId];
-    if (movingSession?.movement?.routeId === routeId) toast("이동 중...", `${nodeDisplayName(movingSession.movement.fromNode)}에서 ${nodeDisplayName(movingSession.movement.targetNode)} 방향으로 이동하고 있습니다.`);
+  async function beginMove(sessionId, routeId, actionContext = null) {
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("BEGIN_MOVEMENT_V1", { sessionId, routeId, actionText: actionContext?.actionText || "", itemId: actionContext?.itemUse?.status === "usable" ? actionContext.itemUse.itemId : "" });
+      if (['APPLIED', 'REPLAY'].includes(result?.status)) toast("이동 중...", "최신 조사 기록을 불러오는 중입니다.");
+      else toast("이동할 수 없습니다.", "최신 조사 기록을 확인해 주세요.", "error");
+      return result;
+    } catch (error) { toast("이동할 수 없습니다.", String(error?.message || "MOVEMENT_BEGIN_FAILED"), "error"); }
   }
 
   function isMultiAction(text) {
@@ -3652,232 +3222,52 @@
     return rule.min + (hashNumber(seed) % (rule.max - rule.min + 1));
   }
 
-  function resolveHazard(sessionId, forcedText = null, alreadyLogged = false, itemUse = null, interpretation = null) {
+  async function resolveHazard(sessionId, forcedText = null, alreadyLogged = false, itemUse = null, interpretation = null) {
     const text = String(forcedText ?? (document.querySelector("[data-chat-input]")?.value || "")).trim();
     const selectedItemId = itemUse?.itemId || ui.selectedItemId || "";
     if (!text) return toast("행동을 입력해 주세요.", "한 가지 행동을 구체적으로 적어 주세요.", "error");
     if (isMultiAction(text)) return toast("ONE_ACTION_ONLY", "한 채팅에는 한 가지 행동만 입력할 수 있습니다.", "error");
-    const uid = currentUserId();
-    requestLatestLogScroll({ system: true });
-    mutate("resolve-hazard", (draft) => {
-      const session = draft.sessions[sessionId];
-      const encounter = session?.activeEncounter;
-      if (!encounter) return;
-      const hazardId = encounter.hazards[encounter.currentIndex];
-      const hazardIndex = encounter.currentIndex;
-      const transition = session.lastMovementTransition?.kind === "ENCOUNTER"
-        && session.lastMovementTransition.routeId === encounter.routeId
-        ? session.lastMovementTransition
-        : null;
-      const movementToken = transition?.token || "";
-      const contaminationBefore = Object.fromEntries(session.memberIds.map((memberId) => [memberId, Number(draft.characters?.[memberId]?.contamination || 0)]));
-      const hazard = DATA.hazardTemplates[hazardId];
-      const lower = text.toLowerCase();
-      const risky = /(뛰|달려|맨손|무시|강하게 밀|밟고|잡고 버틴|그냥 간)/.test(lower);
-      const safe = hazard.safeKeywords.some((keyword) => lower.includes(keyword.toLowerCase()));
-      const hasItem = selectedItemId && draft.characters[uid].inventory[selectedItemId]?.quantity > 0;
-      const outcome = risky ? "FAIL" : safe || hasItem ? "SUCCESS" : "PARTIAL";
-      let ruleId = "EXP_CONTACT_NONE";
-      if (outcome === "PARTIAL") ruleId = "EXP_CONTACT_LOW";
-      if (outcome === "FAIL") ruleId = hazard.failRule || "EXP_CONTACT_MEDIUM";
-      if (hasItem && outcome !== "FAIL") ruleId = "EXP_ITEM_ONLY";
-      const delta = deterministicDelta(ruleId, `${sessionId}:${hazardId}:${text}:${encounter.currentIndex}`);
-      session.choiceReveal = null;
-      const character = draft.characters[uid];
-      character.contamination = clamp(character.contamination + delta, 0, 100);
-      character.symptom = contaminationStage(character.contamination);
-      if (hasItem && ruleId === "EXP_ITEM_ONLY") character.inventory[selectedItemId].state = "CONTAMINATED";
-      encounter.resolutions.push({ hazardId, actorId: uid, text, selectedItemId: selectedItemId || null, outcome, ruleId, delta });
-      let resultText = actionResolutionText(DEMO_USERS[uid].name, text, outcome, hazardId, delta, `${session.id}:${encounter.currentIndex}:${encounter.resolutions.length}:${session.logs.length}`, itemUse);
-      encounter.currentIndex += 1;
-      if (encounter.currentIndex >= encounter.hazards.length) {
-        const arrival = applyArrival(draft, session, encounter.targetNode, encounter.ambientRuleId, movementToken);
-        resultText += ` ${arrival}`;
-        session.activeEncounter = null;
-      } else {
-        const nextHazardId = encounter.hazards[encounter.currentIndex];
-        resultText += ` 이어서 ${HAZARD_PHENOMENA[nextHazardId] || DATA.hazardTemplates[nextHazardId]?.name}`;
-      }
-      if (transition) {
-        const contaminationBaselines = { ...(transition.contaminationBaselines || {}) };
-        const contaminationDeltas = { ...(transition.contaminationDeltas || {}) };
-        session.memberIds.forEach((memberId) => {
-          if (!(memberId in contaminationBaselines)) contaminationBaselines[memberId] = contaminationBefore[memberId];
-          const change = Number(draft.characters?.[memberId]?.contamination || 0) - contaminationBefore[memberId];
-          if (change > 0) contaminationDeltas[memberId] = Number(contaminationDeltas[memberId] || 0) + change;
-        });
-        session.lastMovementTransition = {
-          ...transition,
-          kind: session.activeEncounter ? "ENCOUNTER" : "ARRIVED",
-          completedAt: session.activeEncounter ? transition.completedAt : Date.now(),
-          contaminationBaselines,
-          contaminationDeltas,
-        };
-      }
-      const entry = appendLog(
-        session,
-        outcome === "FAIL" ? "fail" : "success",
-        resultText,
-        null,
-        movementLogMeta(movementToken, session.id, `hazard:${hazardIndex}:${hazardId}`),
-      );
-      queueActionNarration(session, entry, text, interpretation || localActionInterpretation(session, text), {
-        kind: "HAZARD_RESPONSE",
-        outcome,
-        hazardId,
-        contaminationDelta: delta,
-        contaminationAfter: character.contamination,
-        arrived: !session.activeEncounter,
-        currentLocation: nodeDisplayName(session.currentNode),
-      });
-    });
-    ui.actionText = "";
-    ui.selectedItemId = "";
+    const session = loadState().sessions?.[sessionId];
+    const encounter = session?.activeEncounter;
+    const transition = session?.lastMovementTransition;
+    if (!encounter || !transition?.token) return;
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("RESOLVE_HAZARD_V1", { sessionId, movementToken: transition.token, hazardIndex: encounter.currentIndex, hazardId: encounter.hazards?.[encounter.currentIndex] || "", actionText: text, itemId: selectedItemId });
+      if (!['APPLIED', 'REPLAY'].includes(result?.status)) throw new Error(result?.status || "HAZARD_NOT_APPLIED");
+      requestLatestLogScroll({ system: true });
+      ui.actionText = ""; ui.selectedItemId = "";
+      return result;
+    } catch (error) { toast("위험 대응을 확정하지 못했습니다.", String(error?.message || "HAZARD_FAILED"), "error"); }
   }
 
-  function sendFieldMessage(sessionId) {
+  async function sendFieldMessage(sessionId) {
     const text = String(document.querySelector("[data-field-message]")?.value || "").trim();
     if (!text) return toast("대화 내용을 입력해 주세요.", "같은 현장에 있는 인물에게 전달할 말을 적어 주세요.", "error");
-    const uid = currentUserId();
-    mutate("field-message", (draft) => {
-      const session = draft.sessions[sessionId];
-      if (!session || session.movement) return;
-      const scopeKey = chatScopeKey(session);
-      const recipients = [session, ...fieldSessions(draft, session)];
-      unique(recipients.map((candidate) => candidate.id)).forEach((candidateId) => {
-        appendLog(draft.sessions[candidateId], "interaction", `“${text}”`, uid, { scopeKey });
-      });
-    });
-    ui.fieldMessage = "";
+    try { const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("SEND_FIELD_CHAT_V1", { sessionId, text }); if (!['APPLIED', 'REPLAY'].includes(result?.status)) throw new Error(result?.status || "CHAT_NOT_APPLIED"); ui.fieldMessage = ""; }
+    catch (error) { toast("대화를 전송하지 못했습니다.", String(error?.message || "FIELD_CHAT_FAILED"), "error"); }
   }
 
-  function transferFieldItem(sessionId) {
+  async function transferFieldItem(sessionId) {
     const targetId = document.querySelector("[data-transfer-target]")?.value || "";
     const itemId = document.querySelector("[data-transfer-item]")?.value || "";
-    const uid = currentUserId();
     if (!targetId || !itemId) return toast("받을 인물과 소지품을 선택해 주세요.", "전달은 현재 같은 현장에 있는 인물에게만 가능합니다.", "error");
-    mutate("transfer-field-item", (draft) => {
-      const session = draft.sessions[sessionId];
-      if (!session || session.movement) return;
-      const presentIds = fieldCharacterIds(draft, session).filter((memberId) => memberId !== uid);
-      if (!presentIds.includes(targetId)) return;
-      const giverItem = draft.characters[uid].inventory[itemId];
-      if (!giverItem || giverItem.quantity < 1) return;
-      const receiverInventory = draft.characters[targetId].inventory;
-      if (!receiverInventory[itemId]) receiverInventory[itemId] = { ...giverItem, quantity: 0 };
-      receiverInventory[itemId].quantity += 1;
-      giverItem.quantity -= 1;
-      if (giverItem.quantity <= 0) delete draft.characters[uid].inventory[itemId];
-      const message = `${DEMO_USERS[uid].name}가 ${DEMO_USERS[targetId].name}에게 ${giverItem.name} ×1을 건넸다.`;
-      const scopeKey = chatScopeKey(session);
-      const recipients = [session, ...fieldSessions(draft, session)];
-      unique(recipients.map((candidate) => candidate.id)).forEach((candidateId) => appendLog(draft.sessions[candidateId], "interaction", message, null, { scopeKey }));
-    });
-    ui.transferItemId = "";
+    try { const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("OFFER_ITEM_TRANSFER_V1", { receiverId: targetId, inventoryKey: itemId, quantity: 1, actionText: "", source: "field-transfer" }); if (!['APPLIED', 'REPLAY'].includes(result?.status)) throw new Error(result?.status || "TRANSFER_NOT_APPLIED"); ui.transferItemId = ""; }
+    catch (error) { toast("전달 제안을 보낼 수 없습니다.", String(error?.message || "TRANSFER_FAILED"), "error"); }
   }
 
-  function inspectObject(sessionId, objectId) {
-    const uid = currentUserId();
-    let canReveal = false;
-    mutate("inspect-object", (draft) => {
-      const session = draft.sessions[sessionId];
-      const object = findObject(objectId);
-      if (!session || !object || session.activeEncounter || session.movement) return;
-      const detailAllowed = DATA.places[session.currentNode]?.details.some((d) => d.id === object.detailId);
-      if (!detailAllowed) {
-        appendLog(session, "fail", `${DEMO_USERS[uid].name}는 ${object.name}을 조사하려고 주변을 살핀다. 그러나 이 장소에는 해당 물건이 보이지 않아 행동을 이어갈 수 없다.`);
-        return;
-      }
-      canReveal = true;
-      if (!session.inspectedObjectIds.includes(objectId)) {
-        session.inspectedObjectIds.push(objectId);
-        appendLog(session, "scene", `${DEMO_USERS[uid].name}는 ${object.name} 앞에 몸을 낮추고 세부를 확인한다. ${object.result} ${objectItemFindingText(draft, session, object.id)}`);
-      }
-    });
-    if (canReveal) showObjectModal(objectId);
+  async function inspectObject(sessionId, objectId) {
+    try { const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("INVESTIGATION_ACTION_V1", { sessionId, kind: "INSPECT", targetId: objectId }); if (!['APPLIED', 'REPLAY'].includes(result?.status)) throw new Error(result?.status || "INSPECT_NOT_APPLIED"); showObjectModal(objectId); }
+    catch (error) { toast("조사할 수 없습니다.", String(error?.message || "INSPECT_FAILED"), "error"); }
   }
 
-  function takeItemNow(sessionId, objectId, itemId) {
-    const uid = currentUserId();
-    mutate("take-item", (draft) => {
-      const session = draft.sessions[sessionId];
-      const fieldPlacementId = itemId.startsWith("FIELD:") ? itemId.slice("FIELD:".length) : "";
-      const placement = fieldPlacementId ? variantFieldPlacements(draft, session)[fieldPlacementId] : null;
-      const key = itemClaimKey(objectId, itemId);
-      const mapping = placement && placement.objectId === objectId
-        ? { itemId, name: String(placement.item?.name || placement.sourceInventoryKey || "현장 물품"), default: Number(placement.item?.quantity || 1) }
-        : (DATA.objectItems[objectId] || []).find((m) => m.itemId === itemId);
-      if (!session || !mapping || !session.inspectedObjectIds.includes(objectId)) return;
-      if (placement) {
-        takeFieldPlacementItemState(draft, { sessionId, objectId, placementId: fieldPlacementId, characterId: uid });
-        return;
-      }
-      const claims = variantItemClaims(draft, session);
-      if (claims[key]) {
-        appendLog(session, "fail", `${DEMO_USERS[uid].name}는 ${mapping.name}을 챙기려고 곧바로 손을 뻗는다. 그러나 이미 누군가 가져가버렸다··· 남아 있는 것은 빈 자리뿐이라 획득할 수 없다.`);
-        return;
-      }
-      claims[key] = { objectId, itemId, characterId: uid, sessionId, claimedAt: Date.now() };
-      if (!session.takenItemKeys.includes(key)) session.takenItemKeys.push(key);
-      const catalog = DATA.itemCatalog[itemId];
-      const inventory = draft.characters[uid].inventory;
-      if (!inventory[itemId]) inventory[itemId] = { itemId, name: catalog?.name || mapping.name, category: catalog?.category || "일반", quantity: 0, state: "CLEAN" };
-      inventory[itemId].quantity += mapping.default;
-      appendLog(session, "item", `${DEMO_USERS[uid].name}는 ${mapping.name} ×${mapping.default}을 챙겨 소지품에 넣었다.`);
-    });
+  async function takeItem(sessionId, objectId, itemId) {
+    try { const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("CLAIM_FIELD_ITEM_V1", { sessionId, objectId, itemId }); if (!['APPLIED', 'REPLAY'].includes(result?.status)) throw new Error(result?.status || "CLAIM_NOT_APPLIED"); }
+    catch (error) { toast("물품을 획득할 수 없습니다.", String(error?.message || "CLAIM_FAILED"), "error"); }
   }
 
-  async function withLocalItemClaimLock(lockName, callback) {
-    const storageKey = `${GLOBAL_KEY}_item_lock_${hashNumber(lockName)}`;
-    const token = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    try {
-      for (let attempt = 0; attempt < 24; attempt += 1) {
-        const now = Date.now();
-        const existing = JSON.parse(localStorage.getItem(storageKey) || "null");
-        if (!existing || existing.expiresAt < now) {
-          localStorage.setItem(storageKey, JSON.stringify({ token, expiresAt: now + 2000 }));
-          await new Promise((resolve) => setTimeout(resolve, 28));
-          const confirmed = JSON.parse(localStorage.getItem(storageKey) || "null");
-          if (confirmed?.token === token) {
-            try { return callback(); }
-            finally {
-              const latest = JSON.parse(localStorage.getItem(storageKey) || "null");
-              if (latest?.token === token) localStorage.removeItem(storageKey);
-            }
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 22 + (attempt % 4) * 7));
-      }
-    } catch {
-      return callback();
-    }
-    return callback();
-  }
-
-  function takeItem(sessionId, objectId, itemId) {
-    const session = loadState().sessions[sessionId];
-    const lockName = `baekji-item-claim:${session?.variant || "unknown"}:${itemClaimKey(objectId, itemId)}`;
-    if (typeof navigator !== "undefined" && navigator.locks?.request) {
-      navigator.locks.request(lockName, () => takeItemNow(sessionId, objectId, itemId))
-        .catch(() => withLocalItemClaimLock(lockName, () => takeItemNow(sessionId, objectId, itemId)));
-      return;
-    }
-    if (typeof navigator !== "undefined") {
-      withLocalItemClaimLock(lockName, () => takeItemNow(sessionId, objectId, itemId));
-      return;
-    }
-    takeItemNow(sessionId, objectId, itemId);
-  }
-
-  function endSession(sessionId) {
-    mutate("end-session", (draft) => {
-      const session = draft.sessions[sessionId];
-      if (!session || session.activeEncounter) return;
-      session.status = "COMPLETED";
-      session.endedAt = Date.now();
-      appendLog(session, "scene", "조사를 마치고 현재까지 확인한 기록을 확정했다.");
-    });
-    go(`result/${sessionId}`);
+  async function endSession(sessionId) {
+    try { const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("END_SESSION_V1", { sessionId }); if (['APPLIED', 'REPLAY'].includes(result?.status)) go(`result/${sessionId}`); else toast("조사를 종료할 수 없습니다.", "최신 상태를 확인해 주세요.", "error"); }
+    catch (error) { toast("조사를 종료할 수 없습니다.", String(error?.message || "END_SESSION_FAILED"), "error"); }
   }
 
   function renderResult(sessionId) {
@@ -3963,6 +3353,7 @@
   persistence.subscribe(ingestWorldRaw);
   window.addEventListener("hashchange", render);
   window.addEventListener("storage", (event) => { if (event.key === GLOBAL_KEY) ingestWorldRaw(event.newValue); });
+  window.addEventListener("baekji-player-session-ready", () => render(false));
   window.addEventListener("pageshow", () => {
     if (routeParts()[0] === "investigate") {
       renderExternalUpdate();

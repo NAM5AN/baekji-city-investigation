@@ -13,7 +13,7 @@ const profileSync = fs.readFileSync("tester-party-profile-sync.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 
 const homeStart = app.indexOf("  function renderHome()");
-const homeEnd = app.indexOf("  function createParty()", homeStart);
+const homeEnd = app.indexOf("  const acceptInviteInFlight", homeStart);
 const briefingStart = app.indexOf("  function renderBriefing(sessionId)");
 const briefingEnd = app.indexOf("  function appendLog(", briefingStart);
 const projectionStart = app.indexOf("  function playerRouteProjection(");
@@ -58,12 +58,12 @@ assert.doesNotMatch(roster, /function decorateMemberHome|new MutationObserver/, 
 assert.doesNotMatch(profileSync, /function decorateBriefingMembers/, "profile sync must not rewrite direct briefing members");
 
 assert.match(index, /stage2-home-briefing-party-ui=1/);
-assert.match(index, /party-flow-sync\.js\?v=0\.3\.68&stage3a=1&stage6b=1/);
+assert.match(index, /party-flow-sync\.js\?v=0\.3\.69&stage3a=1&stage6b=1&stage8b-b5=1/);
 assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.69&stage3a=1&stage6b=1/);
-assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.88&stage3a=1&stage3b=1&stage6b=1/);
+assert.match(index, /party-membership-ux-fix\.js\?v=0\.3\.89&stage3a=1&stage3b=1&stage6b=1&stage8b-b5=1/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.97&stage3a=1&stage3b=1&stage6b=1/);
-assert.match(index, /party-ui-stability\.js\?v=0\.3\.94&stage3a=1&stage6b=1/);
+assert.match(index, /party-ui-stability\.js\?v=0\.3\.95&stage3a=1&stage6b=1&rename-party-command=1/);
 assert.match(index, /party-member-home-roster\.js\?v=0\.3\.98/);
 
 console.log("PASS: home and briefing party UI render directly without DOM post-processing");

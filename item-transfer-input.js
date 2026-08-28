@@ -62,27 +62,28 @@
       if (decision.mode !== "OFFER") decision = T.localInterpret(text, T.context(state, giverId));
       if (decision.mode !== "OFFER") return replayOriginal(button);
 
-      const result = T.createOffer(state, {
-        giverId,
+      let result;
+      try {
+        result = await UI.dispatch("OFFER_ITEM_TRANSFER_V1", {
         receiverId: decision.targetCharacterId,
         inventoryKey: decision.inventoryKey,
         quantity: Math.max(1, Number(decision.quantity || 1)),
         actionText: text,
-        source: "free-action-ai",
-      });
-      if (!result.ok) {
+          source: "free-action-ai",
+        });
+        if (result.status !== "APPLIED" && result.status !== "REPLAY") throw new Error(result.status || "TRANSFER_NOT_APPLIED");
+      } catch (error) {
         const messages = {
-          NOT_COLOCATED: "현재 같은 현장에 있는 캐릭터에게만 건넬 수 있습니다.",
-          ITEM_NOT_AVAILABLE: "해당 상태의 물품 수량이 부족하거나 다른 전달 제안에 묶여 있습니다.",
-          ACTIVE_SESSION_REQUIRED: "진행 중인 조사 현장에서만 물품을 건넬 수 있습니다.",
+          WORLD_COMMAND_SYNC_NOT_READY: "최신 조사 기록을 불러온 뒤 다시 시도해 주세요.",
+          WORLD_COMMAND_INVALID_PAYLOAD: "전달할 물품과 받는 대상을 다시 확인해 주세요.",
         };
-        UI.toast("소지품을 건넬 수 없습니다.", messages[result.error] || result.error, "error");
+        const code = String(error?.message || "TRANSFER_FAILED");
+        UI.toast("소지품을 건넬 수 없습니다.", messages[code] || code, "error");
         return;
       }
-      UI.write(state);
       if (input) input.value = "";
       input?.dispatchEvent(new Event("input", { bubbles: true }));
-      UI.toast("전달 제안을 보냈습니다.", `${T.uname(result.offer.receiverId)}가 수락해야 소지품이 이동합니다.`);
+      UI.toast("전달 제안을 보냈습니다.", `${T.uname(decision.targetCharacterId)}가 수락해야 소지품이 이동합니다.`);
     } finally {
       busy = false;
       setPending(false);

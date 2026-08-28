@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const app = fs.readFileSync("app.js", "utf8");
-const foundation = fs.readFileSync("foundation-rule-fixes.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 
 const correctHomeCopy = "조사조를 생성한 캐릭터가 조장을 맡으며, 조장은 조원 관리와 세션 시작을 담당합니다.";
@@ -19,11 +18,8 @@ assert.ok(!app.includes("복수 위험은 서로 다른 행동으로 순서대�
 assert.ok(!app.includes("data-reset-demo"), "player result render must not create a demo reset control");
 assert.ok(!app.includes("function resetDemo"), "the hidden player reset handler must not remain as dead runtime code");
 
-assert.ok(foundation.includes("applyMovementImpairment"), "movement impairment rules must remain installed");
-assert.ok(foundation.includes("Storage.prototype"), "movement storage guard must remain installed");
-assert.ok(!foundation.includes("MutationObserver"), "foundation rules must not observe the DOM for pure copy fixes");
-assert.ok(!foundation.includes("querySelectorAll"), "foundation rules must not search rendered UI for copy fixes");
-assert.ok(index.includes("foundation-rule-fixes.js?v=0.4.3"), "updated foundation rules must be cache-busted");
+assert.ok(!index.includes("foundation-rule-fixes.js"), "retired browser movement repair must not load after command ownership moved server-side");
+assert.ok(index.includes("player-world-commands.js"), "the authoritative command client replaces browser movement repair");
 assert.ok(index.includes("stage2-foundation-ui=1"), "the direct app render change must be cache-busted");
 
 console.log("PASS: stage 2 foundation UI copy and controls render correctly without DOM post-processing");

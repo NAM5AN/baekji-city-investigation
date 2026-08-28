@@ -89,14 +89,16 @@ async function checkSignup() {
 async function checkCloud() {
   const keyName = `__ci_missing_state_${Date.now()}__`;
   const revision = await rpc("baekji_mvp_get_revision", { p_state_key: keyName });
-  if (!revision.ok || Number(revision.payload) !== 0) {
-    throw new Error(`cloud revision RPC failed: HTTP ${revision.status} ${JSON.stringify(revision.payload)}`);
-  }
   const state = await rpc("baekji_mvp_get_state", { p_state_key: keyName });
-  if (!state.ok || !Array.isArray(state.payload) || state.payload.length !== 0) {
-    throw new Error(`cloud state RPC failed: HTTP ${state.status} ${JSON.stringify(state.payload)}`);
+  for (const [name, probe] of [["baekji_mvp_get_revision", revision], ["baekji_mvp_get_state", state]]) {
+    const message = String(probe.payload?.message || probe.payload || "");
+    const denied = [401, 403].includes(probe.status)
+      && (String(probe.payload?.code || "") === "42501" || /permission denied|insufficient privilege/i.test(message));
+    if (!denied) {
+      throw new Error(`${name} must stay revoked from the publishable browser role: HTTP ${probe.status} ${JSON.stringify(probe.payload)}`);
+    }
   }
-  console.log("PASS: live cloud state RPCs are reachable");
+  console.log("PASS: live legacy whole-world read RPCs remain revoked from the publishable browser role");
 }
 
 if (mode === "probe-login") await probeLogin();

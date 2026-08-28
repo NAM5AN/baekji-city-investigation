@@ -337,43 +337,14 @@
     };
   }
 
-  async function resolveWithAI(context, fallback) {
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
-    const timeout = controller ? setTimeout(() => controller.abort(), 16000) : null;
-    try {
-      const response = await fetch("/api/resolve-character-interaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(context),
-        cache: "no-store",
-        signal: controller?.signal,
-      });
-      if (!response.ok) throw new Error(`CHARACTER_INTERACTION_${response.status}`);
-      return normalizeDecision(await response.json(), fallback, context.actor.name, context.target.name);
-    } catch {
-      return normalizeDecision(fallback, fallback, context.actor.name, context.target.name);
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
-  }
-
-  function appendLog(session, type, text, actorId = null, meta = {}) {
-    session.logs ||= [];
-    const entry = {
-      id: `log_char_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-      type,
-      text,
-      actorId,
-      at: Date.now(),
-      ...meta,
-    };
-    session.logs.push(entry);
-    return entry;
-  }
-
-  function saveState(snapshot) {
-    persistence.writeRaw(JSON.stringify(snapshot));
-    try { window.dispatchEvent(new Event("hashchange")); } catch { /* ignore */ }
+  async function resolveWithAI(context) {
+    const commands = window.__BAEKJI_PLAYER_WORLD_COMMANDS__;
+    if (!commands?.dispatch) throw new Error("PLAYER_WORLD_COMMANDS_UNAVAILABLE");
+    return commands.dispatch("CHARACTER_INTERACTION_V1", {
+      sessionId: context.sessionId,
+      targetId: context.targetId,
+      actionText: context.actionText,
+    });
   }
 
   function setPending(pending) {
@@ -428,47 +399,11 @@
     resolving = true;
     setPending(true);
     try {
-      const actorName = nameForId(uid);
-      const fallback = fallbackDecision(action, actorName, target.name, `${session.id}:${uid}:${target.id}:${session.logs?.length || 0}`);
-      const context = interactionContext(snapshot, session, uid, target, action);
-      const visibility = visibilityForAction(action);
-      const sessionIds = capturedSessionIds(snapshot, session, target, visibility);
-      const eventId = `char_interaction_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-      appendLog(session, "action-input", action, uid, {
-        scopeKey: spatialScopeKey(session),
-        fieldObservationBroadcasted: true,
-        characterInteraction: true,
-        interactionEventId: eventId,
-        targetId: target.id,
-      });
-      clearComposer();
-      saveState(snapshot);
-
-      const decision = await resolveWithAI(context, fallback);
-      const latest = readState() || snapshot;
-      const resultType = decision.outcome === "RESISTED" ? "fail" : decision.outcome === "NEUTRAL" ? "scene" : "success";
-      sessionIds.forEach((sessionId) => {
-        const recipient = latest.sessions?.[sessionId];
-        if (!recipient) return;
-        if ((recipient.logs || []).some((entry) => entry?.interactionEventId === eventId && entry?.kind === "CHARACTER_INTERACTION_RESULT")) return;
-        appendLog(recipient, resultType, decision.narration, null, {
-          kind: "CHARACTER_INTERACTION_RESULT",
-          interactionEventId: eventId,
-          actorId: uid,
-          targetId: target.id,
-          sourceSessionId: session.id,
-          targetSessionId: target.sessionId,
-          outcome: decision.outcome,
-          targetEffect: decision.targetEffect,
-          scopeKey: spatialScopeKey(session),
-          aiNarrationFinal: true,
-          characterInteraction: true,
-        });
-      });
-      saveState(latest);
-      window.dispatchEvent?.(new CustomEvent("baekji-character-interaction-resolved", {
-        detail: { eventId, actorId: uid, targetId: target.id, outcome: decision.outcome, targetEffect: decision.targetEffect },
-      }));
+      const result = await resolveWithAI({ sessionId: session.id, targetId: target.id, actionText: action });
+      if (result?.status === "APPLIED" || result?.status === "REPLAY") {
+        clearComposer();
+        window.dispatchEvent?.(new CustomEvent("baekji-character-interaction-resolved", { detail: { actorId: uid, targetId: target.id } }));
+      }
       return true;
     } finally {
       resolving = false;

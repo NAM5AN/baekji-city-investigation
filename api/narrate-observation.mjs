@@ -160,40 +160,43 @@ function send(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
+export async function generateObservation(body, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
+  if (!env.OPENAI_API_KEY) throw Object.assign(new Error("AI_NOT_CONFIGURED"), { statusCode: 503 });
+  const payload = sanitizeObservationPayload(body);
+  if (!payload.action || !payload.fallback) throw Object.assign(new Error("OBSERVATION_CONTEXT_REQUIRED"), { statusCode: 400 });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const baseUrl = String(env.OPENAI_API_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const apiResponse = await fetchImpl(`${baseUrl}/responses`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: env.OPENAI_MODEL || MODEL,
+        input: [{ role: "developer", content: PROMPT }, { role: "user", content: JSON.stringify(payload) }],
+        text: { format: { type: "json_schema", name: "field_observation", strict: true, schema: SCHEMA } },
+        max_output_tokens: 260,
+      }),
+      signal: controller.signal,
+    });
+    const responsePayload = await apiResponse.json().catch(() => ({}));
+    if (!apiResponse.ok) throw Object.assign(new Error("AI_SERVICE_UNAVAILABLE"), { statusCode: 502 });
+    let parsed;
+    try { parsed = JSON.parse(outputText(responsePayload)); }
+    catch { throw Object.assign(new Error("AI_INVALID_OUTPUT"), { statusCode: 502 }); }
+    const observation = composeObservation(parsed?.observation, payload);
+    if (!observation) throw Object.assign(new Error("AI_EMPTY_OUTPUT"), { statusCode: 502 });
+    return { observation, speechMode: payload.speechMode, visualMode: payload.visualMode };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export default async function handler(request, response) {
   try {
     if (request.method !== "POST") return send(response, 405, { error: "METHOD_NOT_ALLOWED" });
     if (!sameOrigin(request)) return send(response, 403, { error: "ORIGIN_NOT_ALLOWED" });
-    if (!process.env.OPENAI_API_KEY) return send(response, 503, { error: "AI_NOT_CONFIGURED", fallback: "local" });
-    const payload = sanitizeObservationPayload(await readBody(request));
-    if (!payload.action || !payload.fallback) return send(response, 400, { error: "OBSERVATION_CONTEXT_REQUIRED" });
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const baseUrl = String(process.env.OPENAI_API_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
-      const apiResponse = await fetch(`${baseUrl}/responses`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || MODEL,
-          input: [{ role: "developer", content: PROMPT }, { role: "user", content: JSON.stringify(payload) }],
-          text: { format: { type: "json_schema", name: "field_observation", strict: true, schema: SCHEMA } },
-          max_output_tokens: 260,
-        }),
-        signal: controller.signal,
-      });
-      const responsePayload = await apiResponse.json().catch(() => ({}));
-      if (!apiResponse.ok) return send(response, 502, { error: "AI_SERVICE_UNAVAILABLE", fallback: "local" });
-      let parsed;
-      try { parsed = JSON.parse(outputText(responsePayload)); }
-      catch { return send(response, 502, { error: "AI_INVALID_OUTPUT", fallback: "local" }); }
-      const observation = composeObservation(parsed?.observation, payload);
-      if (!observation) return send(response, 502, { error: "AI_EMPTY_OUTPUT", fallback: "local" });
-      return send(response, 200, { observation, speechMode: payload.speechMode, visualMode: payload.visualMode });
-    } finally {
-      clearTimeout(timer);
-    }
+    return send(response, 200, await generateObservation(await readBody(request)));
   } catch (error) {
     const status = Number(error?.statusCode) || (error?.name === "AbortError" ? 504 : 500);
     return send(response, status, { error: status >= 500 ? "AI_SERVICE_UNAVAILABLE" : compact(error?.message, 80), fallback: "local" });

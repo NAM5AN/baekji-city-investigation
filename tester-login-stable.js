@@ -41,39 +41,9 @@
   }
 
   function ensureCharacter(userId) {
-    let snapshot;
-    try { snapshot = JSON.parse(persistence.readRaw() || "null"); }
-    catch { snapshot = null; }
-    if (!snapshot || snapshot.version !== 3) snapshot = blankWorld();
-    snapshot.characters ||= {};
-    snapshot.parties ||= {};
-    snapshot.sessions ||= {};
-    snapshot.itemClaimsByVariant ||= { a: {}, b: {}, c: {}, d: {} };
-
-    const current = snapshot.characters[userId];
-    if (current && typeof current === "object" && !Array.isArray(current)) {
-      let changed = false;
-      if (current.id !== userId) { current.id = userId; changed = true; }
-      if (!Number.isFinite(Number(current.contamination))) { current.contamination = 0; changed = true; }
-      if (!String(current.symptom || "").trim()) { current.symptom = "안정"; changed = true; }
-      if (!current.inventory || typeof current.inventory !== "object" || Array.isArray(current.inventory)) { current.inventory = {}; changed = true; }
-      if (!("currentPartyId" in current)) { current.currentPartyId = null; changed = true; }
-      if (!("currentSessionId" in current)) { current.currentSessionId = null; changed = true; }
-      if (!("onlineAt" in current)) { current.onlineAt = null; changed = true; }
-      if (changed) persistence.writeRaw(JSON.stringify(snapshot));
-      return;
-    }
-
-    snapshot.characters[userId] = {
-      id: userId,
-      contamination: 0,
-      symptom: "안정",
-      inventory: {},
-      currentPartyId: null,
-      currentSessionId: null,
-      onlineAt: null,
-    };
-    persistence.writeRaw(JSON.stringify(snapshot));
+    // Login succeeds only after the server-side bootstrap RPC has created a
+    // missing actor. The browser keeps this hook for flow compatibility only.
+    return Boolean(userId);
   }
 
   function toUser(payload, pin) {

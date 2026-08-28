@@ -191,24 +191,10 @@
     };
   }
 
-  async function resolveWithAI(context, fallback, target) {
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
-    const timeout = controller ? setTimeout(() => controller.abort(), 16000) : null;
-    try {
-      const response = await fetch("/api/resolve-hazard-flex", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(context),
-        cache: "no-store",
-        signal: controller?.signal,
-      });
-      if (!response.ok) throw new Error(`CROSS_PARTY_HAZARD_${response.status}`);
-      return normalizeDecision(await response.json(), fallback, target);
-    } catch {
-      return fallback;
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
+  async function resolveWithAI(payload) {
+    const commands = window.__BAEKJI_PLAYER_WORLD_COMMANDS__;
+    if (!commands?.dispatch) throw new Error("PLAYER_WORLD_COMMANDS_UNAVAILABLE");
+    return commands.dispatch("RESOLVE_FLEXIBLE_HAZARD_V1", payload);
   }
 
   function ruleForExposure(level) {
@@ -366,24 +352,16 @@
     resolving = true;
     setPending(true);
     try {
-      const remainingCount = session.activeEncounter.hazards.length - session.activeEncounter.currentIndex;
-      const fallback = fallbackDecision(cleanAction, target, remainingCount);
-      const context = hazardContext(snapshot, session, uid, cleanAction);
-      const expectedHazard = context.currentHazard?.id;
-      const decision = await resolveWithAI(context, fallback, target);
-
-      const latest = readState();
-      const latestSession = latest?.sessions?.[session.id];
-      if (!latestSession?.activeEncounter) return true;
-      const actualHazard = latestSession.activeEncounter.hazards[latestSession.activeEncounter.currentIndex];
-      if (actualHazard !== expectedHazard || !stillPresent(latest, latestSession, target)) return true;
-
-      appendLog(latestSession, "interaction", rawAction, uid, { scopeKey: spatialScopeKey(latestSession), crossParty: true });
-      applyDecision(latest, latestSession.id, uid, cleanAction, target, decision);
-      clearComposer();
-      persistence.writeRaw(JSON.stringify(latest));
-      window.dispatchEvent(new Event("hashchange"));
-      window.dispatchEvent(new CustomEvent("baekji-cross-party-hazard-resolved", { detail: { sessionId: latestSession.id, targetId: target.id, targetSessionId: target.sessionId, decision } }));
+      const encounter = session.activeEncounter;
+      const movementToken = String(session.lastMovementTransition?.kind === "ENCOUNTER" ? session.lastMovementTransition.token || "" : "");
+      const hazardIndex = Number(encounter.currentIndex);
+      const hazardId = String(encounter.hazards?.[hazardIndex] || "");
+      if (!movementToken || !hazardId) return true;
+      const result = await resolveWithAI({ sessionId: session.id, movementToken, hazardIndex, hazardId, actionText: cleanAction, targetId: target.id });
+      if (result?.status === "APPLIED" || result?.status === "REPLAY") {
+        clearComposer();
+        window.dispatchEvent(new CustomEvent("baekji-cross-party-hazard-resolved", { detail: { sessionId: session.id, targetId: target.id, targetSessionId: target.sessionId } }));
+      }
       return true;
     } finally {
       resolving = false;

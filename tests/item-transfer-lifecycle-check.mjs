@@ -9,10 +9,15 @@ const css = fs.readFileSync(new URL("../item-transfer-modal.css", import.meta.ur
 
 assert.match(modal, /baekji_transfer_held/);
 assert.match(modal, /heldTransferId\(\) === offer\.id/);
-assert.match(lifecycle, /decision:\s*"CANCELLED"/);
-assert.match(lifecycle, /둘 중 한 명이 전달을 시작한 장소를 벗어났다/);
+assert.match(lifecycle, /EXPIRE_ITEM_TRANSFER_V1/);
+assert.match(lifecycle, /CANCEL_ITEM_TRANSFER_V1/);
 assert.match(lifecycle, /giverSession\.variant === receiverSession\.variant/);
 assert.match(lifecycle, /T\.scope\(giverSession\) === T\.scope\(receiverSession\)/);
+assert.match(lifecycle, /result\.status === "APPLIED" \|\| result\.status === "REPLAY"/);
+assert.doesNotMatch(lifecycle, /(?:UI\.write|T\.resolveOffer|T\.createOffer|session\.logs\.push)/);
+assert.match(modal, /RESOLVE_ITEM_TRANSFER_V1/);
+assert.match(sender, /CANCEL_ITEM_TRANSFER_V1/);
+assert.match(sender, /result\.status !== "APPLIED" && result\.status !== "REPLAY"/);
 assert.match(sender, /상대방의 답변을 기다리는 중/);
 assert.match(sender, /data-transfer-cancel/);
 assert.match(sender, /data-transfer-sender-bar/);

@@ -149,7 +149,7 @@ assert.match(renderParty, /data-party-invite-cancel/, "direct participant markup
 assert.match(renderParty, /members\.map\(\(memberId\) => memberRow\(party, memberId\)\)\.join\(""\)[\s\S]*?pendingInviteIds\.map\(\(memberId\) => pendingInviteRow\(memberId, isCreator, pendingInviteLabel\)\)\.join\(""\)/, "pending rows must render after joined member rows");
 assert.match(renderParty, /\[data-party-invite-cancel\][\s\S]*?cancelInvite\(partyId, el\.dataset\.partyInviteCancel\)/, "pending cancel button must be wired to the cancel action");
 const pendingRowStart = app.indexOf("  function pendingInviteRow(");
-const pendingRowEnd = app.indexOf("  function inviteUser(", pendingRowStart);
+const pendingRowEnd = app.indexOf("  async function inviteUser(", pendingRowStart);
 assert.ok(pendingRowStart >= 0 && pendingRowEnd > pendingRowStart, "pending invite row renderer must be discoverable");
 const pendingRow = app.slice(pendingRowStart, pendingRowEnd);
 assert.match(pendingRow, /status-pills">\$\{cancelMarkup\}<span[^>]*>\$\{escapeHtml\(pendingInviteLabel\)\}<\/span>/, "cancel markup must be left of the invitation-status box");
@@ -157,10 +157,10 @@ assert.match(pendingRow, /초대 취소/, "pending row must use the exact cancel
 assert.match(pendingRow, /초대하는 중\.\.\./, "pending row must use the exact waiting label");
 assert.match(renderParty, /초대하는 중\.\.\./, "pending participant markup must show the waiting-invitation label");
 assert.match(renderParty, /pending/i, "party renderer must explicitly render pending invite rows");
-assert.match(index, /app\.js\?v=0\.4\.15[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1/, "app cache key must identify the current combined flow");
+assert.match(index, /app\.js\?v=0\.4\.18[^"']*pending-party-invites=1[^"']*party-member-readiness-ux=1[^"']*party-invite-grid-stability=1[^"']*party-confirmed-ready-collapse=1[^"']*departure-guards=1[^"']*stage3a=1[^"']*stage3b=1[^"']*stage3c=1[^"']*transfer-privacy=1[^"']*movement-departure-presence=1[^"']*item-disposition=1[^"']*stage5-world-store=1[^"']*stage6a=1[^"']*stage8b=1[^"']*stage8b-b5=1[^"']*toggle-party-ready-command=1/, "app cache key must identify the current combined flow");
 assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1/);
 assert.match(index, /party-leadership-flow\.js\?v=0\.3\.69&stage3a=1&stage6b=1/);
-assert.match(index, /party-flow-sync\.js\?v=0\.3\.68&stage3a=1&stage6b=1/);
+assert.match(index, /party-flow-sync\.js\?v=0\.3\.69&stage3a=1&stage6b=1&stage8b-b5=1/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.97&stage3a=1&stage3b=1&stage6b=1/);
 
 const uxSource = fs.readFileSync(new URL("../party-flow-ux-fix.js", import.meta.url), "utf8");
@@ -171,6 +171,8 @@ class FakeElement {
   constructor(matches = {}, dataset = {}) { this.matches = matches; this.dataset = dataset; }
   closest(selector) { return this.matches[selector] ? this : null; }
   remove() { this.removed = true; }
+  setAttribute(name, value) { this.attributes ||= new Map(); this.attributes.set(name, String(value)); }
+  removeAttribute(name) { this.attributes?.delete(name); }
 }
 
 function clickEvent(target) {
@@ -183,11 +185,12 @@ function clickEvent(target) {
   };
 }
 
-function uxRuntime(initialState, userId) {
+function uxRuntime(initialState, userId, { dispatch = async () => ({ status: "APPLIED" }) } = {}) {
   const local = new Map([[UX_GLOBAL_KEY, JSON.stringify(initialState)]]);
   const session = new Map([[UX_USER_KEY, userId]]);
   let clickHandler = null;
   let writes = 0;
+  let dispatches = 0;
   const alerts = [];
   const modalRoot = { querySelector() { return null; }, replaceChildren() {} };
   const document = {
@@ -217,6 +220,7 @@ function uxRuntime(initialState, userId) {
     queueMicrotask(callback) { callback(); },
   });
   context.window = context;
+  context.__BAEKJI_PLAYER_WORLD_COMMANDS__ = { dispatch(command, payload) { dispatches += 1; return dispatch(command, payload); } };
   context.dispatchEvent = () => true;
   context.alert = (message) => alerts.push(String(message));
   vm.runInContext(runtimeUtils, context, { filename: "runtime-utils.js" });
@@ -228,6 +232,7 @@ function uxRuntime(initialState, userId) {
     click(target) { const event = clickEvent(target); clickHandler(event); return event; },
     snapshot() { return JSON.parse(local.get(UX_GLOBAL_KEY)); },
     writes: () => writes,
+    dispatches: () => dispatches,
     alerts,
   };
 }
@@ -236,12 +241,12 @@ const clickAcceptedFixture = fixture("COMPOSITION_CONFIRMED");
 clickAcceptedFixture.parties.p1.invitedIds = ["test_b"];
 const acceptRuntime = uxRuntime(clickAcceptedFixture, "test_b");
 const acceptClick = acceptRuntime.click(new FakeElement({ "[data-party-flow-accept], [data-accept]": true }, { partyFlowAccept: "p1" }));
-assert.equal(acceptRuntime.writes(), 1, "confirmed-stage accept capture click must produce one atomic state write");
-assert.equal(acceptRuntime.snapshot().characters.test_b.currentPartyId, "p1");
-assert.ok(acceptRuntime.snapshot().parties.p1.memberIds.includes("test_b"));
-assert.ok(!acceptRuntime.snapshot().parties.p1.invitedIds.includes("test_b"));
-assert.equal(acceptClick.prevented, true);
-assert.equal(acceptClick.stopped, true);
+assert.equal(acceptRuntime.writes(), 0, "B5 removes the UX sidecar accept writer; only the server command may accept an invitation");
+assert.equal(acceptRuntime.snapshot().characters.test_b.currentPartyId, null, "the retired sidecar cannot locally join a member");
+assert.ok(!acceptRuntime.snapshot().parties.p1.memberIds.includes("test_b"));
+assert.ok(acceptRuntime.snapshot().parties.p1.invitedIds.includes("test_b"));
+assert.equal(acceptClick.prevented, false, "the retired UX sidecar does not intercept the command owner click");
+assert.equal(acceptClick.stopped, false);
 
 const clickReadyFixture = fixture("COMPOSITION_CONFIRMED");
 clickReadyFixture.parties.p1.invitedIds = ["test_b", "test_c"];
@@ -251,8 +256,8 @@ assert.equal(readyRuntime.writes(), 0, "the retired leader ready control must no
 assert.equal(readyRuntime.alerts.length, 0, "the retired leader ready control must not show the deleted auto-cancel alert");
 assert.equal(readyRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED");
 assert.deepEqual(Array.from(readyRuntime.snapshot().parties.p1.invitedIds), ["test_b", "test_c"], "the retired control must leave pending invitations for the explicit departure confirmation");
-assert.equal(readyClick.prevented, true);
-assert.equal(readyClick.stopped, true);
+assert.equal(readyClick.prevented, false, "retired leader data-ready is no longer owned by the flow capture handler");
+assert.equal(readyClick.stopped, false, "retired leader data-ready cannot block the direct app command owner");
 readyRuntime.click(new FakeElement({ "[data-ready]": true }));
 assert.equal(readyRuntime.alerts.length, 0, "retired leader-ready clicks must never show a cancellation alert");
 assert.equal(readyRuntime.writes(), 0, "retired leader-ready clicks remain write-free");
@@ -269,9 +274,11 @@ assert.ok(alreadyReadyRuntime.snapshot().parties.p1.readyBy.includes("leader"));
 const memberReadyFixture = fixture("COMPOSITION_CONFIRMED");
 const memberRuntime = uxRuntime(memberReadyFixture, "member");
 const memberReadyClick = memberRuntime.click(new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" }));
-assert.equal(memberRuntime.writes(), 1, "member ready capture click must write its own readiness once");
+await Promise.resolve();
+assert.equal(memberRuntime.dispatches(), 1, "member ready capture click sends one authoritative command");
+assert.equal(memberRuntime.writes(), 0, "member ready capture click cannot locally write the whole world");
 assert.equal(memberRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED", "member readiness must not advance the leader-owned ready stage");
-assert.ok(memberRuntime.snapshot().parties.p1.readyBy.includes("member"));
+assert.ok(!memberRuntime.snapshot().parties.p1.readyBy.includes("member"), "readiness remains unchanged until authoritative refresh applies the canonical state");
 assert.equal(memberReadyClick.prevented, true);
 assert.equal(memberReadyClick.stopped, true);
 
@@ -280,12 +287,22 @@ readyCheckMemberFixture.parties.p1.readyStateBy = { leader: { ready: true, at: 1
 readyCheckMemberFixture.parties.p1.readyBy = ["leader"];
 const readyCheckMemberRuntime = uxRuntime(readyCheckMemberFixture, "member");
 readyCheckMemberRuntime.click(new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" }));
-assert.equal(readyCheckMemberRuntime.writes(), 1, "a nonleader must be able to become ready during READY_CHECK");
-assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED", "the first legacy READY_CHECK member update must normalize into the collapsed state");
-assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.readyStateBy.member.ready, true);
-readyCheckMemberRuntime.click(new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" }));
-assert.equal(readyCheckMemberRuntime.writes(), 2, "a nonleader must be able to cancel readiness during READY_CHECK");
-assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "COMPOSITION_CONFIRMED");
-assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.readyStateBy.member.ready, false);
+await Promise.resolve();
+assert.equal(readyCheckMemberRuntime.dispatches(), 1, "a nonleader can request a legacy READY_CHECK readiness toggle through the command boundary");
+assert.equal(readyCheckMemberRuntime.writes(), 0, "legacy readiness cannot locally normalize/write the world");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.status, "READY_CHECK", "legacy status stays unchanged until authoritative refresh normalizes it");
+assert.equal(readyCheckMemberRuntime.snapshot().parties.p1.readyStateBy.member.ready, false, "local state cannot optimistically flip readiness");
+
+function deferred() { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; }
+const pendingReady = deferred();
+const guardedFixture = fixture("COMPOSITION_CONFIRMED");
+const guardedRuntime = uxRuntime(guardedFixture, "member", { dispatch: () => pendingReady.promise });
+const guardedControl = new FakeElement({ "[data-member-ready]": true }, { memberReady: "p1" });
+guardedRuntime.click(guardedControl); guardedRuntime.click(guardedControl);
+assert.equal(guardedRuntime.dispatches(), 1, "rapid duplicate member-ready clicks send exactly one command while settlement is pending");
+assert.equal(guardedRuntime.writes(), 0, "in-flight readiness command emits no local whole-world write");
+assert.equal(guardedRuntime.snapshot().parties.p1.readyStateBy.member, undefined, "in-flight command leaves local canonical state unchanged");
+pendingReady.resolve({ status: "APPLIED" }); await Promise.resolve(); await Promise.resolve();
+assert.equal(guardedRuntime.writes(), 0, "successful settlement still relies on authoritative refresh rather than a local write");
 
 console.log("PASS: pending invite state, ordering, cancellation, confirmed-stage acceptance, explicit departure cancellation, renderer, and capture-click contracts");

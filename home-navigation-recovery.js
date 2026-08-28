@@ -57,15 +57,11 @@
 
     const logout = target.closest('[data-action="logout"]');
     if (logout) {
-      const before = sessionStorage.getItem(USER_KEY);
-      setTimeout(() => {
-        if (before && sessionStorage.getItem(USER_KEY) === before) {
-          sessionStorage.removeItem(USER_KEY);
-          location.replace(`${location.pathname}${location.search}#/login`);
-        }
-      }, 40);
+      // App-owned logout waits for server revocation. This recovery listener must not
+      // clear a session while the server is temporarily unavailable.
+      return;
     }
   }, true);
 
-  window.__BAEKJI_HOME_NAV_RECOVERY__ = Object.freeze({ version: "0.3.96", go });
+  window.__BAEKJI_HOME_NAV_RECOVERY__ = Object.freeze({ version: "0.3.97", go });
 })();

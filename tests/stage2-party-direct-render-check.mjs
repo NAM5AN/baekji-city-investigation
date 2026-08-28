@@ -9,7 +9,7 @@ const stability = fs.readFileSync("party-ui-stability.js", "utf8");
 const index = fs.readFileSync("index.html", "utf8");
 
 const start = app.indexOf("  function renderParty(partyId)");
-const end = app.indexOf("  function inviteUser(", start);
+const end = app.indexOf("  async function inviteUser(", start);
 assert.ok(start >= 0 && end > start, "renderParty source must be discoverable");
 const renderParty = app.slice(start, end);
 
@@ -39,6 +39,6 @@ assert.doesNotMatch(stability, /function ensurePartyNameControl/, "paint guard m
 assert.match(index, /stage2-party-ui=1/, "direct party rendering must be cache-busted");
 assert.match(index, /party-flow-ux-fix\.js\?v=0\.3\.88&departure-capture-guard=1&stage3a=1&stage3b=1&stage6b=1/);
 assert.match(index, /party-preflight-flow-fix\.js\?v=0\.3\.97&stage3a=1&stage3b=1&stage6b=1/);
-assert.match(index, /party-ui-stability\.js\?v=0\.3\.94&stage3a=1&stage6b=1/);
+assert.match(index, /party-ui-stability\.js\?v=0\.3\.95&stage3a=1&stage6b=1&rename-party-command=1/);
 
 console.log("PASS: party composition and ready-state UI render directly without party-page DOM post-processing");

@@ -11,28 +11,10 @@
     try { return sessionStorage.getItem(HOLD_KEY) || ""; } catch { return ""; }
   };
 
-  function dispatchState(oldValue, newValue) {
-    try {
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: T.STATE_KEY,
-        oldValue,
-        newValue,
-        storageArea: localStorage,
-        url: location.href,
-      }));
-    } catch {
-      const event = new Event("storage");
-      Object.defineProperty(event, "key", { value: T.STATE_KEY });
-      Object.defineProperty(event, "newValue", { value: newValue });
-      window.dispatchEvent(event);
-    }
-  }
-
-  function write(state) {
-    T.aliasAll(state);
-    const oldValue = persistence.readRaw();
-    const newValue = persistence.writeRaw(JSON.stringify(state));
-    dispatchState(oldValue, newValue);
+  async function dispatch(command, payload) {
+    const commands = window.__BAEKJI_PLAYER_WORLD_COMMANDS__;
+    if (typeof commands?.dispatch !== "function") throw new Error("WORLD_COMMAND_UNAVAILABLE");
+    return commands.dispatch(command, payload);
   }
 
   function toast(title, copy = "", type = "") {
@@ -55,22 +37,20 @@
     queueMicrotask(showPendingModal);
   }
 
-  function resolveTransfer(transferId, decision) {
-    const state = read();
-    const receiverId = T.uid();
-    if (!state || !receiverId) return;
-    const result = T.resolveOffer(state, transferId, receiverId, decision);
-    if (!result.ok) {
-      toast("전달 요청을 처리할 수 없습니다.", result.error, "error");
+  async function resolveTransfer(transferId, decision) {
+    try {
+      const result = await dispatch("RESOLVE_ITEM_TRANSFER_V1", { transferId, decision });
+      if (result.status !== "APPLIED" && result.status !== "REPLAY") throw new Error(result.status || "TRANSFER_NOT_APPLIED");
+    } catch (error) {
+      toast("전달 요청을 처리할 수 없습니다.", String(error?.message || "TRANSFER_FAILED"), "error");
       closeModal(transferId);
       return;
     }
     try { sessionStorage.removeItem(HOLD_KEY); } catch { /* 저장소를 사용할 수 없는 환경은 무시합니다. */ }
-    write(state);
     closeModal(transferId);
     toast(
-      result.resolution.decision === "ACCEPT" ? "소지품을 받았습니다." : "소지품을 받지 않았습니다.",
-      result.offer.itemSnapshot?.displayName || result.offer.itemSnapshot?.name || "물품",
+      decision === "ACCEPT" ? "소지품을 받았습니다." : "소지품을 받지 않았습니다.",
+      "최신 조사 기록을 불러오는 중입니다.",
     );
   }
 
@@ -138,7 +118,7 @@
     });
   }
 
-  window.BAEKJI_ITEM_TRANSFER_UI = Object.freeze({ read, write, toast, showPendingModal, decorateInventory });
+  window.BAEKJI_ITEM_TRANSFER_UI = Object.freeze({ read, dispatch, toast, showPendingModal, decorateInventory });
   window.addEventListener("storage", (event) => {
     if (event.key !== T.STATE_KEY) return;
     T.aliasAll(T.parse(event.newValue) || read());

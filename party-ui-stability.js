@@ -78,42 +78,6 @@
     return "";
   }
 
-  function dispatchStateUpdate(oldRaw, newRaw) {
-    if (oldRaw === newRaw) return;
-    try {
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: GLOBAL_KEY,
-        oldValue: oldRaw,
-        newValue: newRaw,
-        storageArea: localStorage,
-        url: location.href,
-      }));
-    } catch {
-      const event = new Event("storage");
-      Object.defineProperty(event, "key", { value: GLOBAL_KEY });
-      Object.defineProperty(event, "oldValue", { value: oldRaw });
-      Object.defineProperty(event, "newValue", { value: newRaw });
-      window.dispatchEvent(event);
-    }
-    window.dispatchEvent(new CustomEvent("baekji-party-name-change", { detail: { version: VERSION } }));
-  }
-
-  function writeRenamedParty(partyId, name) {
-    const snapshot = readState();
-    const userId = currentUserId();
-    if (!snapshot || !userId) return false;
-    const before = snapshot.parties?.[partyId];
-    const next = renamePartyState(snapshot, partyId, userId, name, Date.now());
-    const after = next.parties?.[partyId];
-    if (!before || !after || after.name === before.name && before.nameCustomized === true) return false;
-    const oldRaw = persistence.readRaw();
-    const newRaw = JSON.stringify(next);
-    persistence.writeRaw(newRaw);
-    dispatchStateUpdate(oldRaw, newRaw);
-    stabilizePaint(next, userId);
-    return true;
-  }
-
   function stabilizePaint() {
     document.documentElement.dataset.partyUiStabilityVersion = VERSION;
   }
@@ -150,10 +114,18 @@
     requestAnimationFrame(() => { input.focus(); input.select(); });
   }
 
-  function saveEditor() {
+  const renamePartyInFlight = new Set();
+
+  async function saveEditor() {
     const input = document.querySelector("[data-party-name-input]");
     const error = document.querySelector("[data-party-name-error]");
-    const clean = String(input?.value || "").trim().replace(/\s+/g, " ");
+    const rawName = String(input?.value || "");
+    if (/[\u0000-\u001f\u007f]/.test(rawName)) {
+      if (error) error.textContent = "이름에 사용할 수 없는 제어문자가 있습니다.";
+      input?.focus();
+      return;
+    }
+    const clean = rawName.trim().replace(/\s+/g, " ");
     if (!clean) {
       if (error) error.textContent = "조사조 이름을 1자 이상 입력해 주세요.";
       input?.focus();
@@ -164,14 +136,37 @@
       input?.focus();
       return;
     }
+    const name = clean;
     const partyId = editingPartyId;
-    if (!partyId || !writeRenamedParty(partyId, clean)) {
-      const snapshot = readState();
-      if (snapshot?.parties?.[partyId]?.name === clean) closeEditor();
-      else if (error) error.textContent = "현재 단계에서는 이름을 변경할 수 없습니다.";
+    if (!partyId) {
+      if (error) error.textContent = "현재 단계에서는 이름을 변경할 수 없습니다.";
       return;
     }
-    closeEditor();
+    if (renamePartyInFlight.has(partyId)) return;
+    renamePartyInFlight.add(partyId);
+    const save = document.querySelector("[data-party-name-save]");
+    if (save) save.disabled = true;
+    try {
+      const result = await window.__BAEKJI_PLAYER_WORLD_COMMANDS__.dispatch("RENAME_PARTY_V1", { partyId, name });
+      if (["APPLIED", "NOOP", "REPLAY"].includes(result?.status)) {
+        closeEditor();
+        return;
+      }
+      if (result?.status === "REVISION_CONFLICT") {
+        if (error) error.textContent = "이름 변경 상태가 갱신되었습니다. 최신 상태를 확인한 뒤 다시 시도해 주세요.";
+      } else {
+        if (error) error.textContent = "현재 단계에서는 이름을 변경할 수 없습니다.";
+      }
+    } catch (commandError) {
+      if (commandError?.message === "WORLD_COMMAND_SYNC_NOT_READY") {
+        if (error) error.textContent = "동기화 중입니다. 잠시 후 다시 시도해 주세요.";
+      } else if (error) {
+        error.textContent = "이름 변경을 저장하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.";
+      }
+    } finally {
+      renamePartyInFlight.delete(partyId);
+      if (save?.isConnected) save.disabled = false;
+    }
   }
 
   document.addEventListener("click", (event) => {
